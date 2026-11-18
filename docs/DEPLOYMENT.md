@@ -17,6 +17,8 @@ This is an Astro **static** site. No Worker script, SSR, R2, KV, D1, or paid ser
 
 Connect the chosen source repository under Workers & Pages → project → Builds. Use the repository’s supported Node runtime, `npm run build`, and `npx wrangler deploy` for production. Set `SITE_URL` to the production hostname. Enable non-production branch previews through Cloudflare’s preview configuration. Repository publication/visibility is a separate owner decision.
 
+For an existing Worker created from a dashboard template, connect GitHub and merge a pull request into the configured production branch. The merge triggers the first repository build for that Worker. Check **Deployments → View build history** for the build and confirm the commit is active. The production hostname is `https://kubernetes-visualized.chandravardhanb.workers.dev`.
+
 Keep the build checks in the repository’s CI. Preview builds should exercise the same static output; do not introduce an adapter or API just for deployment.
 
 ## Verified platform boundaries

@@ -2,6 +2,8 @@
 
 An interactive visual textbook for building a practical, accurate mental model of Kubernetes, from containers through control-plane internals and platform operations.
 
+[Open Kubernetes, Visualized](https://kubernetes-visualized.chandravardhanb.workers.dev/)
+
 ## Run locally
 
 Use Node **22.23.4 or newer supported LTS** (the exact baseline is in `.node-version`).
