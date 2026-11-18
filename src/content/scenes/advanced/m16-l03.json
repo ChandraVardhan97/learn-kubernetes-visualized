@@ -1,0 +1,649 @@
+[
+  {
+    "title": "Stable names do not grant adoption",
+    "kind": "ownership",
+    "description": "A matching owner permits normal reconciliation; names and labels alone do not.",
+    "assumption": "The teaching controller intentionally refuses adoption; production adoption policies require additional explicit design.",
+    "frames": [
+      {
+        "title": "Read parent identity",
+        "narration": "The operator uses the current WebApp UID when deriving child owner references.",
+        "nodes": [
+          {
+            "id": "parent",
+            "label": "Current WebApp UID A",
+            "type": "object",
+            "detail": "Declared desired state",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "op",
+            "label": "Operator",
+            "type": "control",
+            "detail": "Checks existing controller owner",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "child",
+            "label": "Existing child",
+            "type": "object",
+            "detail": "Expected name",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "other",
+            "label": "Different UID B",
+            "type": "object",
+            "detail": "Unrelated lifecycle",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "desired parent identity",
+            "state": "active",
+            "from": "parent"
+          }
+        ]
+      },
+      {
+        "title": "Inspect existing child",
+        "narration": "A child with the expected name must already have the matching controller owner before it is managed.",
+        "nodes": [
+          {
+            "id": "parent",
+            "label": "Current WebApp UID A",
+            "type": "object",
+            "detail": "Declared desired state",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Operator",
+            "type": "control",
+            "detail": "Checks existing controller owner",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "child",
+            "label": "Existing child",
+            "type": "object",
+            "detail": "Expected name",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "other",
+            "label": "Different UID B",
+            "type": "object",
+            "detail": "Unrelated lifecycle",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "child",
+            "label": "inspect before apply",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      },
+      {
+        "title": "Apply only a valid relationship",
+        "narration": "A matching owner permits normal reconciliation; names and labels alone do not.",
+        "nodes": [
+          {
+            "id": "parent",
+            "label": "Current WebApp UID A",
+            "type": "object",
+            "detail": "Declared desired state",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Operator",
+            "type": "control",
+            "detail": "Checks existing controller owner",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "child",
+            "label": "Existing child",
+            "type": "object",
+            "detail": "Expected name",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "other",
+            "label": "Different UID B",
+            "type": "object",
+            "detail": "Unrelated lifecycle",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "child",
+            "label": "inspect before apply",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Unrelated object blocks adoption",
+        "description": "An existing child belongs to another lifecycle.",
+        "frames": [
+          {
+            "title": "Same name is found",
+            "narration": "The expected child name is occupied by a resource whose owner UID is B.",
+            "nodes": [
+              {
+                "id": "parent",
+                "label": "Current WebApp UID A",
+                "type": "object",
+                "detail": "Declared desired state",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Operator",
+                "type": "control",
+                "detail": "Checks existing controller owner",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "child",
+                "label": "Existing child",
+                "type": "object",
+                "detail": "Existing child references UID B",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "other",
+                "label": "Different UID B",
+                "type": "object",
+                "detail": "Unrelated lifecycle",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "child",
+                "label": "inspect before apply",
+                "state": "active",
+                "from": "op"
+              },
+              {
+                "to": "child",
+                "label": "actual owner if mismatched",
+                "state": "active",
+                "from": "other"
+              }
+            ]
+          },
+          {
+            "title": "Identity mismatch is detected",
+            "narration": "The current WebApp UID is A, so the operator refuses to apply over that child.",
+            "nodes": [
+              {
+                "id": "parent",
+                "label": "Current WebApp UID A",
+                "type": "object",
+                "detail": "Declared desired state",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Operator",
+                "type": "control",
+                "detail": "Checks existing controller owner",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "child",
+                "label": "Existing child",
+                "type": "object",
+                "detail": "Existing child references UID B",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "other",
+                "label": "Different UID B",
+                "type": "object",
+                "detail": "Unrelated lifecycle",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "child",
+                "label": "apply refused: owner UID mismatch",
+                "state": "blocked",
+                "from": "op"
+              },
+              {
+                "to": "child",
+                "label": "actual owner if mismatched",
+                "state": "active",
+                "from": "other"
+              }
+            ]
+          },
+          {
+            "title": "Investigate before takeover",
+            "narration": "Resolve the intended ownership explicitly; removing the safety check risks overwriting another resource.",
+            "nodes": [
+              {
+                "id": "parent",
+                "label": "Current WebApp UID A",
+                "type": "object",
+                "detail": "Declared desired state",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Operator",
+                "type": "control",
+                "detail": "Checks existing controller owner",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "child",
+                "label": "Existing child",
+                "type": "object",
+                "detail": "Existing child references UID B",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "other",
+                "label": "Different UID B",
+                "type": "object",
+                "detail": "Unrelated lifecycle",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "child",
+                "label": "actual owner if mismatched",
+                "state": "active",
+                "from": "other"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m16-l03-operator-owner-check"
+  },
+  {
+    "title": "Repair a child, then delete the parent",
+    "kind": "lifecycle",
+    "description": "When the parent is removed, garbage collection removes owned children; the operator does not recreate a deleted parent.",
+    "assumption": "The actual lab creates only Kubernetes children and needs no external-resource finalizer.",
+    "frames": [
+      {
+        "title": "Accidental child deletion",
+        "narration": "With the parent still active, a missing child is drift from desired state.",
+        "nodes": [
+          {
+            "id": "parent",
+            "label": "WebApp",
+            "type": "object",
+            "detail": "Current desired intent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Operator",
+            "type": "control",
+            "detail": "Recreate missing child",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "child",
+            "label": "ConfigMap / Deployment",
+            "type": "object",
+            "detail": "Owned Kubernetes children",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Removes eligible dependents",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "child",
+            "label": "ownerReference UID",
+            "state": "active",
+            "from": "parent"
+          }
+        ]
+      },
+      {
+        "title": "Reconcile repairs drift",
+        "narration": "The next operator pass creates the same desired child name with a new child UID and the same parent UID.",
+        "nodes": [
+          {
+            "id": "parent",
+            "label": "WebApp",
+            "type": "object",
+            "detail": "Current desired intent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Operator",
+            "type": "control",
+            "detail": "Recreate missing child",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "child",
+            "label": "ConfigMap / Deployment",
+            "type": "object",
+            "detail": "Owned Kubernetes children",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Removes eligible dependents",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "exists and active",
+            "state": "active",
+            "from": "parent"
+          },
+          {
+            "to": "child",
+            "label": "repair if missing",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      },
+      {
+        "title": "Parent deletion changes intent",
+        "narration": "When the parent is removed, garbage collection removes owned children; the operator does not recreate a deleted parent.",
+        "nodes": [
+          {
+            "id": "parent",
+            "label": "WebApp",
+            "type": "object",
+            "detail": "Current desired intent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Operator",
+            "type": "control",
+            "detail": "Recreate missing child",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "child",
+            "label": "ConfigMap / Deployment",
+            "type": "object",
+            "detail": "Owned Kubernetes children",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Removes eligible dependents",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "child",
+            "label": "delete after owner removal",
+            "state": "active",
+            "from": "gc"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "External cleanup is required",
+        "description": "Kubernetes garbage collection cannot perform a database provider API workflow.",
+        "frames": [
+          {
+            "title": "External resource exists",
+            "narration": "A hypothetical production extension manages infrastructure outside the API owner graph.",
+            "nodes": [
+              {
+                "id": "parent",
+                "label": "WebApp",
+                "type": "object",
+                "detail": "Current desired intent",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "op",
+                "label": "Operator",
+                "type": "control",
+                "detail": "External cleanup requires explicit logic",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "child",
+                "label": "ConfigMap / Deployment",
+                "type": "object",
+                "detail": "Owned Kubernetes children",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Only API dependents are in the owner graph",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "child",
+                "label": "ownerReference UID",
+                "state": "active",
+                "from": "parent"
+              }
+            ]
+          },
+          {
+            "title": "No finalizer coordination",
+            "narration": "Deleting the parent without an implemented cleanup barrier can abandon that external resource.",
+            "nodes": [
+              {
+                "id": "parent",
+                "label": "WebApp",
+                "type": "object",
+                "detail": "Deleted without a cleanup barrier",
+                "x": 35,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "op",
+                "label": "Operator",
+                "type": "control",
+                "detail": "External cleanup requires explicit logic",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "child",
+                "label": "ConfigMap / Deployment",
+                "type": "object",
+                "detail": "Owned Kubernetes children",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Only API dependents are in the owner graph",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "child",
+                "label": "delete after owner removal",
+                "state": "active",
+                "from": "gc"
+              }
+            ]
+          },
+          {
+            "title": "Implement the obligation",
+            "narration": "Use an idempotent finalizer protocol with external identity checks; a string alone supplies no cleanup code.",
+            "nodes": [
+              {
+                "id": "parent",
+                "label": "WebApp",
+                "type": "object",
+                "detail": "Current desired intent",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Operator",
+                "type": "control",
+                "detail": "Implement idempotent external cleanup",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "child",
+                "label": "ConfigMap / Deployment",
+                "type": "object",
+                "detail": "Owned Kubernetes children",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Only API dependents are in the owner graph",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m16-l03-operator-repair-gc"
+  }
+]

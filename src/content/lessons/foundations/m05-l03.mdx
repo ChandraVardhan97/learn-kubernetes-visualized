@@ -1,0 +1,152 @@
+---
+{
+  "lessonId": "m05-l03",
+  "title": "Probes and graceful recovery",
+  "description": "Give the kubelet separate startup, traffic-readiness, and restart signals.",
+  "level": "foundations",
+  "module": "m05",
+  "order": 3,
+  "minutes": 14,
+  "prerequisites": [
+    "m05-l02"
+  ],
+  "objectives": [
+    "Distinguish startup, readiness, and liveness consequences",
+    "Choose probe paths and budgets that match failure semantics",
+    "Explain termination grace without assuming instant traffic draining"
+  ],
+  "concepts": [
+    {
+      "id": "m05-l03-startup-probes",
+      "title": "Startup probes",
+      "scene": "m05-l03-probes"
+    },
+    {
+      "id": "m05-l03-readiness",
+      "title": "Readiness probes",
+      "scene": "m05-l03-probes"
+    },
+    {
+      "id": "m05-l03-liveness",
+      "title": "Liveness probes",
+      "scene": "m05-l03-probes"
+    },
+    {
+      "id": "m05-l03-graceful-recovery",
+      "title": "Graceful termination",
+      "scene": "m05-l03-termination"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Liveness, readiness, and startup probes",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes"
+    },
+    {
+      "title": "Configure probes",
+      "url": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"
+    },
+    {
+      "title": "Termination of Pods",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination"
+    }
+  ],
+  "lab": "m05",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: three questions with different consequences
+
+A startup probe asks whether a container's application has completed startup. While a configured startup probe has not succeeded, the kubelet does not run that container's readiness or liveness probes. This gives slow initialization a deliberate budget without making ongoing liveness checks permanently slow. When consecutive startup failures reach `failureThreshold`, the kubelet terminates the container and applies its restart policy.
+
+A readiness probe asks whether this container should currently contribute to a ready Pod. Failed readiness can make the Pod unready, affecting ordinary Service endpoint eligibility after observers propagate the change. It does **not** restart the container. The process can stay alive, warm caches, retry dependencies, or recover itself. Readiness is about traffic eligibility rather than punishment for an error.
+
+A liveness probe asks whether restarting this container is a useful repair. After enough consecutive failures, the kubelet terminates the container and applies restart behavior. Use it for conditions such as a local deadlock that a restart can plausibly fix. Making liveness fail because a shared database is temporarily unavailable can cause every healthy application process to restart together, adding load to a failing dependency.
+
+<Scene id="m05-l03-probes" />
+
+## Walkthrough: configure real paths
+
+This complete training Pod serves nginx's existing root path. It demonstrates mechanics rather than an ideal application health API. A real application should expose deliberately designed startup, readiness, and liveness semantics, with cheap checks and controlled dependency behavior.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: probes-demo
+spec:
+  terminationGracePeriodSeconds: 30
+  containers:
+    - name: web
+      image: nginx:1.27.5
+      ports:
+        - name: http
+          containerPort: 80
+      startupProbe:
+        httpGet:
+          path: /
+          port: http
+        periodSeconds: 2
+        failureThreshold: 30 # Roughly a 60-second startup window, not an SLA.
+      readinessProbe:
+        httpGet:
+          path: /
+          port: http
+        periodSeconds: 5
+        failureThreshold: 2
+      livenessProbe:
+        httpGet:
+          path: /
+          port: http
+        periodSeconds: 10
+        failureThreshold: 3
+      lifecycle:
+        preStop:
+          exec:
+            command: ["/bin/sh", "-c", "nginx -s quit"]
+```
+
+The named `http` port resolves to the container's declared port 80. HTTP probe success depends on the returned status, not whether a page body contains expected business data. Defaults such as timeout also matter. A threshold times period is a useful planning approximation, but probe scheduling, execution time, initial delay, and status propagation mean it is not an exact user-visible failure duration.
+
+```bash
+kubectl apply -f probes-demo.yaml
+kubectl get pod probes-demo -w
+kubectl describe pod probes-demo
+kubectl get pod probes-demo -o jsonpath='{.status.containerStatuses[0].restartCount}'
+```
+
+A healthy lab should see startup succeed, readiness become true, and no unexpected restart growth. For a new disposable Pod, change only the readiness path to `/does-not-exist`. Expect readiness failures without liveness-triggered restarts because liveness still checks `/`. Change only the liveness path in another new Pod to observe a different consequence. Keep these failure exercises isolated from real workloads.
+
+## Practice: trace a deliberate shutdown
+
+Pod deletion sets a deletion timestamp and starts graceful termination. The kubelet runs a configured preStop hook within the termination grace period and asks the runtime to signal the container's main process. The default signal behavior is commonly TERM, though image or explicit stop-signal configuration can affect it. After the grace period, remaining processes can be forcibly killed. Hook execution consumes the same grace budget; it is not extra unlimited time.
+
+<Scene id="m05-l03-termination" />
+
+Endpoint changes happen asynchronously with termination. A terminating endpoint is normally not ready for ordinary new Service traffic, while its serving/terminating conditions can help implementations handle draining. Existing connections, load-balancer refresh, and special fallback behavior complicate any claim of immediate zero traffic. The application should stop accepting unwanted new work, finish bounded in-flight work, and exit before the grace deadline. A fixed sleep is only a timing guess unless validated against the actual request path.
+
+## Pitfalls
+
+A kubelet HTTP probe targets the Pod endpoint; it does not validate public DNS, ingress routing, TLS at an external gateway, or every application route. Supplement it with end-to-end request tests. Keep probe responses cheap so a high replica count does not create a new health-check bottleneck.
+
+## Check your understanding
+
+<details>
+
+<summary>Readiness fails for one minute while liveness succeeds. Should the restart count necessarily increase?</summary>
+
+No. Readiness affects the Pod's readiness and ordinary endpoint eligibility; it does not request a restart. The process may recover in place. If restart count rises, inspect exits, liveness/startup failures, OOM evidence, or other actual restart causes instead of attributing the restart to readiness alone.
+
+</details>
+
+Use the [module lab](/labs/#m05) to compare probe consequences and a bounded shutdown. Next, inspect the Service and EndpointSlice objects that consume readiness information.
+
+## Primary documentation
+
+- [Liveness, readiness, and startup probes](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#container-probes)
+- [Configure probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+- [Termination of Pods](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination)

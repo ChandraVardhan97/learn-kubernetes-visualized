@@ -1,0 +1,446 @@
+[
+  {
+    "id": "m02-l03-request",
+    "title": "Accepted does not mean started",
+    "kind": "flow",
+    "description": "Trace kubectl through API persistence and scheduler binding.",
+    "assumption": "One ordinary Pod uses default scheduling; admission and persistence are drawn as one API stage. Frames show responsibilities, not an exact ordering of client receipt and observer actions.",
+    "frames": [
+      {
+        "title": "kubectl submits the Pod",
+        "narration": "The configured context identifies the API endpoint and credentials. The API validates and admits the requested Pod.",
+        "nodes": [
+          {
+            "id": "cli",
+            "label": "kubectl apply",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Pod request",
+            "type": "object",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "authenticated write",
+            "state": "active",
+            "from": "cli"
+          },
+          {
+            "to": "pod",
+            "label": "validate + admit",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Creation acknowledges accepted intent",
+        "narration": "The Pod object is persisted, so kubectl can return created without waiting for binding or startup. Observers may already have advanced the Pod by the time the client receives that response.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "state": "ready",
+            "detail": "Returns the created Pod"
+          },
+          {
+            "id": "store",
+            "label": "etcd object state",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Accepted; startup not guaranteed",
+            "type": "pod",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "store",
+            "label": "persist",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "pod",
+            "label": "accepted specification",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Scheduler records placement",
+        "narration": "The scheduler selects an eligible worker and binds the Pod. The worker now has an assignment to observe.",
+        "nodes": [
+          {
+            "id": "sched",
+            "label": "Scheduler",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "spec.nodeName: node-a",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "node",
+            "label": "node-a",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "binding",
+            "state": "active",
+            "from": "sched"
+          },
+          {
+            "to": "node",
+            "label": "assigned",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m02-l03-request-failure",
+        "label": "Failure: admission rejects the write",
+        "description": "Failure: admission rejects the write",
+        "frames": [
+          {
+            "title": "Submit an invalid request",
+            "narration": "An invalid field or a violated admission requirement can reject the request before any Pod is persisted.",
+            "nodes": [
+              {
+                "id": "cli",
+                "label": "Invalid Pod request",
+                "type": "actor",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Validation/admission",
+                "type": "control",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "write request",
+                "state": "active",
+                "from": "cli"
+              }
+            ]
+          },
+          {
+            "title": "No Pod exists to schedule",
+            "narration": "The API returns an error. The scheduler has no accepted object from this request.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "Request rejected",
+                "type": "control",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "sched",
+                "label": "No new Pod to bind",
+                "type": "control",
+                "state": "idle",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Correct and resubmit",
+            "narration": "Read the API error, correct the manifest or required policy inputs, and retry the write before investigating worker execution.",
+            "nodes": [
+              {
+                "id": "cli",
+                "label": "Corrected manifest",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Accepted request",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "valid write",
+                "state": "active",
+                "from": "cli"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m02-l03-startup",
+    "title": "Assigned, prepared, reported",
+    "kind": "lifecycle",
+    "description": "Show local image preparation, executable startup, and status reporting.",
+    "assumption": "Networking and volume implementations are collapsed into local preparation; one container is shown.",
+    "frames": [
+      {
+        "title": "Kubelet observes its assignment",
+        "narration": "The kubelet on node-a sees the bound Pod and prepares local dependencies, including the Pod sandbox and required mounts.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Bound Pod",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet node-a",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "CRI runtime",
+            "type": "control",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kubelet",
+            "label": "assigned spec",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "runtime",
+            "label": "prepare sandbox",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      },
+      {
+        "title": "Runtime starts the container",
+        "narration": "The runtime ensures the image is available and launches the configured executable. A valid image can still contain a failing command.",
+        "nodes": [
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "Runtime + image",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx executable",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "runtime",
+            "label": "create + start",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "web",
+            "label": "execute",
+            "state": "active",
+            "from": "runtime"
+          }
+        ]
+      },
+      {
+        "title": "Status is reported to the API",
+        "narration": "The kubelet reports observed states and conditions. Running and Ready are separate fields, and neither replaces an actual request test.",
+        "nodes": [
+          {
+            "id": "web",
+            "label": "Container Running",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Observed status",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "API status + conditions",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kubelet",
+            "label": "local observation",
+            "state": "active",
+            "from": "web"
+          },
+          {
+            "to": "api",
+            "label": "status update",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m02-l03-startup-failure",
+        "label": "Failure: executable exits after a successful pull",
+        "description": "Failure: executable exits after a successful pull",
+        "frames": [
+          {
+            "title": "Image preparation succeeds",
+            "narration": "The required image is available and the runtime launches the command. The image may have been cached locally; a container start alone does not prove current registry reachability.",
+            "nodes": [
+              {
+                "id": "runtime",
+                "label": "Image available",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "Process started",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "start executable",
+                "state": "active",
+                "from": "runtime"
+              }
+            ]
+          },
+          {
+            "title": "Application exits",
+            "narration": "The command fails and terminates. Under the usual Always Pod restart policy, the kubelet attempts a container restart with backoff as appropriate.",
+            "nodes": [
+              {
+                "id": "web",
+                "label": "Terminated: nonzero exit",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "kubelet",
+                "label": "Restart supervision",
+                "type": "control",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "restart attempt",
+                "state": "active",
+                "from": "kubelet"
+              }
+            ]
+          },
+          {
+            "title": "Inspect execution evidence",
+            "narration": "Read logs and previous-container logs plus the termination reason. This failure follows successful scheduling and image preparation, whether the image was pulled or reused locally.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Logs + termination status",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "Failing application",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "inspect cause",
+                "state": "active",
+                "from": "operator"
+              }
+            ],
+            "code": "kubectl -n path-lab logs path-demo -c web --previous"
+          }
+        ]
+      }
+    ]
+  }
+]

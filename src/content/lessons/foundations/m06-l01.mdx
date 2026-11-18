@@ -1,0 +1,165 @@
+---
+{
+  "lessonId": "m06-l01",
+  "title": "Services and EndpointSlices",
+  "description": "Separate stable service identity, changing backend records, and node data-plane forwarding.",
+  "level": "foundations",
+  "module": "m06",
+  "order": 1,
+  "minutes": 14,
+  "prerequisites": [
+    "m05-l03"
+  ],
+  "objectives": [
+    "Map Service selectors to EndpointSlice backend records",
+    "Distinguish port, targetPort, and ClusterIP",
+    "Explain why a Service is not a central proxy process"
+  ],
+  "concepts": [
+    {
+      "id": "m06-l01-services",
+      "title": "Services",
+      "scene": "m06-l01-selection"
+    },
+    {
+      "id": "m06-l01-endpointslices",
+      "title": "EndpointSlices",
+      "scene": "m06-l01-selection"
+    },
+    {
+      "id": "m06-l01-clusterip",
+      "title": "ClusterIP and port mapping",
+      "scene": "m06-l01-dataplane"
+    },
+    {
+      "id": "m06-l01-service-forwarding",
+      "title": "Service forwarding",
+      "scene": "m06-l01-dataplane"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Services",
+      "url": "https://kubernetes.io/docs/concepts/services-networking/service/"
+    },
+    {
+      "title": "EndpointSlices",
+      "url": "https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/"
+    },
+    {
+      "title": "Virtual IPs and Service proxies",
+      "url": "https://kubernetes.io/docs/reference/networking/virtual-ips/"
+    }
+  ],
+  "lab": "m06",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: stable address, replaceable backends
+
+A Service gives clients a stable network abstraction over a changing set of endpoints. Pods come and go, names and IPs change, and a client should not need a manually updated list after each rollout. A normal selector-based Service declares which Pod labels belong to its backend set and which ports clients use. Its default type, ClusterIP, allocates a cluster-internal virtual IP for the Service's lifetime.
+
+A Service is an API object, not necessarily a process that every request passes through. The control plane tracks relevant backends in EndpointSlices. A node data-plane implementation watches Services and EndpointSlices and programs packet forwarding or equivalent behavior. kube-proxy is one common implementation; other networking implementations can provide replacement behavior, including eBPF-based paths. The Service IP is a virtual frontend abstraction, not proof that a central “Service server” owns a socket at that IP.
+
+An EndpointSlice records endpoint addresses, ports, and conditions such as ready, serving, and terminating. For normal selector-based Services, a controller maintains these records as matching Pods change. A Service can span multiple EndpointSlices; inspect them all using the `kubernetes.io/service-name` label rather than assuming one object contains every backend. The records describe the target set and health information; they do not themselves forward packets.
+
+<Scene id="m06-l01-selection" />
+
+## Walkthrough: expose an existing listener
+
+The following complete example declares one web replica and a Service. Save it as `service-demo.yaml` and apply it in a dedicated namespace. nginx listens on 80. Clients use Service port 8080, which targets the Pod's named `http` port resolving to 80.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-demo
+  template:
+    metadata:
+      labels:
+        app: service-demo
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27.5
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: service-demo
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080 # Client-facing Service port.
+      targetPort: http # Resolves to the Pod's named port 80.
+```
+
+```bash
+kubectl apply -f service-demo.yaml
+kubectl get service service-demo
+kubectl get pods -l app=service-demo --show-labels
+kubectl get endpointslices -l kubernetes.io/service-name=service-demo -o yaml
+```
+
+Expect an allocated ClusterIP and, once the Pod is ready, an endpoint address corresponding to the Pod IP with target port 80. Do not hard-code the sample cluster's allocated address into reusable manifests. The stable DNS name introduced next is normally a better application configuration reference.
+
+<Scene id="m06-l01-dataplane" />
+
+## Practice: test from the caller's network
+
+Use a disposable client Pod in the same namespace. BusyBox provides a small HTTP client for this training test. If your cluster restricts debug images or egress, use an approved equivalent.
+
+```bash
+kubectl run service-client --image=busybox:1.36.1 --restart=Never \
+  --command -- sh -c 'wget -qO- http://service-demo:8080/'
+# This finite client can finish before a Ready condition is observed.
+kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/service-client --timeout=90s
+kubectl logs service-client
+kubectl delete pod service-client
+```
+
+A successful HTTP body shows name resolution and the tested in-cluster Service request path worked for that caller. If the completion wait times out, inspect the client's status and logs before deleting it; a Failed client is different from one still preparing its image. Success does not prove external exposure or every backend's behavior. Service forwarding commonly selects a backend per connection or flow, not round-robin for each HTTP request. Connection reuse can make several requests reach the same Pod; do not infer a balancing bug from a small sequence without understanding client connections.
+
+Change only the Service selector to an unmatched label in the lab. The Service and ClusterIP can remain present while the backend set becomes empty. Restore the selector and inspect the EndpointSlice records again. Alternatively, a wrong numeric targetPort can leave selected endpoint addresses visible but send connections to an unused Pod port. Selection and listener mapping are different boundaries.
+
+## Pitfalls
+
+Readiness does not delete a Pod or necessarily remove its address from every EndpointSlice. Conditions can mark it ineligible for ordinary traffic while retaining the record. `publishNotReadyAddresses` and terminating-endpoint handling alter ordinary behavior, so read the actual Service configuration. Endpoint propagation is asynchronous; do not promise that readiness loss instantly ends existing connections.
+
+## Check your understanding
+
+<details>
+
+<summary>A Service has a ClusterIP but no ready backend. Does the allocated IP prove that a healthy proxy process exists?</summary>
+
+No. The Service object and virtual IP can exist independently of healthy backend Pods. Inspect selector matches, endpoint addresses and conditions, target ports, and the node forwarding implementation. Creating or recreating the Service alone will not repair an application that cannot become ready.
+
+</details>
+
+Practice selector and target-port failures in the [module lab](/labs/#m06). Next, distinguish internal discovery from reaching the cluster externally.
+
+## Primary documentation
+
+- [Services](https://kubernetes.io/docs/concepts/services-networking/service/)
+- [EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)
+- [Virtual IPs and Service proxies](https://kubernetes.io/docs/reference/networking/virtual-ips/)

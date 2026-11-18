@@ -1,0 +1,806 @@
+[
+  {
+    "title": "Wait for placement before choosing a storage zone",
+    "kind": "storage",
+    "description": "Follow a delayed-binding PVC through scheduler topology selection and dynamic provisioning.",
+    "assumption": "A topology-aware provisioner supports WaitForFirstConsumer; no spec.nodeName bypass.",
+    "frames": [
+      {
+        "title": "Select a storage offering",
+        "narration": "The PVC names a real StorageClass whose provisioner and parameters define the storage mechanism.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC report-data",
+            "detail": "Requests 2Gi; class selected",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "StorageClass",
+            "detail": "WaitForFirstConsumer",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Consumer Pod",
+            "detail": "Requires zone west",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "Chooses compatible topology",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Provisioner",
+            "detail": "Creates west volume and PV",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "PV west",
+            "detail": "Bound to claim",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "class reference",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Wait for a consumer",
+        "narration": "The class delays binding so the workload zone can influence storage allocation. Pending is expected at this step.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC report-data",
+            "detail": "Requests 2Gi; class selected",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "1",
+            "label": "StorageClass",
+            "detail": "WaitForFirstConsumer",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Consumer Pod",
+            "detail": "Requires zone west",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "Chooses compatible topology",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Provisioner",
+            "detail": "Creates west volume and PV",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "PV west",
+            "detail": "Bound to claim",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "4",
+            "label": "defer allocation",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Coordinate placement",
+        "narration": "The consumer requires west, so scheduler and volume binding coordination select a compatible node and storage topology.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC report-data",
+            "detail": "Requests 2Gi; class selected",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "StorageClass",
+            "detail": "WaitForFirstConsumer",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Consumer Pod",
+            "detail": "Requires zone west",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "Chooses compatible topology",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Provisioner",
+            "detail": "Creates west volume and PV",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "PV west",
+            "detail": "Bound to claim",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "zone west",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "selected topology",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Provision and bind",
+        "narration": "The provisioner creates compatible storage and its PV, which binds to the PVC before mounting can finish.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC report-data",
+            "detail": "Requests 2Gi; class selected",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "StorageClass",
+            "detail": "WaitForFirstConsumer",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Consumer Pod",
+            "detail": "Requires zone west",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "Chooses compatible topology",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Provisioner",
+            "detail": "Creates west volume and PV",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "PV west",
+            "detail": "Bound to claim",
+            "type": "storage",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "5",
+            "label": "create PV",
+            "state": "active"
+          },
+          {
+            "from": "5",
+            "to": "0",
+            "label": "bind",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Immediate binding picks the wrong zone",
+        "description": "Storage exists in east before a west-only consumer appears.",
+        "frames": [
+          {
+            "title": "Early allocation",
+            "narration": "Immediate provisioning creates an east volume without the future consumer constraints.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC report-data",
+                "detail": "Requests 2Gi; class selected",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "StorageClass",
+                "detail": "Immediate binding",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Consumer Pod",
+                "detail": "Requires zone west",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Scheduler",
+                "detail": "Chooses compatible topology",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Provisioner",
+                "detail": "Created east volume and PV",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "PV east",
+                "detail": "Bound to claim; usable in east only",
+                "type": "storage",
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "5",
+                "label": "east volume",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Workload cannot use it",
+            "narration": "The west-only Pod has no node compatible with both its affinity and the bound volume topology.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC report-data",
+                "detail": "Requests 2Gi; class selected",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "StorageClass",
+                "detail": "Immediate binding",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Consumer Pod",
+                "detail": "Requires zone west",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Scheduler",
+                "detail": "Chooses compatible topology",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Provisioner",
+                "detail": "Created east volume and PV",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "PV east",
+                "detail": "Bound to claim; usable in east only",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "west only",
+                "state": "active"
+              },
+              {
+                "from": "5",
+                "to": "3",
+                "label": "east only",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Repair without discarding data",
+            "narration": "Review class binding mode for future claims; migrate existing data deliberately rather than deleting the bound volume impulsively.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC report-data",
+                "detail": "Requests 2Gi; class selected",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "StorageClass",
+                "detail": "Immediate binding",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "2",
+                "label": "Consumer Pod",
+                "detail": "Requires zone west",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Scheduler",
+                "detail": "Chooses compatible topology",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Provisioner",
+                "detail": "Created east volume and PV",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "PV east",
+                "detail": "Bound to claim; usable in east only",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "review offering",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod report-writer"
+          }
+        ]
+      }
+    ],
+    "id": "m09-l02-binding"
+  },
+  {
+    "title": "Bound, attached and mounted are separate checkpoints",
+    "kind": "storage",
+    "description": "Trace CSI controller and node responsibilities and explain driver-dependent expansion.",
+    "assumption": "A CSI driver supporting controller attachment and node staging; drivers without those capabilities skip the corresponding checkpoints.",
+    "frames": [
+      {
+        "title": "Bind the resource",
+        "narration": "The claim binds to a PV naming the CSI driver and provider volume identity. Binding does not mount the filesystem.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC + PV",
+            "detail": "Bound storage identity",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "CSI controller",
+            "detail": "Provision / attach operations",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Storage backend",
+            "detail": "Disk or filesystem service",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "CSI node plugin",
+            "detail": "Stage / publish on worker",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "/data mount visible",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "volume identity",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Prepare controller-side access",
+        "narration": "For an attachment-based driver, controller operations authorize or attach the backend volume to the selected worker.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC + PV",
+            "detail": "Bound storage identity",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "CSI controller",
+            "detail": "Provision / attach operations",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Storage backend",
+            "detail": "Disk or filesystem service",
+            "type": "storage",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "CSI node plugin",
+            "detail": "Stage / publish on worker",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "/data mount visible",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "attach",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Publish on the node",
+        "narration": "The node plugin stages and publishes the volume into the Pod path; errors here can produce FailedMount even with a Bound PVC.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC + PV",
+            "detail": "Bound storage identity",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "CSI controller",
+            "detail": "Provision / attach operations",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Storage backend",
+            "detail": "Disk or filesystem service",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "CSI node plugin",
+            "detail": "Stage / publish on worker",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "/data mount visible",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "node access",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "mount path",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Expand with supported operations",
+        "narration": "An increased PVC request can trigger controller and filesystem expansion if the class and driver support it. Bound status alone says nothing about resize completion.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC + PV",
+            "detail": "Bound storage identity",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "CSI controller",
+            "detail": "Provision / attach operations",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Storage backend",
+            "detail": "Disk or filesystem service",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "CSI node plugin",
+            "detail": "Stage / publish on worker",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "/data mount visible",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "larger request",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "3",
+            "label": "expand filesystem",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl get pvc report-data -o yaml"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Attach succeeds but mount fails",
+        "description": "Storage reaches the node, but filesystem publication fails.",
+        "frames": [
+          {
+            "title": "Controller attachment completes",
+            "narration": "The backend can be attached to the intended worker, so provisioning and binding are already past their checkpoints.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC + PV",
+                "detail": "Bound storage identity",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "CSI controller",
+                "detail": "Provision / attach operations",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Storage backend",
+                "detail": "Disk or filesystem service",
+                "type": "storage",
+                "state": "ready"
+              },
+              {
+                "id": "3",
+                "label": "CSI node plugin",
+                "detail": "Stage / publish on worker",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Application",
+                "detail": "Waiting for successful /data mount",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "attached",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Node mount is blocked",
+            "narration": "The node plugin cannot publish the filesystem, so the application container waits before starting.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC + PV",
+                "detail": "Bound storage identity",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "CSI controller",
+                "detail": "Provision / attach operations",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Storage backend",
+                "detail": "Disk or filesystem service",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "CSI node plugin",
+                "detail": "Stage / publish on worker",
+                "type": "node",
+                "state": "failed"
+              },
+              {
+                "id": "4",
+                "label": "Application",
+                "detail": "Waiting for successful /data mount",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "FailedMount",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect the node-side cause",
+            "narration": "Read Pod events and driver evidence for mount options, filesystem or permission problems; changing Service networking will not help.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC + PV",
+                "detail": "Bound storage identity",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "CSI controller",
+                "detail": "Provision / attach operations",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Storage backend",
+                "detail": "Disk or filesystem service",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "CSI node plugin",
+                "detail": "Stage / publish on worker",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Application",
+                "detail": "/data mount visible",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "3",
+                "label": "inspect events",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod report-writer"
+          }
+        ]
+      }
+    ],
+    "id": "m09-l02-csi-path"
+  }
+]

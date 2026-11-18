@@ -1,0 +1,13 @@
+---
+import Base from '../layouts/Base.astro';
+import {modules,levels,levelNames} from '../data/modules';
+import {getLessons,lessonHref} from '../lib/content';
+import ProgressManager from '../components/ProgressManager';
+const lessons=await getLessons();
+const descriptions={foundations:'Start with the primitives. Build an application, trace its traffic, and learn how the cluster keeps its promises.',intermediate:'Turn a running application into a reliable system. Work through scheduling, networking, data, trust, diagnosis, and delivery.',advanced:'Study the machinery beneath the API, then use it to design resilient control planes and extensible platforms.'};
+---
+<Base title="Learning path"><div class="page-pad"><header class="page-header"><h1>The whole system,<br/>one idea at a time.</h1><p>A connected path from foundations to production operations and internals. Follow the sequence, or go directly to the question you are working on.</p></header>
+ <ProgressManager lessons={lessons.map(l=>({id:l.data.lessonId,title:l.data.title,href:lessonHref(l)}))} client:load />
+ <nav class="level-tabs" aria-label="Curriculum levels">{levels.map(l=><a href={`#${l}`}>{levelNames[l]}</a>)}</nav>
+ {levels.map(level=><section id={level} class="curriculum-level"><h2>{levelNames[level]}</h2><p>{descriptions[level]}</p>{modules.filter(m=>m.level===level).map(module=><article class="module" id={module.id}><div><span class="module-id">{module.id} · 3 lessons</span><h3>{module.title}</h3><p>{module.description}</p><a class="module-lab" href={`/labs/#${module.id}`}>Open local exercise →</a></div><ol class="module-lessons">{lessons.filter(l=>l.data.module===module.id).map(l=><li><a href={lessonHref(l)}><span>{l.data.title}</span><small>{l.data.minutes} min <span aria-hidden="true">↗</span></small></a></li>)}</ol></article>)}</section>)}
+ </div></Base>

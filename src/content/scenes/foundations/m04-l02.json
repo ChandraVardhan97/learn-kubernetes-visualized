@@ -1,0 +1,466 @@
+[
+  {
+    "id": "m04-l02-init",
+    "title": "Regular init containers are a completion gate",
+    "kind": "lifecycle",
+    "description": "Run ordered setup before starting the app container.",
+    "assumption": "The Pod has one regular initializer; its default Pod restart policy retries failed initialization.",
+    "frames": [
+      {
+        "title": "Start the initializer",
+        "narration": "The kubelet starts prepare before the web application. The emptyDir exists and is mounted at /work for setup.",
+        "nodes": [
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "init",
+            "label": "prepare: running",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "vol",
+            "label": "emptyDir page",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "web: not started",
+            "type": "pod",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "init",
+            "label": "run first",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "vol",
+            "label": "write index.html",
+            "state": "active",
+            "from": "init"
+          }
+        ]
+      },
+      {
+        "title": "Completion opens the gate",
+        "narration": "prepare exits 0 after writing the file. Successful completion permits the next initialization step and then app startup.",
+        "nodes": [
+          {
+            "id": "init",
+            "label": "prepare: exit 0",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "vol",
+            "label": "index.html prepared",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "web: eligible to start",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "web",
+            "label": "completion gate opens",
+            "state": "active",
+            "from": "init"
+          },
+          {
+            "to": "web",
+            "label": "shared input ready",
+            "state": "active",
+            "from": "vol"
+          }
+        ]
+      },
+      {
+        "title": "Serve the prepared file",
+        "narration": "nginx mounts the same volume at its document root. Shared storage connects two different root filesystems.",
+        "nodes": [
+          {
+            "id": "init",
+            "label": "prepare: completed",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "vol",
+            "label": "Shared page file",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx serving",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "vol",
+            "label": "read document root",
+            "state": "active",
+            "from": "web"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m04-l02-init-failure",
+        "label": "Failure: initializer waits for its own app",
+        "description": "Failure: initializer waits for its own app",
+        "frames": [
+          {
+            "title": "Initializer waits for web",
+            "narration": "A setup command waits for localhost:80 before exiting, but nginx is an ordinary app container that has not started.",
+            "nodes": [
+              {
+                "id": "init",
+                "label": "prepare waits for :80",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "nginx not started",
+                "type": "pod",
+                "state": "idle",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "wait for listener",
+                "state": "blocked",
+                "from": "init"
+              }
+            ]
+          },
+          {
+            "title": "The dependency is circular",
+            "narration": "The app waits for successful init completion. The initializer waits for the app, so neither condition can advance.",
+            "nodes": [
+              {
+                "id": "init",
+                "label": "No completion",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "Startup gated",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "completion required",
+                "state": "blocked",
+                "from": "init"
+              },
+              {
+                "to": "init",
+                "label": "listener required",
+                "state": "blocked",
+                "from": "web"
+              }
+            ]
+          },
+          {
+            "title": "Remove the circular gate",
+            "narration": "Prepare files independently or use an appropriate ongoing helper. Retry-safe initialization must be able to complete before ordinary app startup.",
+            "nodes": [
+              {
+                "id": "init",
+                "label": "Finite independent setup",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "Starts after setup",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "exit 0",
+                "state": "active",
+                "from": "init"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m04-l02-sidecar",
+    "title": "A restartable helper keeps running",
+    "kind": "lifecycle",
+    "description": "Use an init sidecar with restartPolicy Always and shared storage.",
+    "assumption": "The observer has no startup probe; production ordering may require an explicit health gate.",
+    "frames": [
+      {
+        "title": "Start the restartable sidecar",
+        "narration": "observer is listed under initContainers with restartPolicy Always. After it starts, initialization can proceed rather than waiting for it to exit.",
+        "nodes": [
+          {
+            "id": "observer",
+            "label": "observer: started",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet lifecycle",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "web: starting",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "observer",
+            "label": "restartable init",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "web",
+            "label": "continue startup",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      },
+      {
+        "title": "Run alongside the app",
+        "narration": "The observer reads the shared page volume while nginx serves it. Both run in one Pod and share its resource and failure context.",
+        "nodes": [
+          {
+            "id": "observer",
+            "label": "Observer helper",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "vol",
+            "label": "Shared emptyDir page",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx application",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "vol",
+            "label": "read",
+            "state": "active",
+            "from": "observer"
+          },
+          {
+            "to": "vol",
+            "label": "read",
+            "state": "active",
+            "from": "web"
+          }
+        ]
+      },
+      {
+        "title": "Supervise the helper independently",
+        "narration": "If observer exits, kubelet can restart that sidecar without replacing the Pod or restarting nginx merely because the helper exited.",
+        "nodes": [
+          {
+            "id": "observer",
+            "label": "Observer restarted",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx still running",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "observer",
+            "label": "sidecar restart",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m04-l02-sidecar-failure",
+        "label": "Failure: shared volume permissions",
+        "description": "Failure: shared volume permissions",
+        "frames": [
+          {
+            "title": "Helper and app use different users",
+            "narration": "The initializer creates a file with permissions the nginx process cannot read. The volume is shared, but permissions still apply.",
+            "nodes": [
+              {
+                "id": "vol",
+                "label": "File unreadable by nginx",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "nginx user",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "vol",
+                "label": "read denied",
+                "state": "blocked",
+                "from": "web"
+              }
+            ]
+          },
+          {
+            "title": "Running does not imply useful content",
+            "narration": "Containers may run while HTTP requests fail to retrieve the intended file. Check ownership, mode, and mount paths.",
+            "nodes": [
+              {
+                "id": "web",
+                "label": "HTTP file access fails",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "observer",
+                "label": "Helper may read successfully",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "vol",
+                "label": "Mismatched permissions",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "vol",
+                "label": "denied",
+                "state": "blocked",
+                "from": "web"
+              },
+              {
+                "to": "vol",
+                "label": "different user access",
+                "state": "active",
+                "from": "observer"
+              }
+            ]
+          },
+          {
+            "title": "Align permissions deliberately",
+            "narration": "Choose compatible ownership and minimum necessary access for the shared path. Do not solve every mount error by making all files world-writable.",
+            "nodes": [
+              {
+                "id": "vol",
+                "label": "Readable prepared file",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "web",
+                "label": "nginx serves file",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "vol",
+                "label": "permitted read",
+                "state": "active",
+                "from": "web"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

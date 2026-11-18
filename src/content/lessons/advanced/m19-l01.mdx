@@ -1,0 +1,81 @@
+---
+lessonId: "m19-l01"
+title: "GitOps and drift reconciliation"
+description: "Make declared ownership and live recovery agree."
+level: "advanced"
+module: "m19"
+order: 1
+minutes: 16
+prerequisites: ["m14-l02", "m16-l03"]
+objectives: ["Trace Git revision through render, diff, sync and health.", "Explain Argo CD self-heal and prune as separate choices.", "Choose an explicit field-ownership takeover for the local drift exercise."]
+concepts: [{"id": "m19-l01-gitops-loop", "title": "Revision, render, diff, sync, health", "scene": "m19-l01-gitops-loop"}, {"id": "m19-l01-gitops-field-takeover", "title": "Drift repair includes an ownership decision", "scene": "m19-l01-gitops-field-takeover"}]
+sources: [{"title": "Argo CD automated sync policy", "url": "https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/"}, {"title": "Argo CD sync options", "url": "https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/"}, {"title": "Server-side apply", "url": "https://kubernetes.io/docs/reference/using-api/server-side-apply/"}]
+lab: "m19"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: the source of intent is another dependency
+
+GitOps stores reviewed desired configuration in a source repository and uses a controller to compare that source with live cluster state. Argo CD renders the selected revision, compares desired resources with the destination, and applies changes according to application policy. The controller also evaluates resource health. A successful sync says something about configuration convergence; a healthy application requires workload and dependency evidence. A Git commit is not an atomic transaction across every resource in the cluster.
+
+Drift is a difference between the intended source and observed live state. It can come from an emergency edit, defaulting, an operator, an autoscaler or an unauthorized change. Treating all differences as malicious is as unhelpful as ignoring all differences. Define which actor owns each field. For an HPA-managed workload, continuously forcing the Git replica count can create a fight between controllers rather than a more reliable deployment process.
+
+<Scene id="m19-l01-gitops-loop" />
+
+## Walkthrough: automatic sync has independent controls
+
+Argo CD automated synchronization, self-healing and pruning are related but distinct settings. Self-healing controls automatic correction of certain live-only deviations under automated sync. Pruning allows removal of tracked resources that are no longer in desired source, with additional safeguards and options relevant to empty applications and destructive changes. Enabling one behavior should not be assumed to enable every other one. Inspect the installed Argo CD version and application policy before predicting whether a manual edit will be reversed.
+
+SSA changes the coordination behavior at the API field boundary. A controller applying a field already owned with a different value can conflict. `--force-conflicts` is an explicit takeover, not a harmless way to silence a warning. The local m19 exercise first declares a ConfigMap using `kv-gitops`, introduces drift with an ordinary patch, and then intentionally forces the declarative manager to recover its field. That force is part of the teaching scenario's approved ownership decision, not a recommended blanket Argo CD policy.
+
+<Scene id="m19-l01-gitops-field-takeover" />
+
+This ConfigMap is the entire desired resource in the local exercise. The lab models reconciliation with explicit kubectl commands; it does not silently install an Argo CD service or connect to a remote repository.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m19
+  namespace: kv-lab
+  labels:
+    lab: m19
+data:
+  release: git-declared
+```
+
+```bash
+# Run from the downloaded m19 directory.
+kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f resources.yaml
+kubectl --context kind-kv-lab -n kv-lab patch configmap m19 --type=merge -p '{"data":{"release":"manual-drift"}}'
+kubectl --context kind-kv-lab -n kv-lab get configmap m19 -o yaml --show-managed-fields
+# Intentional takeover of this disposable lab field only.
+kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops --force-conflicts -f resources.yaml
+```
+
+## Practice: observe state and ownership before restoring it
+
+Run the [m19 local exercise](/labs/#m19). Expect release to change to `manual-drift`, then return to `git-declared` after explicit declarative recovery. Inspect managedFields before and after the patch because an ordinary update can transfer ownership of changed fields. A separate manager performing a conflicting SSA declaration has different behavior from a patch that already changed the field. These are distinct operations, not interchangeable ways to demonstrate a conflict.
+
+For an optional real Argo CD extension, read `ARGOCD-OPTIONAL.md` from the download. First choose a supported release and check its [upstream-tested Kubernetes versions](https://argo-cd.readthedocs.io/en/stable/operator-manual/tested-kubernetes-versions/); a pinned install manifest alone does not establish compatibility with this course's Kubernetes 1.37 cluster. Keep source credentials, destination permissions, project restrictions and application scope explicit. Test rendering before sync and use an immutable reviewed revision when reproducibility matters. Record both the desired revision and observed health. Repository access failure, manifest-render failure, admission rejection and an unhealthy deployed workload need different diagnosis paths even though they can all prevent a delivery from completing.
+
+## Pitfalls: emergency changes need a return path
+
+An emergency live change may be reverted by active self-healing unless the source or reconciliation policy is updated deliberately. Pause the relevant automation only through the team's incident procedure, preserve the exact live change, and incorporate or revert it in source afterward. Broad ignore-differences rules can hide meaningful drift; broad pruning permissions can delete resources that were incorrectly tracked. Restoring an old cluster snapshot while GitOps points at a newer revision can immediately change the restored state again.
+
+Choose the application boundary to match ownership. GitOps can own the WebApp custom resource while an operator owns generated ConfigMaps and Deployments. Having both controllers declare the same child fields produces avoidable conflicts. This boundary is exercised in the final platform capstone.
+
+## Check your understanding
+
+<details>
+
+<summary>The app is Synced, but no ready endpoints exist. Has GitOps proved service availability?</summary>
+
+No. Sync compares and applies desired configuration; readiness and actual requests are later evidence. Inspect application health, Pod conditions, EndpointSlices and dependencies before claiming the service is available.
+
+</details>
+
+Next, define who is allowed to supply that desired configuration and which artifacts it may reference. Git history alone is not a complete tenancy or software-trust boundary.

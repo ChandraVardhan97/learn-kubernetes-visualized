@@ -1,0 +1,730 @@
+[
+  {
+    "title": "A mesh secures a defined traffic path",
+    "kind": "flow",
+    "description": "The destination still needs appropriate business and end-user authorization; peer identity alone is insufficient.",
+    "assumption": "Generic data-plane boxes apply across sidecar and other modes; actual placement and supported policy features vary.",
+    "frames": [
+      {
+        "title": "Define covered traffic",
+        "narration": "The chosen mesh mode determines which connections enter its data plane.",
+        "nodes": [
+          {
+            "id": "appA",
+            "label": "Application A",
+            "type": "pod",
+            "detail": "Source workload",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "planeA",
+            "label": "Mesh data plane A",
+            "type": "control",
+            "detail": "Identity and traffic handling",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "planeB",
+            "label": "Mesh data plane B",
+            "type": "control",
+            "detail": "Peer policy and encryption",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "appB",
+            "label": "Application B",
+            "type": "pod",
+            "detail": "Destination workload",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "control",
+            "label": "Mesh control plane",
+            "type": "control",
+            "detail": "Identity + config distribution",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "planeA",
+            "label": "covered connection",
+            "state": "active",
+            "from": "appA"
+          },
+          {
+            "to": "planeA",
+            "label": "configuration",
+            "state": "active",
+            "from": "control"
+          },
+          {
+            "to": "planeB",
+            "label": "configuration",
+            "state": "active",
+            "from": "control"
+          }
+        ]
+      },
+      {
+        "title": "Authenticate peers",
+        "narration": "Configured mTLS verifies workload identities and encrypts the covered connection.",
+        "nodes": [
+          {
+            "id": "appA",
+            "label": "Application A",
+            "type": "pod",
+            "detail": "Source workload",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "planeA",
+            "label": "Mesh data plane A",
+            "type": "control",
+            "detail": "Identity and traffic handling",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "planeB",
+            "label": "Mesh data plane B",
+            "type": "control",
+            "detail": "Peer policy and encryption",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "appB",
+            "label": "Application B",
+            "type": "pod",
+            "detail": "Destination workload",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "control",
+            "label": "Mesh control plane",
+            "type": "control",
+            "detail": "Identity + config distribution",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "planeB",
+            "label": "mTLS when configured",
+            "state": "active",
+            "from": "planeA"
+          }
+        ]
+      },
+      {
+        "title": "Keep application decisions",
+        "narration": "The destination still needs appropriate business and end-user authorization; peer identity alone is insufficient.",
+        "nodes": [
+          {
+            "id": "appA",
+            "label": "Application A",
+            "type": "pod",
+            "detail": "Source workload",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "planeA",
+            "label": "Mesh data plane A",
+            "type": "control",
+            "detail": "Identity and traffic handling",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "planeB",
+            "label": "Mesh data plane B",
+            "type": "control",
+            "detail": "Peer policy and encryption",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "appB",
+            "label": "Application B",
+            "type": "pod",
+            "detail": "Destination workload",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "control",
+            "label": "Mesh control plane",
+            "type": "control",
+            "detail": "Identity + config distribution",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "appB",
+            "label": "authorized delivery",
+            "state": "active",
+            "from": "planeB"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Caller outside coverage",
+        "description": "Traffic outside the configured data path does not automatically gain mesh guarantees.",
+        "frames": [
+          {
+            "title": "Unmeshed caller connects",
+            "narration": "The caller has no configured mesh identity path.",
+            "nodes": [
+              {
+                "id": "appA",
+                "label": "Application A",
+                "type": "pod",
+                "detail": "Caller outside mesh coverage",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "planeA",
+                "label": "Mesh data plane A",
+                "type": "control",
+                "detail": "No source mesh identity on this path",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "planeB",
+                "label": "Mesh data plane B",
+                "type": "control",
+                "detail": "Peer policy and encryption",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "appB",
+                "label": "Application B",
+                "type": "pod",
+                "detail": "Destination workload",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "control",
+                "label": "Mesh control plane",
+                "type": "control",
+                "detail": "Identity + config distribution",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "planeB",
+                "label": "connection without mesh identity",
+                "state": "active",
+                "from": "appA"
+              }
+            ]
+          },
+          {
+            "title": "Policy determines acceptance",
+            "narration": "Strict or permissive destination settings affect whether this call is rejected or accepted without the expected protection.",
+            "nodes": [
+              {
+                "id": "appA",
+                "label": "Application A",
+                "type": "pod",
+                "detail": "Source workload",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "planeA",
+                "label": "Mesh data plane A",
+                "type": "control",
+                "detail": "Identity and traffic handling",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "planeB",
+                "label": "Mesh data plane B",
+                "type": "control",
+                "detail": "Strict may reject; permissive may accept",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "appB",
+                "label": "Application B",
+                "type": "pod",
+                "detail": "Destination workload",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "control",
+                "label": "Mesh control plane",
+                "type": "control",
+                "detail": "Identity + config distribution",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Test coverage explicitly",
+            "narration": "Observe this path rather than claiming all cluster traffic is encrypted by installing a mesh control plane.",
+            "nodes": [
+              {
+                "id": "appA",
+                "label": "Application A",
+                "type": "pod",
+                "detail": "Source workload",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "planeA",
+                "label": "Mesh data plane A",
+                "type": "control",
+                "detail": "Identity and traffic handling",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "planeB",
+                "label": "Mesh data plane B",
+                "type": "control",
+                "detail": "Peer policy and encryption",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "appB",
+                "label": "Application B",
+                "type": "pod",
+                "detail": "Verify observed policy and transport",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "control",
+                "label": "Mesh control plane",
+                "type": "control",
+                "detail": "Identity + config distribution",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m19-l03-mesh-identity"
+  },
+  {
+    "title": "Network policy, mesh policy, and provider ownership differ",
+    "kind": "policy",
+    "description": "The managed-provider contract and platform ownership map determine who maintains infrastructure, add-ons and data recovery.",
+    "assumption": "Provider responsibilities must be verified for the actual service; no universal managed-Kubernetes contract is assumed.",
+    "frames": [
+      {
+        "title": "Constrain connectivity",
+        "narration": "The networking implementation enforces selected reachability rules independently of mesh identity policy.",
+        "nodes": [
+          {
+            "id": "network",
+            "label": "NetworkPolicy",
+            "type": "control",
+            "detail": "Reachability enforcement",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "mesh",
+            "label": "Mesh policy",
+            "type": "control",
+            "detail": "Covered service identity / L7",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "app",
+            "label": "Application policy",
+            "type": "pod",
+            "detail": "Business and user authorization",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "provider",
+            "label": "Managed provider",
+            "type": "actor",
+            "detail": "Contracted infrastructure duties",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "team",
+            "label": "Platform / app team",
+            "type": "actor",
+            "detail": "Workloads, data and add-ons",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "mesh",
+            "label": "permitted network path",
+            "state": "active",
+            "from": "network"
+          }
+        ]
+      },
+      {
+        "title": "Evaluate identity and request",
+        "narration": "The mesh can add identity-aware or L7 decisions where supported; application authorization remains necessary.",
+        "nodes": [
+          {
+            "id": "network",
+            "label": "NetworkPolicy",
+            "type": "control",
+            "detail": "Reachability enforcement",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mesh",
+            "label": "Mesh policy",
+            "type": "control",
+            "detail": "Covered service identity / L7",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "app",
+            "label": "Application policy",
+            "type": "pod",
+            "detail": "Business and user authorization",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "provider",
+            "label": "Managed provider",
+            "type": "actor",
+            "detail": "Contracted infrastructure duties",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "team",
+            "label": "Platform / app team",
+            "type": "actor",
+            "detail": "Workloads, data and add-ons",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "permitted covered request",
+            "state": "active",
+            "from": "mesh"
+          }
+        ]
+      },
+      {
+        "title": "Assign operations explicitly",
+        "narration": "The managed-provider contract and platform ownership map determine who maintains infrastructure, add-ons and data recovery.",
+        "nodes": [
+          {
+            "id": "network",
+            "label": "NetworkPolicy",
+            "type": "control",
+            "detail": "Reachability enforcement",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mesh",
+            "label": "Mesh policy",
+            "type": "control",
+            "detail": "Covered service identity / L7",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "app",
+            "label": "Application policy",
+            "type": "pod",
+            "detail": "Business and user authorization",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "provider",
+            "label": "Managed provider",
+            "type": "actor",
+            "detail": "Contracted infrastructure duties",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "team",
+            "label": "Platform / app team",
+            "type": "actor",
+            "detail": "Workloads, data and add-ons",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "team",
+            "label": "document service boundary",
+            "state": "active",
+            "from": "provider"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Assume the provider owns every recovery",
+        "description": "A control-plane service does not imply automatic application-data restoration.",
+        "frames": [
+          {
+            "title": "Cluster is managed",
+            "narration": "The provider operates specified infrastructure components.",
+            "nodes": [
+              {
+                "id": "network",
+                "label": "NetworkPolicy",
+                "type": "control",
+                "detail": "Reachability enforcement",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "mesh",
+                "label": "Mesh policy",
+                "type": "control",
+                "detail": "Covered service identity / L7",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "app",
+                "label": "Application policy",
+                "type": "pod",
+                "detail": "Business and user authorization",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "provider",
+                "label": "Managed provider",
+                "type": "actor",
+                "detail": "Contracted infrastructure duties",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "team",
+                "label": "Platform / app team",
+                "type": "actor",
+                "detail": "Workloads, data and add-ons",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "team",
+                "label": "document service boundary",
+                "state": "active",
+                "from": "provider"
+              }
+            ]
+          },
+          {
+            "title": "Application data is lost",
+            "narration": "A workload or external database still requires its own backup and restore owner.",
+            "nodes": [
+              {
+                "id": "network",
+                "label": "NetworkPolicy",
+                "type": "control",
+                "detail": "Reachability enforcement",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "mesh",
+                "label": "Mesh policy",
+                "type": "control",
+                "detail": "Covered service identity / L7",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "app",
+                "label": "Application policy",
+                "type": "pod",
+                "detail": "Lost application data requires its own recovery",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "provider",
+                "label": "Managed provider",
+                "type": "actor",
+                "detail": "Contracted infrastructure duties",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "team",
+                "label": "Platform / app team",
+                "type": "actor",
+                "detail": "Workloads, data and add-ons",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Responsibility gap is exposed",
+            "narration": "Without an explicit ownership map, neither a mesh nor a managed API restores the missing application records.",
+            "nodes": [
+              {
+                "id": "network",
+                "label": "NetworkPolicy",
+                "type": "control",
+                "detail": "Reachability enforcement",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "mesh",
+                "label": "Mesh policy",
+                "type": "control",
+                "detail": "Covered service identity / L7",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "app",
+                "label": "Application policy",
+                "type": "pod",
+                "detail": "Business and user authorization",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "provider",
+                "label": "Managed provider",
+                "type": "actor",
+                "detail": "Contracted infrastructure duties",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "team",
+                "label": "Platform / app team",
+                "type": "actor",
+                "detail": "Backup and restore ownership missing",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m19-l03-platform-boundaries"
+  }
+]

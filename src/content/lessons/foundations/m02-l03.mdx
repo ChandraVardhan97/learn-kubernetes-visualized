@@ -1,0 +1,133 @@
+---
+{
+  "lessonId": "m02-l03",
+  "title": "From kubectl to a running Pod",
+  "description": "Trace API acceptance, scheduling, image preparation, and status without conflating them.",
+  "level": "foundations",
+  "module": "m02",
+  "order": 3,
+  "minutes": 14,
+  "prerequisites": [
+    "m02-l02"
+  ],
+  "objectives": [
+    "Follow the complete ordinary Pod creation path",
+    "Locate failure before or after node binding",
+    "Interpret Running and Ready as separate observations"
+  ],
+  "concepts": [
+    {
+      "id": "m02-l03-pod-request-path",
+      "title": "Pod request lifecycle",
+      "scene": "m02-l03-request"
+    },
+    {
+      "id": "m02-l03-pod-startup",
+      "title": "Node startup and status",
+      "scene": "m02-l03-startup"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Pod lifecycle",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/"
+    },
+    {
+      "title": "Kubernetes API concepts",
+      "url": "https://kubernetes.io/docs/reference/using-api/api-concepts/"
+    },
+    {
+      "title": "Debug running Pods",
+      "url": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/"
+    }
+  ],
+  "lab": "m02",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: one intention, several asynchronous owners
+
+When `kubectl apply` returns “created,” the API request has completed: the API server accepted and persisted a Pod object. The response does not confirm application startup. Scheduling and worker preparation proceed independently and may still be incomplete, although fast observers can already have advanced the Pod before the response reaches your terminal. This separation explains why a command can succeed while a Pod remains Pending or its application immediately exits.
+
+kubectl reads a kubeconfig context, connects to the configured API endpoint, and sends authenticated requests. The API server checks permissions, admission requirements, and the object's schema. Admission can supply defaults or reject a request. Successful persistence makes the object observable to other components. kubectl does not log into a worker and execute the image itself, and the API server does not synchronously wait for a web request to succeed before acknowledging creation.
+
+For an ordinary unassigned Pod, the scheduler observes the object, evaluates feasible nodes, and records a binding. The selected node's kubelet observes that assignment. Its local preparation includes volumes and the Pod sandbox, with networking performed through the installed network integration and runtime path. The kubelet uses CRI to request image and container operations from the runtime. Precise preparation steps can overlap and differ by implementation; the responsibility boundary is the important invariant.
+
+<Scene id="m02-l03-request" />
+
+## Walkthrough: capture evidence at each boundary
+
+Create a disposable namespace and save the following object as `path-demo.yaml`. The namespace is an API organization boundary explained in the next module. All commands explicitly name it so the experiment does not depend on your current default namespace.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: path-demo
+  namespace: path-lab
+  labels:
+    app: path-demo
+spec:
+  containers:
+    - name: web
+      image: nginx:1.27.5
+      ports:
+        - containerPort: 80 # Documentation; nginx supplies the listener.
+```
+
+```bash
+kubectl create namespace path-lab
+kubectl apply -f path-demo.yaml
+# Node and Pod IP appear only when the relevant work has completed.
+kubectl -n path-lab get pod path-demo -o wide -w
+# In another terminal, inspect conditions and event reasons.
+kubectl -n path-lab describe pod path-demo
+kubectl -n path-lab get pod path-demo -o yaml
+```
+
+A healthy lab should eventually show a node assignment, a Pod IP, and a running web container. “Pending” covers more than the scheduler queue: a bound Pod can still be preparing images or volumes. Check `spec.nodeName`, conditions, container waiting reasons, and events instead of deciding the cause from the phase column alone.
+
+The kubelet reports container states and Pod conditions through the API. A container may be Waiting, Running, or Terminated. Pod phase is a coarser summary. Running means the Pod has been bound, all its containers have been created, and at least one is running or being started/restarted; it is not an end-to-end availability test. The Ready condition expresses a different usability signal. Without deliberate application probes, that signal may be much weaker than your service's real business readiness requirements.
+
+<Scene id="m02-l03-startup" />
+
+## Practice: compare before and after binding
+
+Use an invalid image tag in a second disposable Pod. Its object can be accepted and bound, but the runtime cannot retrieve the image. Expect an assigned node and image-pull failure evidence. Contrast that with a Pod that requests an impossible amount of memory in the later resource lab: that Pod may remain unassigned with FailedScheduling events. The visible “not running” symptom is similar, but different components own the next useful action.
+
+Wait deliberately for a condition when automation needs one:
+
+```bash
+kubectl -n path-lab wait --for=condition=Ready pod/path-demo --timeout=90s
+kubectl -n path-lab logs path-demo -c web --tail=20
+# Local access for this named Pod; not a Service or external load balancer.
+kubectl -n path-lab port-forward pod/path-demo 8080:80
+```
+
+While port-forward runs, request `http://127.0.0.1:8080/` from another terminal. An HTTP response tests the selected Pod through a debugging tunnel. It does not establish that Service selection, cluster DNS, or external exposure works. A wait timeout similarly means the requested condition did not arrive before the deadline; inspect evidence rather than treating the timeout as a diagnosis.
+
+## Pitfalls
+
+A status listing is an observation that can become stale. Use watches and repeat inspection when state changes. Events are useful, time-limited records and can be aggregated; do not assume every internal operation creates one or that the oldest evidence remains forever. For a failed process, logs and termination state complement events, while a failed image pull may have no application logs at all.
+
+## Check your understanding
+
+<details>
+
+<summary>A Pod has a node name but reports ImagePullBackOff. Should you replace the scheduler?</summary>
+
+No. Placement has already completed for this Pod. Investigate the image reference, credentials, registry access, and runtime-side error details. The scheduler does not resolve registry tags or start containers. Correct the responsible layer, then observe whether the kubelet can advance startup.
+
+</details>
+
+Use the [module lab](/labs/#m02) to label each observation with its responsible component. Stop port-forward and delete the disposable namespace after the experiment.
+
+## Primary documentation
+
+- [Pod lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)
+- [Kubernetes API concepts](https://kubernetes.io/docs/reference/using-api/api-concepts/)
+- [Debug running Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/)

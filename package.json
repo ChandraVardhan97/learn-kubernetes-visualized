@@ -1,0 +1,51 @@
+{
+  "name": "kubernetes-visualized",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/astro.mjs dev --host 127.0.0.1",
+    "check": "node scripts/astro.mjs check && node --import tsx scripts/validate-content.ts",
+    "build": "node --import tsx scripts/check-public-assets.ts public && node scripts/astro.mjs build && pagefind --site dist && node --import tsx scripts/check-public-assets.ts dist",
+    "preview": "node scripts/astro.mjs preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "verify:content": "node --import tsx scripts/validate-content.ts",
+    "verify:labs": "node --import tsx scripts/validate-labs.ts",
+    "audit:performance": "node scripts/audit-performance.mjs",
+    "deploy": "node --import tsx scripts/check-public-assets.ts public dist && wrangler deploy"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "8.1.1",
+    "@astrojs/react": "7.1.1",
+    "@astrojs/sitemap": "3.7.4",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "astro": "7.4.2",
+    "motion": "14.6.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@playwright/test": "1.64.1",
+    "@axe-core/playwright": "4.14.0",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "lighthouse": "13.5.0",
+    "pagefind": "1.5.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5",
+    "wrangler": "4.153.0",
+    "yaml": "2.9.1"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261023.1": true
+  },
+  "engines": {
+    "node": ">=22.23.4"
+  }
+}

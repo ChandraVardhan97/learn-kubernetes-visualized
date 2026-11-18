@@ -1,0 +1,114 @@
+---
+{
+  "lessonId": "m01-l01",
+  "title": "Containers are processes",
+  "description": "Separate Linux process isolation from resource control and virtual machines.",
+  "level": "foundations",
+  "module": "m01",
+  "order": 1,
+  "minutes": 14,
+  "prerequisites": [],
+  "objectives": [
+    "Explain why a container shares its host kernel",
+    "Distinguish namespaces from cgroups",
+    "Predict what survives a container restart"
+  ],
+  "concepts": [
+    {
+      "id": "m01-l01-containers",
+      "title": "Containers",
+      "scene": "m01-l01-isolation"
+    },
+    {
+      "id": "m01-l01-linux-namespaces",
+      "title": "Linux namespaces",
+      "scene": "m01-l01-isolation"
+    },
+    {
+      "id": "m01-l01-cgroups",
+      "title": "Control groups",
+      "scene": "m01-l01-resource-boundary"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Docker: What is a container?",
+      "url": "https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/"
+    },
+    {
+      "title": "Linux namespaces overview",
+      "url": "https://man7.org/linux/man-pages/man7/namespaces.7.html"
+    },
+    {
+      "title": "Linux control groups overview",
+      "url": "https://man7.org/linux/man-pages/man7/cgroups.7.html"
+    }
+  ],
+  "lab": "m01",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: a process with boundaries
+
+A container is a running process, or a small process tree, started with an isolated view of parts of its host. It is not a miniature computer with a separately booted kernel. On a Linux host, two ordinary Linux containers use the same host kernel while seeing different filesystem roots, network interfaces, or process IDs. The image provides application files and dependencies; the runtime arranges isolation and starts the configured executable. When that executable exits, the container stops. Keeping an empty terminal open is not the goal; keeping the intended application process healthy is.
+
+A virtual machine places a guest operating system behind a virtual hardware boundary. Containers usually provide a lighter process boundary. Neither description means arbitrary untrusted code is harmless. Kernel vulnerabilities, privileged configuration, host mounts, and excessive capabilities affect isolation. On a macOS or Windows development laptop, a Linux container commonly runs inside a Linux virtual machine. The relevant shared kernel is that Linux VM's kernel, not the laptop's native kernel.
+
+Linux **namespaces** change what a process can see. A PID namespace can make a process appear as PID 1 inside its container. A mount namespace gives it a particular filesystem view. A network namespace supplies interfaces, routes, and port bindings. These are operating-system namespaces; later, Kubernetes namespaces will organize API objects and will not create these kernel boundaries by themselves.
+
+<Scene id="m01-l01-isolation" />
+
+## Walkthrough: visibility and consumption are different
+
+**Control groups**, commonly called cgroups, account for and constrain resource consumption by groups of processes. A namespace can hide other processes without preventing this process from consuming CPU or memory. A memory constraint can limit consumption without changing which processes are visible. These mechanisms answer separate questions: “what can this process see?” and “how much may it consume?”
+
+The following optional Docker exercise needs Docker installed and a working Linux container backend. Kubernetes does not require the Docker CLI; this is a familiar way to inspect the underlying ideas. The image tag is a convenient training choice, not a reproducible production identifier.
+
+```bash
+# The foreground executable is a shell running a finite command.
+docker run --name process-demo --memory 64m --cpus 0.5 \
+  alpine:3.20 sh -c 'echo "container PID: $$"; sleep 300'
+# In another terminal, inspect that process from inside its boundary.
+docker exec process-demo ps
+# Resource reporting comes from runtime/host accounting.
+docker stats --no-stream process-demo
+# Stop the demo and remove its container metadata and writable layer.
+docker stop process-demo
+docker rm process-demo
+```
+
+The process listing should be much smaller than the host's process listing. Reported memory includes actual usage and accounting details; setting a 64 MiB limit does not preallocate 64 MiB or guarantee that all of it is available to application data. A CPU limit constrains CPU time over accounting intervals. It does not reserve half of one particular physical core. Kubernetes later expresses requests and limits, and the node runtime translates relevant settings into operating-system controls.
+
+<Scene id="m01-l01-resource-boundary" />
+
+## Practice: reason about the writable layer
+
+Start another disposable container, create a file under `/tmp`, and inspect it while that same container exists. Then remove the container and create a new one from the same image. The new instance starts from image contents, so your added file is absent. Distinguish restarting the same Docker container, which normally retains its writable layer, from creating a replacement container. In Kubernetes, a restarted container receives a fresh container filesystem; a mounted volume follows its own lifetime rules. Never assume the image will acquire files written by a running process.
+
+Predict each observation before you run commands. Record the configured executable, its exit behavior, the resource limits, and the location of state. These four facts explain many later Pod failures without requiring any cluster machinery.
+
+## Pitfalls
+
+A process that handles signals poorly can delay termination, especially when a shell wraps the real executable. Prefer an executable that receives termination signals correctly, and use exec-form entrypoints when authoring images. A process running as root inside a container is also not automatically safe because it has an isolated filesystem view. Use deliberate security configuration rather than treating “containerized” as a permission model.
+
+## Check your understanding
+
+<details>
+
+<summary>If a container cannot see other processes, can it still exhaust shared host resources?</summary>
+
+Yes. Process visibility comes from namespaces; resource accounting and constraints come from cgroups and other host policies. Without appropriate constraints, an isolated process can still compete heavily for CPU or memory. Isolation of a view is not a resource reservation. If a memory limit is exceeded, the kernel may kill processes in the constrained group; it does not create a larger machine.
+
+</details>
+
+Continue with images and compare an immutable starting filesystem to a running process's writable changes. Use the [module lab](/labs/#m01) to connect those boundaries to ports and requests.
+
+## Primary documentation
+
+- [Docker: What is a container?](https://docs.docker.com/get-started/docker-concepts/the-basics/what-is-a-container/)
+- [Linux namespaces overview](https://man7.org/linux/man-pages/man7/namespaces.7.html)
+- [Linux control groups overview](https://man7.org/linux/man-pages/man7/cgroups.7.html)

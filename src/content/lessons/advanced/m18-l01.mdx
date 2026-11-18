@@ -1,0 +1,80 @@
+---
+lessonId: "m18-l01"
+title: "HA, etcd quorum, and failure domains"
+description: "Keep API availability distinct from storage consensus and workload survival."
+level: "advanced"
+module: "m18"
+order: 1
+minutes: 16
+prerequisites: ["m15-l03", "m17-l03"]
+objectives: ["Calculate quorum from configured voting membership.", "Explain failure-domain placement and timing constraints.", "Distinguish a surviving workload from a healthy control plane."]
+concepts: [{"id": "m18-l01-etcd-quorum", "title": "Quorum counts configured voters", "scene": "m18-l01-etcd-quorum"}, {"id": "m18-l01-failure-domains", "title": "Redundancy requires independent failure domains", "scene": "m18-l01-failure-domains"}]
+sources: [{"title": "Highly available kubeadm topology", "url": "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/ha-topology/"}, {"title": "etcd cluster FAQ", "url": "https://etcd.io/docs/v3.7/faq/"}, {"title": "etcd runtime reconfiguration", "url": "https://etcd.io/docs/v3.7/op-guide/runtime-configuration/"}]
+lab: "m18"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: multiple API servers still share one coordination system
+
+A highly available control plane commonly has multiple API servers behind an appropriate endpoint, redundant scheduler and controller-manager processes using leader election, and an etcd deployment capable of maintaining quorum through the intended failures. API server replicas help only while their dependencies and routing remain available. Three API servers pointing at one unavailable etcd member do not provide three independent durable copies of cluster state.
+
+etcd uses consensus among its configured voting members. A three-voter cluster needs two votes; a five-voter cluster needs three. Losing one voter from a three-member cluster can preserve quorum, while losing two cannot. Count configured voting membership, not merely the processes currently responding. Adding a fourth voting member changes the majority requirement to three and does not increase the number of tolerated voter failures compared with three. More members also add replication and operational cost.
+
+<Scene id="m18-l01-etcd-quorum" />
+
+## Walkthrough: topology and timing can defeat apparent redundancy
+
+Stacked kubeadm topology places etcd members with control-plane nodes, while external etcd separates their hosts and lifecycle. Both require intentional failure-domain planning. Three virtual machines on one physical host or power domain can fail together. Spreading across distant regions may improve geographic separation while introducing latency that harms consensus and operational responsiveness. The right topology follows tested latency, durability and availability requirements rather than a rule that the most distant members are always safest.
+
+Consensus commits depend on network round trips and durable disk behavior. Slow storage, overloaded hosts or packet loss can produce request latency and leadership churn without a clean node-down event. Election timeouts must accommodate the environment; shortening them cannot make an unreliable network reliable. Membership changes are also writes that require a healthy enough cluster to commit. Plan replacements sequentially using the supported member/learner workflow rather than removing several voters and hoping new machines restore quorum automatically.
+
+<Scene id="m18-l01-failure-domains" />
+
+This ConfigMap is a small API marker for the backup exercise. It demonstrates that durable API state belongs in the control-plane recovery plan; it does not configure an HA etcd cluster.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m18-marker
+  namespace: kv-lab
+  labels:
+    lab: m18
+data:
+  purpose: control-plane-recovery-check
+```
+
+```bash
+kubectl --context kind-kv-lab get --raw='/readyz?verbose'
+kubectl --context kind-kv-lab -n kube-system get pods -o wide
+kubectl --context kind-kv-lab -n kube-system get leases
+# Read-only evidence: the single-node teaching cluster is not HA.
+kubectl --context kind-kv-lab get nodes
+```
+
+## Practice: reason about a failure without removing a voter
+
+Use the [m18 local exercise](/labs/#m18) to capture a real API-state snapshot in the named disposable cluster. The standard local topology has a single control-plane node; it intentionally does not demonstrate a quorum surviving machine loss. Draw three voters A, B and C across three failure domains. Predict the outcome when C fails, then when B is isolated from A. Distinguish the configured majority from the number of containers whose process appears Running.
+
+Now draw worker Pods that are already serving traffic. If the API becomes unavailable, some existing workloads can continue while reconciliation, scheduling and new writes are disrupted. That continuing traffic is useful but not proof that the cluster remains operationally healthy. Node failures, expiring credentials, network changes or application dependencies can still affect those workloads. Define the control-plane and application health checks separately in an incident report.
+
+## Pitfalls: restoring quorum is not ordinary scaling
+
+Do not run membership removal or force-new-cluster commands as a generic response to a failed endpoint. Verify which members are alive, which data directories belong to the cluster, and whether quorum can be recovered through an ordinary member restart. Permanent majority loss requires a carefully planned recovery path, commonly from a verified snapshot, with the old cluster isolated to avoid competing histories. Back up before planned changes and test the exact etcd version's documented procedure.
+
+A load balancer can mask one failed API server, but a readiness check should remove unhealthy backends rather than repeatedly route writes to them. Certificate identities and advertised addresses must match the topology. A control-plane plan should include endpoint failover, member replacement, disk capacity, monitoring and human access when the primary API is impaired.
+
+## Check your understanding
+
+<details>
+
+<summary>Only two processes respond in a configured five-voter etcd cluster. Do they form a majority of the survivors?</summary>
+
+They are a majority of the responders but not a quorum of the configured voting membership. Five voters require three votes. Counting only healthy processes would violate the consensus membership boundary.
+
+</details>
+
+Next, maintain the identities and version contracts that let these components communicate. Redundant replicas cannot compensate for expired certificates or an unsupported upgrade sequence.

@@ -1,0 +1,10 @@
+apiVersion: labs.kv.example/v1alpha1
+kind: WebApp
+metadata:
+  name: m16
+  namespace: kv-lab
+  labels:
+    lab: m16
+spec:
+  replicas: 1
+  message: controlled-by-webapp

@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: m20-web
+  namespace: kv-lab
+  labels:
+    lab: m20
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: m20-web
+  template:
+    metadata:
+      labels:
+        app: m20-web
+        lab: m20
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.28.0-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 250m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: m20-web
+  namespace: kv-lab
+  labels:
+    lab: m20
+spec:
+  selector:
+    app: broken-selector
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m20-client
+  namespace: kv-lab
+  labels:
+    lab: m20
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - sleep 3600

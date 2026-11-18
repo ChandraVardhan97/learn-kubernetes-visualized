@@ -1,0 +1,149 @@
+---
+{
+  "lessonId": "m12-l03",
+  "title": "Metrics, logs, and traces",
+  "description": "Choose telemetry by question, then connect collection, correlation, retention and sensitive-data boundaries.",
+  "level": "intermediate",
+  "module": "m12",
+  "order": 3,
+  "minutes": 18,
+  "prerequisites": [
+    "m12-l02"
+  ],
+  "objectives": [
+    "Distinguish resource metrics from application and request telemetry",
+    "Explain Prometheus scraping and Grafana visualization",
+    "Trace OpenTelemetry context across services without exposing sensitive data"
+  ],
+  "concepts": [
+    {
+      "id": "m12-l03-metrics",
+      "title": "Metrics and label cardinality",
+      "scene": "m12-l03-metrics-pipeline"
+    },
+    {
+      "id": "m12-l03-prometheus",
+      "title": "Prometheus collection",
+      "scene": "m12-l03-metrics-pipeline"
+    },
+    {
+      "id": "m12-l03-grafana",
+      "title": "Grafana visualization",
+      "scene": "m12-l03-metrics-pipeline"
+    },
+    {
+      "id": "m12-l03-logs",
+      "title": "Structured logs",
+      "scene": "m12-l03-request-context"
+    },
+    {
+      "id": "m12-l03-traces",
+      "title": "Distributed tracing",
+      "scene": "m12-l03-request-context"
+    },
+    {
+      "id": "m12-l03-opentelemetry",
+      "title": "OpenTelemetry collection and context",
+      "scene": "m12-l03-request-context"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Kubernetes observability",
+      "url": "https://kubernetes.io/docs/concepts/cluster-administration/observability/"
+    },
+    {
+      "title": "Prometheus data model",
+      "url": "https://prometheus.io/docs/concepts/data_model/"
+    },
+    {
+      "title": "Grafana data sources",
+      "url": "https://grafana.com/docs/grafana/latest/datasources/"
+    },
+    {
+      "title": "OpenTelemetry concepts",
+      "url": "https://opentelemetry.io/docs/concepts/"
+    }
+  ],
+  "lab": "m12",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: ask three related questions with three different signals
+
+**Metrics** summarize behavior as measurements over time: request counts, latency distributions, queue depth and memory use. **Logs** record discrete events with contextual fields. **Traces** connect spans representing operations across a distributed request. They overlap but do not replace one another. A latency metric can reveal that a problem affects many requests, a trace can show which dependency consumed time in a sampled request, and a log can explain the application decision at that point.
+
+Kubernetes resource metrics, commonly exposed through Metrics Server for `kubectl top` and resource autoscaling, are not a complete observability system. They do not automatically provide application request rates, durable log retention or request traces. Production collection usually combines additional agents, backends and instrumentation. Name the signal, collection interval, retention period and expected coverage before claiming that the system is observable.
+
+<Scene id="m12-l03-metrics-pipeline" />
+
+## Walkthrough: scrape useful measurements and label them carefully
+
+**Prometheus** commonly discovers targets and scrapes their metrics endpoints. A counter increases over time except for resets, while a gauge represents a current value that may rise or fall. A histogram records a distribution through buckets and related values; a single average can hide a slow tail. Query the appropriate rate or distribution rather than comparing raw cumulative counts across processes with different start times.
+
+This training Prometheus configuration scrapes one endpoint. It is a Prometheus server configuration fragment, not a Kubernetes resource; a production deployment needs installation, service discovery, security and retention configuration.
+
+```yaml
+scrape_configs:
+  - job_name: application
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["api.learning.svc.cluster.local:9090"]
+        labels:
+          environment: training
+```
+
+PromQL expressions:
+
+```text
+# Example application metric: only works if instrumentation exports it.
+sum by (service) (rate(http_requests_total[5m]))
+# A resource signal, when a suitable collector exports this metric.
+sum by (pod) (rate(container_cpu_usage_seconds_total[5m]))
+```
+
+Every unique metric name and label set creates a time series. Labels such as service, method and a normalized route template often support useful aggregation. User IDs, request IDs, full URLs and arbitrary error messages can create unbounded **cardinality**, memory cost and sensitive-data exposure. Put a request identifier in logs or trace correlation fields rather than making it a metric label. Even apparently bounded labels need review when teams can supply arbitrary values.
+
+**Grafana** queries configured data sources and visualizes their results; it is not automatically the collector or storage engine. A blank panel may reflect a wrong time range, missing label filter, unavailable source or absent instrumentation. Compare a panel with the raw backend query and its target health before concluding the application is idle. An alert should link to a user-visible symptom and a useful investigation, rather than firing on every harmless restart.
+
+<Scene id="m12-l03-request-context" />
+
+## Practice: correlate one request without collecting its payload
+
+```bash
+kubectl top pods -n learning
+kubectl logs deployment/api -n learning --since=10m --tail=100
+kubectl get events -n learning --sort-by=.metadata.creationTimestamp
+# Inspect only the telemetry components actually installed in the lab.
+kubectl get pods -A
+```
+
+The [observability lab](/labs/#m12) distinguishes baseline kubectl evidence from optional Prometheus, Grafana and OpenTelemetry installations. Do not expect the sample metric names to exist without their exporters or application instrumentation. First send one known request and confirm that its counter changes, its structured log appears and its trace is exported where those systems are installed.
+
+**OpenTelemetry** defines vendor-neutral instrumentation and signal handling, including SDKs and a Collector that can receive, process and export telemetry. Instrumentation creates spans and propagates context across calls; a Collector does not magically infer missing application spans. Correlate structured logs with trace and span IDs and stable resource attributes such as service name. Preserve context across asynchronous boundaries deliberately. Sampling reduces trace volume but means the absence of a trace is not proof the request never happened.
+
+## Pitfalls: telemetry has its own failure and trust boundaries
+
+A saturated collector or unavailable backend can drop or delay evidence while the application continues serving. Set bounded queues and retention appropriate to the operational need. Redact credentials and avoid recording raw authorization headers, personal data or full prompts by default. Limit access to telemetry because it can expose tenant names, resource identifiers and infrastructure details even without payloads. During an incident, compare signal freshness with wall-clock time before trusting a reassuring stale chart.
+
+## Check your understanding
+
+<details>
+<summary>The dashboard shows no requests, but an application log contains a fresh successful request. Is the log necessarily wrong?</summary>
+
+No. The metrics path may be missing instrumentation, failing its scrape, using a mismatched query label or showing the wrong time range. Compare the raw metrics endpoint, target health and backend query. Different signals have different collection paths, and disagreement is a reason to test those paths rather than discard inconvenient evidence.
+
+</details>
+
+Next, package deployment configuration reproducibly and use these signals to decide whether scaling or a release change actually improves the application.
+
+## Primary documentation
+
+- [Kubernetes observability](https://kubernetes.io/docs/concepts/cluster-administration/observability/)
+- [Prometheus data model](https://prometheus.io/docs/concepts/data_model/)
+- [Grafana data sources](https://grafana.com/docs/grafana/latest/datasources/)
+- [OpenTelemetry concepts](https://opentelemetry.io/docs/concepts/)

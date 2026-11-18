@@ -1,0 +1,745 @@
+[
+  {
+    "title": "Find the earliest boundary that has not succeeded",
+    "kind": "lifecycle",
+    "description": "Distinguish an unscheduled Pod, image retrieval backoff and a repeatedly crashing process.",
+    "assumption": "One application container; displayed waiting reasons are not separate Pod phases.",
+    "frames": [
+      {
+        "title": "Pending before assignment",
+        "narration": "An unassigned Pod with FailedScheduling needs scheduler evidence, not application logs from a process that never ran.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod object",
+            "detail": "Accepted desired workload",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "1",
+            "label": "Scheduler",
+            "detail": "Node fit and assignment",
+            "type": "control",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Image retrieval",
+            "detail": "Worker credentials + registry path",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "App process",
+            "detail": "Startup and runtime behavior",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Evidence",
+            "detail": "Events, states and previous logs",
+            "type": "actor",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "not yet assigned",
+            "state": "blocked"
+          },
+          {
+            "from": "1",
+            "to": "4",
+            "label": "FailedScheduling",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Assigned but image unavailable",
+        "narration": "After node assignment, a pull error can produce ImagePullBackOff. Read the exact registry or network failure in events.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod object",
+            "detail": "Accepted desired workload",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Scheduler",
+            "detail": "Node fit and assignment",
+            "type": "control",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Image retrieval",
+            "detail": "Worker credentials + registry path",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "App process",
+            "detail": "Startup and runtime behavior",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Evidence",
+            "detail": "Events, states and previous logs",
+            "type": "actor",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "assigned node",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "4",
+            "label": "pull event",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Process exits repeatedly",
+        "narration": "A retrieved image can start and then exit. Restart backoff produces CrashLoopBackOff as a container waiting reason.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod object",
+            "detail": "Accepted desired workload",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Scheduler",
+            "detail": "Node fit and assignment",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Image retrieval",
+            "detail": "Worker credentials + registry path",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "App process",
+            "detail": "Startup and runtime behavior",
+            "type": "pod",
+            "state": "failed"
+          },
+          {
+            "id": "4",
+            "label": "Evidence",
+            "detail": "Events, states and previous logs",
+            "type": "actor",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "container starts",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "last termination",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Choose evidence by boundary",
+        "narration": "Previous logs explain a terminated process when available, while events explain placement and setup. Change only a demonstrated cause.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod object",
+            "detail": "Accepted desired workload",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Scheduler",
+            "detail": "Node fit and assignment",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Image retrieval",
+            "detail": "Worker credentials + registry path",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "App process",
+            "detail": "Startup and runtime behavior",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Evidence",
+            "detail": "Events, states and previous logs",
+            "type": "actor",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "0",
+            "label": "targeted correction",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl logs FAILING_POD -c app --previous --tail=100"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Liveness causes the restart loop",
+        "description": "The application is slow to start and a probe repeatedly terminates it.",
+        "frames": [
+          {
+            "title": "Process starts",
+            "narration": "The image and configuration are usable enough for the process to begin startup.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod object",
+                "detail": "Accepted desired workload",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Scheduler",
+                "detail": "Node fit and assignment",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Image retrieval",
+                "detail": "Worker credentials + registry path",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "App process",
+                "detail": "Startup and runtime behavior",
+                "type": "pod",
+                "state": "active"
+              },
+              {
+                "id": "4",
+                "label": "Evidence",
+                "detail": "Events, states and previous logs",
+                "type": "actor",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "startup",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Probe kills before readiness",
+            "narration": "An overly aggressive liveness probe repeatedly triggers restarts during legitimate startup.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod object",
+                "detail": "Accepted desired workload",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Scheduler",
+                "detail": "Node fit and assignment",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Image retrieval",
+                "detail": "Worker credentials + registry path",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "App process",
+                "detail": "Startup and runtime behavior",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Evidence",
+                "detail": "Events, states and previous logs",
+                "type": "actor",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "Unhealthy / Killing events",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Correct probe semantics",
+            "narration": "Use a suitable startup probe and evidence-based timings; increasing memory would not repair this demonstrated probe failure.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod object",
+                "detail": "Accepted desired workload",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "1",
+                "label": "Scheduler",
+                "detail": "Node fit and assignment",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Image retrieval",
+                "detail": "Worker credentials + registry path",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "App process",
+                "detail": "Startup and runtime behavior",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Evidence",
+                "detail": "Events, states and previous logs",
+                "type": "actor",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "0",
+                "label": "probe correction",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod FAILING_POD"
+          }
+        ]
+      }
+    ],
+    "id": "m12-l01-failure-boundary"
+  },
+  {
+    "title": "Bring tools to the Pod network namespace",
+    "kind": "flow",
+    "description": "Follow authorization and admission before adding an ephemeral container for scoped investigation.",
+    "assumption": "Runtime supports the requested target visibility; privileges and process namespace access are not universal.",
+    "frames": [
+      {
+        "title": "Ask a specific question",
+        "narration": "The application has no shell, but the operator needs to test the listener from its network namespace.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Operator",
+            "detail": "Concrete diagnostic question",
+            "type": "actor",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "API subresource",
+            "detail": "pods/ephemeralcontainers permission",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "App Pod",
+            "detail": "Minimal image; no shell",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Debug container",
+            "detail": "Approved tools image",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod network",
+            "detail": "Shared localhost and routes",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "add debug container",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Check permission and policy",
+        "narration": "The subresource request must pass authorization and admission. Debugging does not automatically grant host access.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Operator",
+            "detail": "Concrete diagnostic question",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API subresource",
+            "detail": "pods/ephemeralcontainers permission",
+            "type": "control",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "App Pod",
+            "detail": "Minimal image; no shell",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Debug container",
+            "detail": "Approved tools image",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod network",
+            "detail": "Shared localhost and routes",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "permitted update",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Start tools beside the app",
+        "narration": "The ephemeral container joins the Pod network and may target process visibility when supported by the runtime.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Operator",
+            "detail": "Concrete diagnostic question",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API subresource",
+            "detail": "pods/ephemeralcontainers permission",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "App Pod",
+            "detail": "Minimal image; no shell",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Debug container",
+            "detail": "Approved tools image",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Pod network",
+            "detail": "Shared localhost and routes",
+            "type": "object",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "debug image",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "shared network",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl debug -it FAILING_POD --image=busybox:1.36 --target=app"
+      },
+      {
+        "title": "Observe without replacing the app",
+        "narration": "Test the relevant localhost port or namespace evidence. The debug container does not replace the application or become its deployment revision.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Operator",
+            "detail": "Concrete diagnostic question",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API subresource",
+            "detail": "pods/ephemeralcontainers permission",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "App Pod",
+            "detail": "Minimal image; no shell",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Debug container",
+            "detail": "Approved tools image",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Pod network",
+            "detail": "Shared localhost and routes",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "2",
+            "label": "diagnose listener",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Debug permission is denied",
+        "description": "The operator is not allowed to update the ephemeral-container subresource.",
+        "frames": [
+          {
+            "title": "Application remains unchanged",
+            "narration": "The application Pod is still running or failing in its existing state.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Operator",
+                "detail": "Concrete diagnostic question",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API subresource",
+                "detail": "pods/ephemeralcontainers permission",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "App Pod",
+                "detail": "Minimal image; no shell",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Debug container",
+                "detail": "Approved tools image",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod network",
+                "detail": "Shared localhost and routes",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "API rejects debug addition",
+            "narration": "Authorization denies the subresource update before any new container can run.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Operator",
+                "detail": "Concrete diagnostic question",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API subresource",
+                "detail": "pods/ephemeralcontainers permission",
+                "type": "control",
+                "state": "failed"
+              },
+              {
+                "id": "2",
+                "label": "App Pod",
+                "detail": "Minimal image; no shell",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Debug container",
+                "detail": "Approved tools image",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod network",
+                "detail": "Shared localhost and routes",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "forbidden",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Use authorized evidence",
+            "narration": "Read permitted logs and events or use an approved separate diagnostic Pod; request narrowly scoped access only if the task needs this capability.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Operator",
+                "detail": "Concrete diagnostic question",
+                "type": "actor",
+                "state": "active"
+              },
+              {
+                "id": "1",
+                "label": "API subresource",
+                "detail": "pods/ephemeralcontainers permission",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "App Pod",
+                "detail": "Minimal image; no shell",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Debug container",
+                "detail": "Approved tools image",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod network",
+                "detail": "Shared localhost and routes",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "2",
+                "label": "permitted observation",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl logs FAILING_POD -c app --tail=100"
+          }
+        ]
+      }
+    ],
+    "id": "m12-l01-debug-container"
+  }
+]

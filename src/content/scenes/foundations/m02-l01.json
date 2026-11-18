@@ -1,0 +1,454 @@
+[
+  {
+    "id": "m02-l01-api-store",
+    "title": "The API is the coordination boundary",
+    "kind": "cluster",
+    "description": "Show supported client access to persisted cluster objects.",
+    "assumption": "One logical API server and one logical etcd store represent potentially replicated services.",
+    "frames": [
+      {
+        "title": "Submit an object request",
+        "narration": "kubectl addresses the API server, which checks identity, permissions, admission, and object validity.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "kubectl",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "store",
+            "label": "etcd",
+            "type": "storage",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "API request",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      },
+      {
+        "title": "Persist API state",
+        "narration": "The API server stores accepted object state in etcd. Clients do not write the state database directly.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "store",
+            "label": "etcd: API objects",
+            "type": "storage",
+            "state": "ready",
+            "detail": "Durable Pod object, not a process"
+          }
+        ],
+        "edges": [
+          {
+            "to": "store",
+            "label": "persist",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Observe through the API",
+        "narration": "Controllers and node agents read/watch through the API. Persisted intent is available before workload execution completes.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "controller",
+            "label": "Controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "controller",
+            "label": "object observations",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "kubelet",
+            "label": "assigned Pod observations",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m02-l01-api-store-failure",
+        "label": "Failure: API accepted, application still unavailable",
+        "description": "Failure: API accepted, application still unavailable",
+        "frames": [
+          {
+            "title": "Object acceptance succeeds",
+            "narration": "The submitted Pod is a valid object and is persisted. That response is about the API operation.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "Created response",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Pod object exists",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "accepted intent",
+                "state": "active",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "Execution fails later",
+            "narration": "The assigned node cannot retrieve the image. API success did not validate registry availability.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Waiting for image",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "runtime",
+                "label": "Image pull failed",
+                "type": "control",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "registry",
+                "label": "Unavailable image",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "registry",
+                "label": "pull",
+                "state": "blocked",
+                "from": "runtime"
+              },
+              {
+                "to": "pod",
+                "label": "waiting status",
+                "state": "active",
+                "from": "runtime"
+              }
+            ]
+          },
+          {
+            "title": "Inspect downstream evidence",
+            "narration": "Read the Pod events through the API and fix the execution failure. Recreating valid YAML alone will not repair a missing image.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "kubectl describe",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "API events/status",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "inspect Pod evidence",
+                "state": "active",
+                "from": "client"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m02-l01-worker",
+    "title": "From placement to a local executable",
+    "kind": "flow",
+    "description": "Assign separate work to controller, scheduler, kubelet, and runtime.",
+    "assumption": "One ordinary controller-owned Pod is shown; static Pods and direct nodeName overrides are excluded.",
+    "frames": [
+      {
+        "title": "Create the missing object",
+        "narration": "The ReplicaSet controller sees a shortage and creates a Pod object through the API. It has no node assignment yet.",
+        "nodes": [
+          {
+            "id": "rs",
+            "label": "ReplicaSet controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Unassigned Pod",
+            "type": "pod",
+            "state": "idle",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "create Pod",
+            "state": "active",
+            "from": "rs"
+          },
+          {
+            "to": "pod",
+            "label": "persist object",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Bind an eligible node",
+        "narration": "The scheduler chooses a suitable worker and records the binding. This is a placement decision, not a container launch.",
+        "nodes": [
+          {
+            "id": "sched",
+            "label": "Scheduler",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Pod: node-a",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "node",
+            "label": "Worker node-a",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "bind node-a",
+            "state": "active",
+            "from": "sched"
+          },
+          {
+            "to": "node",
+            "label": "assigned to",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      },
+      {
+        "title": "Execute on the worker",
+        "narration": "The kubelet observes its assignment and uses CRI to ask the runtime to prepare and start containers, then reports status.",
+        "nodes": [
+          {
+            "id": "kubelet",
+            "label": "Kubelet on node-a",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "Container runtime",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "process",
+            "label": "Application process",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "runtime",
+            "label": "CRI operations",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "process",
+            "label": "create + start",
+            "state": "active",
+            "from": "runtime"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m02-l01-worker-failure",
+        "label": "Failure: no eligible node",
+        "description": "Failure: no eligible node",
+        "frames": [
+          {
+            "title": "A Pod exists without placement",
+            "narration": "The controller has created the desired object. The scheduler must still find an eligible worker.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pending Pod",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "sched",
+                "label": "Scheduler",
+                "type": "control",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "sched",
+                "label": "needs placement",
+                "state": "active",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Constraints exclude workers",
+            "narration": "No worker meets the Pod requirements. The scheduler records failure evidence; no kubelet launches it.",
+            "nodes": [
+              {
+                "id": "sched",
+                "label": "No feasible node",
+                "type": "control",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "node",
+                "label": "Worker lacks fit",
+                "type": "node",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Still unassigned",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "node",
+                "label": "cannot fit",
+                "state": "blocked",
+                "from": "sched"
+              }
+            ]
+          },
+          {
+            "title": "Correct placement inputs",
+            "narration": "Inspect FailedScheduling events, then change capacity or constraints. Restarting an application that has never started cannot solve placement.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Inspect Pod events",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Requirements corrected",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "fix placement cause",
+                "state": "active",
+                "from": "operator"
+              }
+            ],
+            "code": "kubectl describe pod component-demo"
+          }
+        ]
+      }
+    ]
+  }
+]

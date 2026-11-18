@@ -1,0 +1,791 @@
+[
+  {
+    "title": "Encoding, storage protection and delivery are separate boundaries",
+    "kind": "flow",
+    "description": "Trace a Secret through base64 representation, at-rest encryption and file consumption without exposing its value.",
+    "assumption": "No real credential values are shown; encryption provider configuration is cluster-specific.",
+    "frames": [
+      {
+        "title": "Represent bytes in API data",
+        "narration": "Base64 is reversible representation, not encryption. A reader of the value can recover the original bytes.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Secret API object",
+            "detail": "data is base64 representation",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "1",
+            "label": "API server",
+            "detail": "RBAC-controlled read/write",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "etcd storage",
+            "detail": "Encryption depends on configured provider",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Projected file",
+            "detail": "Mounted read-only into Pod",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "Must reload rotating credentials",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "encoded bytes",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Protect persisted data deliberately",
+        "narration": "The API server encryption provider can encrypt selected stored resources. This must be configured and existing data handled appropriately.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Secret API object",
+            "detail": "data is base64 representation",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API server",
+            "detail": "RBAC-controlled read/write",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "etcd storage",
+            "detail": "Encryption depends on configured provider",
+            "type": "storage",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Projected file",
+            "detail": "Mounted read-only into Pod",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "Must reload rotating credentials",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "provider protection",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Deliver only to the intended process",
+        "narration": "The node projects the chosen Secret as a volume for the Pod, subject to access and filesystem configuration.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Secret API object",
+            "detail": "data is base64 representation",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API server",
+            "detail": "RBAC-controlled read/write",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "etcd storage",
+            "detail": "Encryption depends on configured provider",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Projected file",
+            "detail": "Mounted read-only into Pod",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "Must reload rotating credentials",
+            "type": "pod",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "credential delivery",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "read file",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Rotate application use",
+        "narration": "An updated projected file can arrive eventually, but the process must reread it and the old external credential must be retired safely.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Secret API object",
+            "detail": "data is base64 representation",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API server",
+            "detail": "RBAC-controlled read/write",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "etcd storage",
+            "detail": "Encryption depends on configured provider",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Projected file",
+            "detail": "Mounted read-only into Pod",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application",
+            "detail": "Must reload rotating credentials",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "reload required",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Environment variable never refreshes",
+        "description": "The Secret changes but the running process keeps its original environment.",
+        "frames": [
+          {
+            "title": "Initial credential injected",
+            "narration": "At startup the process receives an environment value derived from the Secret.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Secret API object",
+                "detail": "data is base64 representation",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API server",
+                "detail": "RBAC-controlled read/write",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "etcd storage",
+                "detail": "Encryption depends on configured provider",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Startup environment",
+                "detail": "Fixed for this container instance",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Application",
+                "detail": "Must recreate container to refresh injected environment",
+                "type": "pod",
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "4",
+                "label": "startup environment",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Secret object rotates",
+            "narration": "The API value changes, but the existing environment of that process is unchanged.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Secret API object",
+                "detail": "data is base64 representation",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "1",
+                "label": "API server",
+                "detail": "RBAC-controlled read/write",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "etcd storage",
+                "detail": "Encryption depends on configured provider",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Startup environment",
+                "detail": "Fixed for this container instance",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Application",
+                "detail": "Must recreate container to refresh injected environment",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "no live env update",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Complete the rotation workflow",
+            "narration": "Recreate the container to refresh its Secret-derived environment, or change to a supported file-reload design. Verify the new credential before retiring the old one.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Secret API object",
+                "detail": "data is base64 representation",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API server",
+                "detail": "RBAC-controlled read/write",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "etcd storage",
+                "detail": "Encryption depends on configured provider",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Startup environment",
+                "detail": "Fixed for this container instance",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Application",
+                "detail": "Must recreate container to refresh injected environment",
+                "type": "pod",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "planned recreation or consumption redesign",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m11-l03-secret-path"
+  },
+  {
+    "title": "A namespace boundary is assembled from several controls",
+    "kind": "policy",
+    "description": "Show API permission, workload admission and network enforcement controlling different tenant paths.",
+    "assumption": "Cooperative shared-cluster tenancy example; mutually hostile workloads may need stronger isolation.",
+    "frames": [
+      {
+        "title": "Authorize the API action",
+        "narration": "RBAC determines whether the tenant may create a Pod or directly read a Secret. These are distinct actions.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Tenant identity",
+            "detail": "Can create selected workloads",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "RBAC",
+            "detail": "API verbs and resources",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Admission",
+            "detail": "Pod settings, mounts, identity rules",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Tenant Pod",
+            "detail": "Runs on shared worker kernel",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "NetworkPolicy",
+            "detail": "Implementation-enforced traffic",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Secret",
+            "detail": "Sensitive namespace resource",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "create Pod?",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Constrain the proposal",
+        "narration": "Admission can restrict privileges, mounts and identity selection after API authorization. Namespace existence alone does not add these constraints.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Tenant identity",
+            "detail": "Can create selected workloads",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "RBAC",
+            "detail": "API verbs and resources",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Admission",
+            "detail": "Pod settings, mounts, identity rules",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Tenant Pod",
+            "detail": "Runs on shared worker kernel",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "NetworkPolicy",
+            "detail": "Implementation-enforced traffic",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Secret",
+            "detail": "Sensitive namespace resource",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "authorized proposal",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "admit compliant Pod",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Constrain network edges",
+        "narration": "An enforcing data plane applies NetworkPolicy to workload traffic. RBAC does not control arbitrary application TCP connections.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Tenant identity",
+            "detail": "Can create selected workloads",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "RBAC",
+            "detail": "API verbs and resources",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Admission",
+            "detail": "Pod settings, mounts, identity rules",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Tenant Pod",
+            "detail": "Runs on shared worker kernel",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "NetworkPolicy",
+            "detail": "Implementation-enforced traffic",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Secret",
+            "detail": "Sensitive namespace resource",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "traffic boundary",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Review indirect credential access",
+        "narration": "A Pod creator may mount namespace Secrets unless the permitted workload configuration prevents that access. Audit indirect paths, not only get secrets.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Tenant identity",
+            "detail": "Can create selected workloads",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "RBAC",
+            "detail": "API verbs and resources",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Admission",
+            "detail": "Pod settings, mounts, identity rules",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Tenant Pod",
+            "detail": "Runs on shared worker kernel",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "NetworkPolicy",
+            "detail": "Implementation-enforced traffic",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Secret",
+            "detail": "Sensitive namespace resource",
+            "type": "storage",
+            "state": "warning"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "5",
+            "label": "possible mount path",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Direct read denied but mount allowed",
+        "description": "A tenant reaches a Secret through an unrestricted Pod specification.",
+        "frames": [
+          {
+            "title": "Direct get is denied",
+            "narration": "RBAC denies the tenant get secrets, which closes only the direct API read path.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Tenant identity",
+                "detail": "Can create selected workloads",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "RBAC",
+                "detail": "API verbs and resources",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "Admission",
+                "detail": "Pod settings, mounts, identity rules",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Tenant Pod",
+                "detail": "Runs on shared worker kernel",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "NetworkPolicy",
+                "detail": "Implementation-enforced traffic",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Secret",
+                "detail": "Sensitive namespace resource",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "5",
+                "label": "direct get denied",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Pod creation permits a mount",
+            "narration": "The tenant can create a Pod referencing the Secret because the workload admission boundary did not restrict it.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Tenant identity",
+                "detail": "Can create selected workloads",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "RBAC",
+                "detail": "API verbs and resources",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Admission",
+                "detail": "Pod settings, mounts, identity rules",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Tenant Pod",
+                "detail": "Runs on shared worker kernel",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "NetworkPolicy",
+                "detail": "Implementation-enforced traffic",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Secret",
+                "detail": "Sensitive namespace resource",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "2",
+                "label": "Pod proposal",
+                "state": "active"
+              },
+              {
+                "from": "2",
+                "to": "3",
+                "label": "unrestricted mount",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Credential becomes accessible",
+            "narration": "The admitted workload can consume the mounted Secret. Restrict workload capabilities and use stronger tenant boundaries where required.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Tenant identity",
+                "detail": "Can create selected workloads",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "RBAC",
+                "detail": "API verbs and resources",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Admission",
+                "detail": "Pod settings, mounts, identity rules",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Tenant Pod",
+                "detail": "Runs on shared worker kernel",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "NetworkPolicy",
+                "detail": "Implementation-enforced traffic",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Secret",
+                "detail": "Sensitive namespace resource",
+                "type": "storage",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "5",
+                "to": "3",
+                "label": "mounted credential",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m11-l03-tenant-controls"
+  }
+]

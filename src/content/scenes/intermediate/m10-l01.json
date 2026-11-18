@@ -1,0 +1,846 @@
+[
+  {
+    "title": "An ordinal survives replacement; a process does not",
+    "kind": "ownership",
+    "description": "Trace StatefulSet naming through a headless Service and one Pod replacement.",
+    "assumption": "Default ordinals starting at zero and a matching same-namespace headless Service.",
+    "frames": [
+      {
+        "title": "Assign logical members",
+        "narration": "The controller creates predictable ordinal names instead of interchangeable random Deployment identities.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet ledger",
+            "detail": "replicas=3; serviceName=ledger",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Headless Service",
+            "detail": "clusterIP: None",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-0",
+            "detail": "Ordinal 0",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "ledger-1",
+            "detail": "Ordinal 1",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "ledger-2",
+            "detail": "Ordinal 2",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "DNS",
+            "detail": "Per-Pod stable names",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "ordinal 0",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "3",
+            "label": "ordinal 1",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "4",
+            "label": "ordinal 2",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Publish peer discovery",
+        "narration": "The headless Service and StatefulSet subdomain support member names. DNS publication still depends on endpoint readiness settings.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet ledger",
+            "detail": "replicas=3; serviceName=ledger",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Headless Service",
+            "detail": "clusterIP: None",
+            "type": "service",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "ledger-0",
+            "detail": "Ordinal 0",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "ledger-1",
+            "detail": "Ordinal 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "ledger-2",
+            "detail": "Ordinal 2",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "DNS",
+            "detail": "Per-Pod stable names",
+            "type": "control",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "5",
+            "label": "member addresses",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "5",
+            "label": "ledger-1.ledger",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Lose one process",
+        "narration": "The old ledger-1 Pod ends. Its logical ordinal remains part of the desired state even though that Pod UID is gone.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet ledger",
+            "detail": "replicas=3; serviceName=ledger",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Headless Service",
+            "detail": "clusterIP: None",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-0",
+            "detail": "Ordinal 0",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "ledger-1",
+            "detail": "Ordinal 1",
+            "type": "pod",
+            "state": "failed"
+          },
+          {
+            "id": "4",
+            "label": "ledger-2",
+            "detail": "Ordinal 2",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "DNS",
+            "detail": "Per-Pod stable names",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "member missing",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Create a new member instance",
+        "narration": "The replacement is again ledger-1, with a new UID and potentially a new IP. Clients resolve the stable name to current addresses.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet ledger",
+            "detail": "replicas=3; serviceName=ledger",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Headless Service",
+            "detail": "clusterIP: None",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-0",
+            "detail": "Ordinal 0",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "ledger-1",
+            "detail": "Ordinal 1",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "ledger-2",
+            "detail": "Ordinal 2",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "DNS",
+            "detail": "Per-Pod stable names",
+            "type": "control",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "replace ordinal 1",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "5",
+            "label": "updated address",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "DNS waits for readiness",
+        "description": "A bootstrap process expects a peer name before the Service publishes it.",
+        "frames": [
+          {
+            "title": "Member exists but is unready",
+            "narration": "Running does not necessarily make the member ready for ordinary Service discovery.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "StatefulSet ledger",
+                "detail": "replicas=3; serviceName=ledger",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Headless Service",
+                "detail": "clusterIP: None",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ledger-0",
+                "detail": "Ordinal 0",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "ledger-1",
+                "detail": "Ordinal 1",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "ledger-2",
+                "detail": "Ordinal 2",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "DNS",
+                "detail": "Per-Pod stable names",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Name not yet usable",
+            "narration": "The client cannot rely on ordinary ready endpoint publication to discover this unready member.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "StatefulSet ledger",
+                "detail": "replicas=3; serviceName=ledger",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Headless Service",
+                "detail": "clusterIP: None",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ledger-0",
+                "detail": "Ordinal 0",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "ledger-1",
+                "detail": "Ordinal 1",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "ledger-2",
+                "detail": "Ordinal 2",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "DNS",
+                "detail": "Per-Pod stable names",
+                "type": "control",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "5",
+                "label": "not published normally",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Use application-aware bootstrap",
+            "narration": "Evaluate readiness dependencies and publishNotReadyAddresses deliberately when the application requires bootstrap discovery; account for DNS caching.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "StatefulSet ledger",
+                "detail": "replicas=3; serviceName=ledger",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Headless Service",
+                "detail": "clusterIP: None",
+                "type": "service",
+                "state": "active"
+              },
+              {
+                "id": "2",
+                "label": "ledger-0",
+                "detail": "Ordinal 0",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "ledger-1",
+                "detail": "Ordinal 1",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "ledger-2",
+                "detail": "Ordinal 2",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "DNS",
+                "detail": "Per-Pod stable names",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "5",
+                "label": "explicit bootstrap policy",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m10-l01-identity"
+  },
+  {
+    "title": "Each member keeps a distinct claim and rollout checkpoint",
+    "kind": "storage",
+    "description": "Follow volumeClaimTemplates into per-ordinal claims and a readiness-gated rolling update.",
+    "assumption": "Default OrderedReady management and default rolling-update behavior; retained PVCs.",
+    "frames": [
+      {
+        "title": "Instantiate claims",
+        "narration": "The template produces distinct claims such as data-ledger-0. The controller is not cloning one shared writable filesystem for every Pod.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet",
+            "detail": "volumeClaimTemplates: data",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "ledger-0",
+            "detail": "Lower ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-1",
+            "detail": "Middle ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "ledger-2",
+            "detail": "Highest ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Claims 0 / 1 / 2",
+            "detail": "One claim per ordinal",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Readiness checkpoint",
+            "detail": "Wait before next replacement",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "4",
+            "label": "per-ordinal PVCs",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Reattach the same member data",
+        "narration": "When ledger-1 is replaced, its new instance references the ordinal-1 claim rather than another member disk.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet",
+            "detail": "volumeClaimTemplates: data",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "ledger-0",
+            "detail": "Lower ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-1",
+            "detail": "Middle ordinal",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "ledger-2",
+            "detail": "Highest ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Claims 0 / 1 / 2",
+            "detail": "One claim per ordinal",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Readiness checkpoint",
+            "detail": "Wait before next replacement",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "2",
+            "label": "data-ledger-1",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Update highest ordinal first",
+        "narration": "A default rolling update replaces ledger-2 before lower ordinals and observes its readiness checkpoint.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet",
+            "detail": "volumeClaimTemplates: data",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "ledger-0",
+            "detail": "Lower ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-1",
+            "detail": "Middle ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "ledger-2",
+            "detail": "Highest ordinal",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Claims 0 / 1 / 2",
+            "detail": "One claim per ordinal",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Readiness checkpoint",
+            "detail": "Wait before next replacement",
+            "type": "object",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "new template",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "5",
+            "label": "ready?",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Proceed after readiness",
+        "narration": "When the updated highest member is ready, the controller can update the next lower member. Application replication remains the application responsibility.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "StatefulSet",
+            "detail": "volumeClaimTemplates: data",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "ledger-0",
+            "detail": "Lower ordinal",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ledger-1",
+            "detail": "Middle ordinal",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "ledger-2",
+            "detail": "Highest ordinal",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Claims 0 / 1 / 2",
+            "detail": "One claim per ordinal",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Readiness checkpoint",
+            "detail": "Wait before next replacement",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "5",
+            "to": "2",
+            "label": "proceed downward",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Updated member never becomes ready",
+        "description": "Default ordered update stops before replacing more members.",
+        "frames": [
+          {
+            "title": "New member fails its probe",
+            "narration": "ledger-2 starts but cannot satisfy readiness due to application or storage configuration.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "StatefulSet",
+                "detail": "volumeClaimTemplates: data",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "ledger-0",
+                "detail": "Lower ordinal",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ledger-1",
+                "detail": "Middle ordinal",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "ledger-2",
+                "detail": "Highest ordinal",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Claims 0 / 1 / 2",
+                "detail": "One claim per ordinal",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Readiness checkpoint",
+                "detail": "Wait before next replacement",
+                "type": "object",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "5",
+                "label": "not ready",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Lower members remain old",
+            "narration": "The readiness checkpoint prevents further replacement, preserving lower members while the fault is investigated.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "StatefulSet",
+                "detail": "volumeClaimTemplates: data",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "ledger-0",
+                "detail": "Lower ordinal",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "ledger-1",
+                "detail": "Middle ordinal",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "3",
+                "label": "ledger-2",
+                "detail": "Highest ordinal",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Claims 0 / 1 / 2",
+                "detail": "One claim per ordinal",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Readiness checkpoint",
+                "detail": "Wait before next replacement",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "2",
+                "label": "waiting",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect before force recovery",
+            "narration": "Read logs, events, template revision and application state. Follow documented rollback and member recovery rather than deleting all claims.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "StatefulSet",
+                "detail": "volumeClaimTemplates: data",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "1",
+                "label": "ledger-0",
+                "detail": "Lower ordinal",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ledger-1",
+                "detail": "Middle ordinal",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "ledger-2",
+                "detail": "Highest ordinal",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Claims 0 / 1 / 2",
+                "detail": "One claim per ordinal",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Readiness checkpoint",
+                "detail": "Wait before next replacement",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "3",
+                "label": "targeted recovery",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe statefulset ledger\nkubectl logs ledger-2"
+          }
+        ]
+      }
+    ],
+    "id": "m10-l01-claims"
+  }
+]

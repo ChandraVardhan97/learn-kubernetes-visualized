@@ -1,0 +1,10 @@
+apiVersion: labs.kv.example/v1alpha1
+kind: WebApp
+metadata:
+  name: m20-platform
+  namespace: kv-lab
+  labels:
+    lab: m20
+spec:
+  replicas: 1
+  message: conflicting-human-page

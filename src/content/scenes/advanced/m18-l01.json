@@ -1,0 +1,779 @@
+[
+  {
+    "title": "Quorum counts configured voters",
+    "kind": "cluster",
+    "description": "Writes can commit only with the required healthy agreement; extra API servers do not replace votes.",
+    "assumption": "Voters are simplified to three members; learners, read consistency modes and detailed Raft messages are omitted.",
+    "frames": [
+      {
+        "title": "Three configured voters",
+        "narration": "The voting membership contains A, B and C, so quorum is two.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API servers",
+            "type": "control",
+            "detail": "Read/write API boundary",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "etcd voter A",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "b",
+            "label": "etcd voter B",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "c",
+            "label": "etcd voter C",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "commit",
+            "label": "Committed state",
+            "type": "object",
+            "detail": "Majority required",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "request",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "b",
+            "label": "replication",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "c",
+            "label": "replication",
+            "state": "active",
+            "from": "a"
+          }
+        ]
+      },
+      {
+        "title": "One voter unavailable",
+        "narration": "A and B can still form the configured majority while C is unavailable.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API servers",
+            "type": "control",
+            "detail": "Read/write API boundary",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "etcd voter A",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "etcd voter B",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "c",
+            "label": "etcd voter C",
+            "type": "storage",
+            "detail": "Voter unavailable",
+            "x": 35,
+            "y": 230,
+            "state": "failed"
+          },
+          {
+            "id": "commit",
+            "label": "Committed state",
+            "type": "object",
+            "detail": "Majority required",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "b",
+            "label": "replication",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "c",
+            "label": "replication",
+            "state": "blocked",
+            "from": "a"
+          }
+        ]
+      },
+      {
+        "title": "Commit with majority",
+        "narration": "Writes can commit only with the required healthy agreement; extra API servers do not replace votes.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API servers",
+            "type": "control",
+            "detail": "Read/write API boundary",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "etcd voter A",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "etcd voter B",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "c",
+            "label": "etcd voter C",
+            "type": "storage",
+            "detail": "Configured member",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "commit",
+            "label": "Committed state",
+            "type": "object",
+            "detail": "Majority required",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "a",
+            "to": "commit",
+            "label": "leader has the entry",
+            "state": "active"
+          },
+          {
+            "from": "b",
+            "to": "commit",
+            "label": "follower acknowledges; 2 of 3",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Two voters lost",
+        "description": "A lone survivor cannot declare itself the majority of a three-voter cluster.",
+        "frames": [
+          {
+            "title": "B and C unavailable",
+            "narration": "The configured voting membership still contains all three until valid membership changes commit.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API servers",
+                "type": "control",
+                "detail": "Read/write API boundary",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "etcd voter A",
+                "type": "storage",
+                "detail": "Configured member",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "b",
+                "label": "etcd voter B",
+                "type": "storage",
+                "detail": "Voter unavailable",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "c",
+                "label": "etcd voter C",
+                "type": "storage",
+                "detail": "Voter unavailable",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "commit",
+                "label": "New commits",
+                "type": "object",
+                "detail": "1 of 3 available; needs a majority of 2",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "b",
+                "label": "replication",
+                "state": "blocked",
+                "from": "a"
+              },
+              {
+                "to": "c",
+                "label": "replication",
+                "state": "blocked",
+                "from": "a"
+              }
+            ]
+          },
+          {
+            "title": "Only A remains",
+            "narration": "One vote is less than the required two, so normal consensus writes cannot proceed.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API servers",
+                "type": "control",
+                "detail": "Read/write API boundary",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "etcd voter A",
+                "type": "storage",
+                "detail": "Reachable, but cannot form a majority",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "b",
+                "label": "etcd voter B",
+                "type": "storage",
+                "detail": "Voter unavailable",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "c",
+                "label": "etcd voter C",
+                "type": "storage",
+                "detail": "Voter unavailable",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "commit",
+                "label": "New commits",
+                "type": "object",
+                "detail": "1 of 3 available; needs a majority of 2",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "commit",
+                "label": "no quorum for writes",
+                "state": "blocked",
+                "from": "a"
+              }
+            ]
+          },
+          {
+            "title": "Plan recovery deliberately",
+            "narration": "Recover members or follow verified disaster recovery; do not count only surviving processes.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API servers",
+                "type": "control",
+                "detail": "Read/write API boundary",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "etcd voter A",
+                "type": "storage",
+                "detail": "Configured member",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "b",
+                "label": "etcd voter B",
+                "type": "storage",
+                "detail": "Voter unavailable",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "c",
+                "label": "etcd voter C",
+                "type": "storage",
+                "detail": "Voter unavailable",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "commit",
+                "label": "New commits",
+                "type": "object",
+                "detail": "1 of 3 available; needs a majority of 2",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m18-l01-etcd-quorum"
+  },
+  {
+    "title": "Redundancy requires independent failure domains",
+    "kind": "cluster",
+    "description": "Existing Pods may serve during an API outage, while scheduling and reconciliation are impaired.",
+    "assumption": "The figure illustrates correlated dependencies rather than prescribing one universal cloud topology.",
+    "frames": [
+      {
+        "title": "Count domains, not icons",
+        "narration": "Two replicas in one failure domain can disappear in the same infrastructure incident.",
+        "nodes": [
+          {
+            "id": "domain",
+            "label": "Shared host / zone",
+            "type": "node",
+            "detail": "Possible correlated failure",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "a",
+            "label": "Control plane A",
+            "type": "control",
+            "detail": "API + stacked etcd",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Control plane B",
+            "type": "control",
+            "detail": "API + stacked etcd",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "disk",
+            "label": "Disk and network",
+            "type": "storage",
+            "detail": "Consensus latency path",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "workers",
+            "label": "Existing workloads",
+            "type": "pod",
+            "detail": "May continue without API",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "correlated placement",
+            "state": "active",
+            "from": "domain"
+          },
+          {
+            "to": "b",
+            "label": "correlated placement",
+            "state": "active",
+            "from": "domain"
+          }
+        ]
+      },
+      {
+        "title": "Measure the commit path",
+        "narration": "Network and disk latency affect consensus and election behavior even when processes remain Running.",
+        "nodes": [
+          {
+            "id": "domain",
+            "label": "Shared host / zone",
+            "type": "node",
+            "detail": "Possible correlated failure",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "Control plane A",
+            "type": "control",
+            "detail": "API + stacked etcd",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Control plane B",
+            "type": "control",
+            "detail": "API + stacked etcd",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "disk",
+            "label": "Disk and network",
+            "type": "storage",
+            "detail": "Consensus latency path",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "workers",
+            "label": "Existing workloads",
+            "type": "pod",
+            "detail": "May continue without API",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "disk",
+            "label": "durable replication",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "disk",
+            "label": "durable replication",
+            "state": "active",
+            "from": "b"
+          }
+        ]
+      },
+      {
+        "title": "Separate service health",
+        "narration": "Existing Pods may serve during an API outage, while scheduling and reconciliation are impaired.",
+        "nodes": [
+          {
+            "id": "domain",
+            "label": "Shared host / zone",
+            "type": "node",
+            "detail": "Possible correlated failure",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "Control plane A",
+            "type": "control",
+            "detail": "API + stacked etcd",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Control plane B",
+            "type": "control",
+            "detail": "API + stacked etcd",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "disk",
+            "label": "Disk and network",
+            "type": "storage",
+            "detail": "Consensus latency path",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "workers",
+            "label": "Existing workloads",
+            "type": "pod",
+            "detail": "May continue without API",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": []
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Correlated outage",
+        "description": "All apparent replicas rely on one shared failure source.",
+        "frames": [
+          {
+            "title": "Shared infrastructure fails",
+            "narration": "A host, zone or storage dependency removes multiple colocated members together.",
+            "nodes": [
+              {
+                "id": "domain",
+                "label": "Shared host / zone",
+                "type": "node",
+                "detail": "Possible correlated failure",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "Control plane A",
+                "type": "control",
+                "detail": "Lost in the same failure domain",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "b",
+                "label": "Control plane B",
+                "type": "control",
+                "detail": "Lost in the same failure domain",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "disk",
+                "label": "Disk and network",
+                "type": "storage",
+                "detail": "Consensus latency path",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "workers",
+                "label": "Existing workloads",
+                "type": "pod",
+                "detail": "May continue without API",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "a",
+                "label": "correlated placement",
+                "state": "blocked",
+                "from": "domain"
+              },
+              {
+                "to": "b",
+                "label": "correlated placement",
+                "state": "blocked",
+                "from": "domain"
+              }
+            ]
+          },
+          {
+            "title": "Replica count was misleading",
+            "narration": "Multiple control-plane processes did not provide independent failure tolerance.",
+            "nodes": [
+              {
+                "id": "domain",
+                "label": "Shared host / zone",
+                "type": "node",
+                "detail": "Possible correlated failure",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "Control plane A",
+                "type": "control",
+                "detail": "Lost in the same failure domain",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "b",
+                "label": "Control plane B",
+                "type": "control",
+                "detail": "Lost in the same failure domain",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "disk",
+                "label": "Disk and network",
+                "type": "storage",
+                "detail": "Consensus latency path",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "workers",
+                "label": "Existing workloads",
+                "type": "pod",
+                "detail": "May continue without API",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "disk",
+                "label": "durable replication",
+                "state": "blocked",
+                "from": "a"
+              },
+              {
+                "to": "disk",
+                "label": "durable replication",
+                "state": "blocked",
+                "from": "b"
+              }
+            ]
+          },
+          {
+            "title": "Workload continuity is conditional",
+            "narration": "Some existing traffic can continue, but this does not prove a healthy control plane or guaranteed service survival.",
+            "nodes": [
+              {
+                "id": "domain",
+                "label": "Shared host / zone",
+                "type": "node",
+                "detail": "Possible correlated failure",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "Control plane A",
+                "type": "control",
+                "detail": "API + stacked etcd",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "b",
+                "label": "Control plane B",
+                "type": "control",
+                "detail": "API + stacked etcd",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "disk",
+                "label": "Disk and network",
+                "type": "storage",
+                "detail": "Consensus latency path",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "workers",
+                "label": "Existing workloads",
+                "type": "pod",
+                "detail": "Existing traffic may continue",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m18-l01-failure-domains"
+  }
+]

@@ -1,0 +1,835 @@
+[
+  {
+    "title": "Record the whole input set that a process will consume",
+    "kind": "ownership",
+    "description": "Show immutable image identity, rendered manifests and versioned configuration producing an explicit Pod-template revision.",
+    "assumption": "Credential values are external to the release artifact; references and delivery method are recorded.",
+    "frames": [
+      {
+        "title": "Record the release inputs",
+        "narration": "Associate the source revision, image digest and configuration source so a later investigation can reproduce the intended environment.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Source revision",
+            "detail": "Reviewed application/configuration source",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Image digest",
+            "detail": "Immutable application content",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete API manifests",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Versioned ConfigMap",
+            "detail": "Non-secret configuration reference",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod template",
+            "detail": "Image + configuration references",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Running process",
+            "detail": "Consumes startup or reload state",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "rendered source",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "4",
+            "label": "image reference",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Make configuration part of intent",
+        "narration": "A versioned generated configuration reference can change the Pod template when configuration changes, making the rollout explicit.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Source revision",
+            "detail": "Reviewed application/configuration source",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Image digest",
+            "detail": "Immutable application content",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete API manifests",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Versioned ConfigMap",
+            "detail": "Non-secret configuration reference",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Pod template",
+            "detail": "Image + configuration references",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "Running process",
+            "detail": "Consumes startup or reload state",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "versioned reference",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "4",
+            "label": "resource specification",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Create a new template revision",
+        "narration": "A changed template produces new Pods through a new ReplicaSet. Updating only mutable ConfigMap data does not necessarily do this.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Source revision",
+            "detail": "Reviewed application/configuration source",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Image digest",
+            "detail": "Immutable application content",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete API manifests",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Versioned ConfigMap",
+            "detail": "Non-secret configuration reference",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod template",
+            "detail": "Image + configuration references",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Running process",
+            "detail": "Consumes startup or reload state",
+            "type": "pod",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "5",
+            "label": "new Pod process",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Verify consumed configuration",
+        "narration": "Check that the process uses the intended image and configuration without revealing credentials. Mounted reload and startup environment have different behavior.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Source revision",
+            "detail": "Reviewed application/configuration source",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Image digest",
+            "detail": "Immutable application content",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete API manifests",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Versioned ConfigMap",
+            "detail": "Non-secret configuration reference",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod template",
+            "detail": "Image + configuration references",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Running process",
+            "detail": "Consumes startup or reload state",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "5",
+            "label": "verify effective behavior",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Mutable ConfigMap changes without a rollout",
+        "description": "Referenced data changes while the Deployment template remains identical.",
+        "frames": [
+          {
+            "title": "ConfigMap data updated",
+            "narration": "The API object changes without altering the Pod template hash.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Source revision",
+                "detail": "Reviewed application/configuration source",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Image digest",
+                "detail": "Immutable application content",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Rendered resources",
+                "detail": "Concrete API manifests",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Mutable ConfigMap",
+                "detail": "Data changes; reference name stays unchanged",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "4",
+                "label": "Pod template",
+                "detail": "Image + configuration references",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "5",
+                "label": "Running process",
+                "detail": "Consumes startup or reload state",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Existing environment stays old",
+            "narration": "A process using environment-derived configuration keeps its startup value; mounted files may update but still need reload handling.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Source revision",
+                "detail": "Reviewed application/configuration source",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Image digest",
+                "detail": "Immutable application content",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Rendered resources",
+                "detail": "Concrete API manifests",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Mutable ConfigMap",
+                "detail": "Data changes; reference name stays unchanged",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod template",
+                "detail": "Image + configuration references",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Running process",
+                "detail": "Consumes startup or reload state",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "5",
+                "label": "no environment refresh",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Make the transition explicit",
+            "narration": "Use a controlled reload or versioned reference and rollout, then verify process behavior. Deployment undo alone does not recover arbitrary ConfigMap history.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Source revision",
+                "detail": "Reviewed application/configuration source",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Image digest",
+                "detail": "Immutable application content",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Rendered resources",
+                "detail": "Concrete API manifests",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Mutable ConfigMap",
+                "detail": "Data changes; reference name stays unchanged",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod template",
+                "detail": "Image + configuration references",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "5",
+                "label": "Running process",
+                "detail": "Consumes startup or reload state",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "explicit new revision",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m13-l03-release-inputs"
+  },
+  {
+    "title": "Readiness gates replacement; evidence gates promotion",
+    "kind": "lifecycle",
+    "description": "Follow a surge Pod through readiness, availability, customer verification and a compatibility-aware recovery decision.",
+    "assumption": "Three replicas, maxSurge=1, maxUnavailable=0 and sufficient temporary capacity.",
+    "frames": [
+      {
+        "title": "Create one surge instance",
+        "narration": "The controller can start an extra candidate while keeping the old replicas, provided requests and quota fit.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Old replicas",
+            "detail": "Three available instances",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "New replica",
+            "detail": "Candidate template",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Readiness gate",
+            "detail": "Can serve + minReadySeconds",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Deployment",
+            "detail": "Controls replacement progress",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Customer probe",
+            "detail": "Safe changed-path verification",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Data compatibility",
+            "detail": "Old/new schema and side effects",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "1",
+            "label": "surge=1",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Wait for stable readiness",
+        "narration": "The candidate must satisfy readiness and the available interval before it counts toward replacement progress.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Old replicas",
+            "detail": "Three available instances",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "New replica",
+            "detail": "Candidate template",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Readiness gate",
+            "detail": "Can serve + minReadySeconds",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Deployment",
+            "detail": "Controls replacement progress",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Customer probe",
+            "detail": "Safe changed-path verification",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Data compatibility",
+            "detail": "Old/new schema and side effects",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "probe + interval",
+            "state": "active"
+          }
+        ],
+        "code": "minReadySeconds: 10"
+      },
+      {
+        "title": "Replace gradually and verify",
+        "narration": "After availability, the controller can remove an old instance and continue. Independently run a safe customer-path check and observe telemetry.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Old replicas",
+            "detail": "Three available instances",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "New replica",
+            "detail": "Candidate template",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Readiness gate",
+            "detail": "Can serve + minReadySeconds",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "Deployment",
+            "detail": "Controls replacement progress",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Customer probe",
+            "detail": "Safe changed-path verification",
+            "type": "actor",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "Data compatibility",
+            "detail": "Old/new schema and side effects",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "available",
+            "state": "active"
+          },
+          {
+            "from": "4",
+            "to": "1",
+            "label": "customer path",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Choose compatible recovery",
+        "narration": "If evidence fails, compare rollback and roll-forward against data/configuration compatibility. A template rollback cannot reverse every external side effect.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Old replicas",
+            "detail": "Three available instances",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "New replica",
+            "detail": "Candidate template",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Readiness gate",
+            "detail": "Can serve + minReadySeconds",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Deployment",
+            "detail": "Controls replacement progress",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Customer probe",
+            "detail": "Safe changed-path verification",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Data compatibility",
+            "detail": "Old/new schema and side effects",
+            "type": "storage",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "5",
+            "label": "recovery decision",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Candidate never becomes ready",
+        "description": "The rollout has capacity but the new version fails its readiness condition.",
+        "frames": [
+          {
+            "title": "Old service remains available",
+            "narration": "maxUnavailable=0 preserves old available replicas while the surge candidate fails.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Old replicas",
+                "detail": "Three available instances",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "New replica",
+                "detail": "Candidate template",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Readiness gate",
+                "detail": "Can serve + minReadySeconds",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Deployment",
+                "detail": "Controls replacement progress",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Customer probe",
+                "detail": "Safe changed-path verification",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Data compatibility",
+                "detail": "Old/new schema and side effects",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Progress deadline exposes stall",
+            "narration": "The Deployment reports failed progress after the configured deadline; that condition does not automatically restore a previous version.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Old replicas",
+                "detail": "Three available instances",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "New replica",
+                "detail": "Candidate template",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Readiness gate",
+                "detail": "Can serve + minReadySeconds",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Deployment",
+                "detail": "Controls replacement progress",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Customer probe",
+                "detail": "Safe changed-path verification",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Data compatibility",
+                "detail": "Old/new schema and side effects",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "not ready",
+                "state": "blocked"
+              },
+              {
+                "from": "2",
+                "to": "3",
+                "label": "stalled progress",
+                "state": "active"
+              }
+            ],
+            "code": "progressDeadlineSeconds: 300"
+          },
+          {
+            "title": "Investigate and act deliberately",
+            "narration": "Read candidate logs, events and effective configuration, then apply a compatible repair or chosen rollback and repeat the customer probe.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Old replicas",
+                "detail": "Three available instances",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "New replica",
+                "detail": "Candidate template",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Readiness gate",
+                "detail": "Can serve + minReadySeconds",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Deployment",
+                "detail": "Controls replacement progress",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Customer probe",
+                "detail": "Safe changed-path verification",
+                "type": "actor",
+                "state": "active"
+              },
+              {
+                "id": "5",
+                "label": "Data compatibility",
+                "detail": "Old/new schema and side effects",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "1",
+                "label": "verify correction",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe deployment api\nkubectl logs deployment/api --tail=100"
+          }
+        ]
+      }
+    ],
+    "id": "m13-l03-delivery-gates"
+  }
+]

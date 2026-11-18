@@ -1,0 +1,137 @@
+---
+{
+  "lessonId": "m08-l03",
+  "title": "Ingress, Gateway API, and TLS",
+  "description": "Separate route declarations, controller installation, certificate termination, and backend reachability.",
+  "level": "intermediate",
+  "module": "m08",
+  "order": 3,
+  "minutes": 18,
+  "prerequisites": [
+    "m08-l02"
+  ],
+  "objectives": [
+    "Explain why route resources need a controller implementation",
+    "Compare Ingress with Gateway API ownership boundaries",
+    "Trace TLS termination and diagnose route attachment"
+  ],
+  "concepts": [
+    {
+      "id": "m08-l03-ingress",
+      "title": "Ingress and its controller",
+      "scene": "m08-l03-attachment"
+    },
+    {
+      "id": "m08-l03-gateway",
+      "title": "Gateway API attachment",
+      "scene": "m08-l03-attachment"
+    },
+    {
+      "id": "m08-l03-tls",
+      "title": "TLS termination and certificates",
+      "scene": "m08-l03-tls"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Ingress",
+      "url": "https://kubernetes.io/docs/concepts/services-networking/ingress/"
+    },
+    {
+      "title": "Gateway API introduction",
+      "url": "https://gateway-api.sigs.k8s.io/docs/concepts/api-overview/"
+    },
+    {
+      "title": "Gateway API TLS",
+      "url": "https://gateway-api.sigs.k8s.io/guides/user-guides/tls/"
+    },
+    {
+      "title": "Gateway API ReferenceGrant",
+      "url": "https://gateway-api.sigs.k8s.io/reference/api-types/referencegrant/"
+    }
+  ],
+  "lab": "m08",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: declare a route, supply a working implementation
+
+An internal Service discovers and forwards to backends. Publishing HTTP outside the cluster adds another boundary: an implementation must receive external traffic, interpret the HTTP host and path, and forward to a backend Service. **Ingress** is a Kubernetes API for declaring that HTTP routing intent. Creating an Ingress object alone installs no proxy and opens no public network path. An Ingress controller observes the object and configures its associated traffic-handling implementation.
+
+An `IngressClass` identifies the implementation responsible for a group of Ingresses. The Ingress API is stable but feature-frozen; controller annotations often expose additional provider-specific behavior. Treat such annotations as implementation configuration rather than portable Kubernetes semantics. A route that works on one controller can behave differently on another if it relies on rewrites, regular expressions or special timeout annotations.
+
+**Gateway API** is an additional API family, normally installed as CRDs with an implementation. It separates infrastructure ownership from application routes. A `GatewayClass` identifies a controller, a `Gateway` declares listeners and attachment policy, and an `HTTPRoute` declares host and path matching plus backend references. These boundaries let an infrastructure team manage public listeners while application teams manage their own routes. Cross-namespace route-to-Gateway attachment is governed by the listener's `allowedRoutes`; cross-namespace backend or certificate references normally require a `ReferenceGrant` in the target namespace. An object reference is not automatically authority to use another team's resource.
+
+<Scene id="m08-l03-attachment" />
+
+## Walkthrough: follow acceptance before following packets
+
+This HTTPRoute assumes the Gateway API CRDs, a compatible implementation, a Gateway named `public` in the same namespace, and a working `api` Service. The Gateway must permit this route to attach to its listener. It does not create that Gateway or its external address.
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api
+spec:
+  parentRefs:
+    - name: public
+  hostnames:
+    - api.example.test
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api
+          port: 80        # Service port, not container targetPort.
+```
+
+Inspect route status conditions and parent status before changing the application. `Accepted` and `ResolvedRefs` explain whether the route attached and its references resolved; the Gateway's own conditions and addresses explain another part of the path. An accepted route still needs a reachable implementation, permitted network traffic, ready endpoints and a functioning backend. Status is evidence about a particular reconciliation boundary, not a universal end-to-end health assertion.
+
+For HTTPS, the listener usually terminates **TLS** using a certificate and private key from a referenced Secret. The certificate's names must cover the client's hostname, and the client must trust its issuer. TLS termination authenticates and encrypts the client-to-listener connection; it does not automatically encrypt the proxy-to-backend hop. Backend TLS needs separate supported configuration and verification. Never infer end-to-end encryption from a padlock at the browser.
+
+<Scene id="m08-l03-tls" />
+
+## Practice: vary one hostname and one layer at a time
+
+```bash
+kubectl get gatewayclass
+kubectl get gateways,httproutes
+kubectl describe httproute api
+kubectl get service api
+kubectl get endpointslices -l kubernetes.io/service-name=api
+# Replace the address with the lab listener address, if installed.
+curl -v -H 'Host: api.example.test' http://127.0.0.1:8080/api
+```
+
+A plain kind cluster may have neither Gateway API CRDs nor a route controller. In that case, the [networking lab](/labs/#m08) first uses port-forwarding for local access and marks controller installation as an optional extension. A missing resource type is an installation boundary; adding more HTTPRoute YAML will not install its CRD. A pending external address may be a LoadBalancer implementation boundary, rather than a route syntax problem.
+
+For an HTTPS extension, use a local training CA and a certificate covering `api.example.test`. Use `curl --resolve` to set the destination address while preserving the hostname used for TLS verification and HTTP routing. Supply the local CA using `--cacert`. Disabling certificate verification may help isolate a trust problem briefly, but it does not validate the final secure configuration. Keep private keys out of shell transcripts and committed manifests.
+
+## Pitfalls: HTTP, TLS and TCP are different match points
+
+A hostname mismatch can select the wrong virtual host even when the destination IP is correct. A TLS handshake may fail before an HTTP path is visible. A route can return 404 because no rule matches, while an implementation-generated 503 may indicate no usable upstream. These exact response conventions vary by controller, so inspect its logs and status rather than treating every code as proof. Test the backend Service internally before changing external routing rules.
+
+## Check your understanding
+
+<details>
+<summary>An HTTPS route serves a valid certificate, but forwards to the backend over plain HTTP. Is the backend hop encrypted?</summary>
+
+No. The listener has terminated the client's TLS session. Encryption of the separate backend connection requires its own supported TLS configuration, trust settings and backend server support. Confirm both connections independently when the requirement is encryption across the entire traffic path.
+
+</details>
+
+Next, connect a Pod to persistent storage. Like routing, storage depends on both declarative API objects and an installed implementation that can realize them.
+
+## Primary documentation
+
+- [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+- [Gateway API introduction](https://gateway-api.sigs.k8s.io/docs/concepts/api-overview/)
+- [Gateway API TLS](https://gateway-api.sigs.k8s.io/guides/user-guides/tls/)
+- [Gateway API ReferenceGrant](https://gateway-api.sigs.k8s.io/reference/api-types/referencegrant/)

@@ -1,0 +1,792 @@
+[
+  {
+    "title": "A supported driver turns a snapshot request into a recovery point",
+    "kind": "storage",
+    "description": "Trace snapshot request, class, controller, content binding and application consistency boundaries.",
+    "assumption": "A snapshot-capable CSI driver and snapshot CRDs/controller are installed; one source volume only.",
+    "frames": [
+      {
+        "title": "Choose the application boundary",
+        "narration": "The application decides whether to checkpoint or quiesce. Storage alone cannot infer transaction completion across memory and disks.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC app-data",
+            "detail": "Live application storage",
+            "type": "storage",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "VolumeSnapshot",
+            "detail": "Names source PVC",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "SnapshotClass",
+            "detail": "Driver + deletion policy",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Snapshot controller",
+            "detail": "Coordinates driver operation",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "SnapshotContent",
+            "detail": "Backend snapshot handle",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Application",
+            "detail": "Flush/checkpoint responsibility",
+            "type": "pod",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "5",
+            "to": "0",
+            "label": "checkpoint if required",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Submit a snapshot request",
+        "narration": "VolumeSnapshot references the source PVC and a compatible class; the class identifies the driver and lifecycle policy.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC app-data",
+            "detail": "Live application storage",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "VolumeSnapshot",
+            "detail": "Names source PVC",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "SnapshotClass",
+            "detail": "Driver + deletion policy",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Snapshot controller",
+            "detail": "Coordinates driver operation",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "SnapshotContent",
+            "detail": "Backend snapshot handle",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Application",
+            "detail": "Flush/checkpoint responsibility",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "0",
+            "label": "source",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "2",
+            "label": "class",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Create and bind backend state",
+        "narration": "The controller and driver create a snapshot handle represented by SnapshotContent and bind it to the request.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC app-data",
+            "detail": "Live application storage",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "VolumeSnapshot",
+            "detail": "Names source PVC",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "SnapshotClass",
+            "detail": "Driver + deletion policy",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Snapshot controller",
+            "detail": "Coordinates driver operation",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "SnapshotContent",
+            "detail": "Backend snapshot handle",
+            "type": "storage",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "Application",
+            "detail": "Flush/checkpoint responsibility",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "driver",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "snapshot handle",
+            "state": "active"
+          },
+          {
+            "from": "4",
+            "to": "1",
+            "label": "bind content",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Observe readyToUse",
+        "narration": "Readiness confirms the snapshot operation checkpoint, while application consistency still depends on the chosen capture procedure.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC app-data",
+            "detail": "Live application storage",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "VolumeSnapshot",
+            "detail": "Names source PVC",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "SnapshotClass",
+            "detail": "Driver + deletion policy",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Snapshot controller",
+            "detail": "Coordinates driver operation",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "SnapshotContent",
+            "detail": "Backend snapshot handle",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Application",
+            "detail": "Flush/checkpoint responsibility",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "1",
+            "label": "readyToUse",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl get volumesnapshot app-before-change -o yaml"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No snapshot capability",
+        "description": "PVC storage works but the backend is not a snapshot-capable CSI implementation.",
+        "frames": [
+          {
+            "title": "Source volume is healthy",
+            "narration": "A working mounted PVC does not prove its provisioner supports the snapshot API.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC app-data",
+                "detail": "Live application storage",
+                "type": "storage",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "VolumeSnapshot",
+                "detail": "Names source PVC",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "SnapshotClass",
+                "detail": "Driver + deletion policy",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Snapshot controller",
+                "detail": "Coordinates driver operation",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "SnapshotContent",
+                "detail": "Backend snapshot handle",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Application",
+                "detail": "Flush/checkpoint responsibility",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Snapshot cannot be realized",
+            "narration": "Missing CRDs, controller or driver capability prevents a valid recovery point from being produced.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC app-data",
+                "detail": "Live application storage",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "VolumeSnapshot",
+                "detail": "Names source PVC",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "SnapshotClass",
+                "detail": "Driver + deletion policy",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Snapshot controller",
+                "detail": "Coordinates driver operation",
+                "type": "control",
+                "state": "failed"
+              },
+              {
+                "id": "4",
+                "label": "SnapshotContent",
+                "detail": "Backend snapshot handle",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Application",
+                "detail": "Flush/checkpoint responsibility",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "3",
+                "label": "missing capability",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Use a supported recovery method",
+            "narration": "Inspect capabilities and choose a supported driver or an application-native backup procedure; do not label a file copy as a CSI snapshot.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC app-data",
+                "detail": "Live application storage",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "VolumeSnapshot",
+                "detail": "Names source PVC",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "SnapshotClass",
+                "detail": "Driver + deletion policy",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Snapshot controller",
+                "detail": "Coordinates driver operation",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "SnapshotContent",
+                "detail": "Backend snapshot handle",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Application",
+                "detail": "Flush/checkpoint responsibility",
+                "type": "pod",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "5",
+                "to": "0",
+                "label": "application export",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl get volumesnapshotclass\nkubectl get csidrivers"
+          }
+        ]
+      }
+    ],
+    "id": "m09-l03-snapshot"
+  },
+  {
+    "title": "Restore into a new claim before trusting a recovery point",
+    "kind": "storage",
+    "description": "Follow snapshot dataSource provisioning and then application-level recovery checks.",
+    "assumption": "A compatible StorageClass supports restoring the ready snapshot and the requested size is sufficient.",
+    "frames": [
+      {
+        "title": "Request an independent destination",
+        "narration": "The new PVC uses the snapshot as its dataSource instead of editing the original volume in place.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ready snapshot",
+            "detail": "Known point in time",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "New PVC",
+            "detail": "app-restored dataSource",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Provisioner",
+            "detail": "Restore-compatible driver",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "New volume",
+            "detail": "Independent restored storage",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Recovery Pod",
+            "detail": "Isolated integrity check",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "0",
+            "label": "dataSource",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Provision from the snapshot",
+        "narration": "The compatible driver creates a restored volume and binds the destination claim after satisfying class and size requirements.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ready snapshot",
+            "detail": "Known point in time",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "New PVC",
+            "detail": "app-restored dataSource",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Provisioner",
+            "detail": "Restore-compatible driver",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "New volume",
+            "detail": "Independent restored storage",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Recovery Pod",
+            "detail": "Isolated integrity check",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "restore request",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "new volume",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Mount without production traffic",
+        "narration": "A recovery Pod mounts the new claim in an isolated environment. The source remains available during verification.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ready snapshot",
+            "detail": "Known point in time",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "New PVC",
+            "detail": "app-restored dataSource",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Provisioner",
+            "detail": "Restore-compatible driver",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "New volume",
+            "detail": "Independent restored storage",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Recovery Pod",
+            "detail": "Isolated integrity check",
+            "type": "pod",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "mount restored claim",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Verify application usability",
+        "narration": "Check markers, integrity and a real application read. Snapshot readiness alone did not prove that the database can recover.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ready snapshot",
+            "detail": "Known point in time",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "New PVC",
+            "detail": "app-restored dataSource",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Provisioner",
+            "detail": "Restore-compatible driver",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "New volume",
+            "detail": "Independent restored storage",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Recovery Pod",
+            "detail": "Isolated integrity check",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "3",
+            "label": "integrity + read",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Files exist but transactions do not recover",
+        "description": "The snapshot captured incompatible application state.",
+        "frames": [
+          {
+            "title": "Storage restore succeeds",
+            "narration": "The destination claim binds and the restored filesystem is readable.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Ready snapshot",
+                "detail": "Known point in time",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "New PVC",
+                "detail": "app-restored dataSource",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Provisioner",
+                "detail": "Restore-compatible driver",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "New volume",
+                "detail": "Independent restored storage",
+                "type": "storage",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "Recovery Pod",
+                "detail": "Isolated integrity check",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "restore complete",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Integrity check fails",
+            "narration": "Application logs or integrity checks show that files do not represent a recoverable transaction boundary.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Ready snapshot",
+                "detail": "Known point in time",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "New PVC",
+                "detail": "app-restored dataSource",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Provisioner",
+                "detail": "Restore-compatible driver",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "New volume",
+                "detail": "Independent restored storage",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Recovery Pod",
+                "detail": "Isolated integrity check",
+                "type": "pod",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "3",
+                "label": "invalid state",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Improve the capture procedure",
+            "narration": "Use an application-native backup or coordinated checkpoint and repeat restoration; do not promote failed recovery data.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Ready snapshot",
+                "detail": "Known point in time",
+                "type": "storage",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "New PVC",
+                "detail": "app-restored dataSource",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Provisioner",
+                "detail": "Restore-compatible driver",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "New volume",
+                "detail": "Independent restored storage",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Recovery Pod",
+                "detail": "Isolated integrity check",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "0",
+                "label": "revisit capture",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m09-l03-restore"
+  }
+]

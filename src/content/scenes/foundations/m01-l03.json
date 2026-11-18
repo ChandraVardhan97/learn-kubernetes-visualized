@@ -1,0 +1,433 @@
+[
+  {
+    "id": "m01-l03-port-path",
+    "title": "Ports are endpoints, not declarations",
+    "kind": "flow",
+    "description": "Follow one HTTP request through a published local port.",
+    "assumption": "Docker publishes only IPv4 loopback 8080 to container TCP 80; Kubernetes Services are introduced later.",
+    "frames": [
+      {
+        "title": "The server listens",
+        "narration": "nginx binds container TCP 80. Declaring a port would not start this listener.",
+        "nodes": [
+          {
+            "id": "host",
+            "label": "Laptop 127.0.0.1",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "rule",
+            "label": "Host 8080 \u2192 container 80",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx listens on :80",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "web",
+            "label": "TCP forwarding",
+            "state": "active",
+            "from": "rule"
+          }
+        ]
+      },
+      {
+        "title": "Connect, then speak HTTP",
+        "narration": "curl connects to host port 8080. Forwarding delivers the connection to the container listener, and HTTP carries GET / over it.",
+        "nodes": [
+          {
+            "id": "curl",
+            "label": "curl client",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "rule",
+            "label": "Published port 8080",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "Container TCP 80",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "rule",
+            "label": "TCP + GET /",
+            "state": "active",
+            "from": "curl"
+          },
+          {
+            "to": "web",
+            "label": "forward connection",
+            "state": "active",
+            "from": "rule"
+          }
+        ]
+      },
+      {
+        "title": "A response is application evidence",
+        "narration": "HTTP 200 shows a server handled the request. HTTP 404 would still show a working connection and a missing application path.",
+        "nodes": [
+          {
+            "id": "curl",
+            "label": "Receives HTTP 200",
+            "type": "actor",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx response",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "curl",
+            "label": "HTTP status + body",
+            "state": "active",
+            "from": "web"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m01-l03-port-path-failure",
+        "label": "Failure: loopback-only server",
+        "description": "Failure: loopback-only server",
+        "frames": [
+          {
+            "title": "Listen on the wrong interface",
+            "narration": "A server binds only 127.0.0.1 inside its container. External traffic targets the container interface address.",
+            "nodes": [
+              {
+                "id": "rule",
+                "label": "Traffic to container IP",
+                "type": "service",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "loop",
+                "label": "127.0.0.1:80 only",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "loop",
+                "label": "different local address",
+                "state": "blocked",
+                "from": "rule"
+              }
+            ]
+          },
+          {
+            "title": "No HTTP response exists",
+            "narration": "The request cannot reach a listener at that destination. A port declaration does not change the bind address.",
+            "nodes": [
+              {
+                "id": "curl",
+                "label": "Connection failure",
+                "type": "actor",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "port",
+                "label": "containerPort: 80",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "loop",
+                "label": "Loopback listener",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "loop",
+                "label": "connection rejected",
+                "state": "blocked",
+                "from": "curl"
+              }
+            ]
+          },
+          {
+            "title": "Align the bind address",
+            "narration": "Configure the intended server interface and port, then retest connectivity before diagnosing an HTTP path.",
+            "nodes": [
+              {
+                "id": "web",
+                "label": "Listener 0.0.0.0:80",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "rule",
+                "label": "Forward to container interface",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "web",
+                "label": "reachable listener",
+                "state": "active",
+                "from": "rule"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m01-l03-dns",
+    "title": "Resolve before connecting",
+    "kind": "flow",
+    "description": "Separate DNS answers, transport connections, and HTTP messages.",
+    "assumption": "A client obtains one IPv4 address; caching, IPv6 racing, and TLS details are simplified.",
+    "frames": [
+      {
+        "title": "Resolve the URL hostname",
+        "narration": "The resolver asks DNS for address information for shop.example.test. No HTTP request has reached the web application yet.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "URL hostname",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "dns",
+            "label": "DNS resolver",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "answer",
+            "label": "Address record",
+            "type": "object",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "dns",
+            "label": "address query",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "answer",
+            "label": "answer",
+            "state": "active",
+            "from": "dns"
+          }
+        ]
+      },
+      {
+        "title": "Connect to address and port",
+        "narration": "The client uses the returned address and explicit TCP port 8080. DNS does not verify the target listener.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Client TCP socket",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "answer",
+            "label": "Resolved server address",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "server",
+            "label": "Server :8080",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "client",
+            "label": "destination IP",
+            "state": "active",
+            "from": "answer"
+          },
+          {
+            "to": "server",
+            "label": "TCP connection",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      },
+      {
+        "title": "Send the HTTP message",
+        "narration": "Only after connection setup does the client exchange HTTP request and response data. The hostname can still influence application routing.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "GET /catalog",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "server",
+            "label": "HTTP application",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "server",
+            "label": "request + authority",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "client",
+            "label": "HTTP response",
+            "state": "active",
+            "from": "server"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m01-l03-dns-failure",
+        "label": "Failure: DNS succeeds, listener absent",
+        "description": "Failure: DNS succeeds, listener absent",
+        "frames": [
+          {
+            "title": "DNS returns an address",
+            "narration": "The name resolves successfully. This proves a naming step worked, not that the application is available.",
+            "nodes": [
+              {
+                "id": "dns",
+                "label": "Valid address answer",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "client",
+                "label": "Client received IP",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "client",
+                "label": "DNS answer",
+                "state": "active",
+                "from": "dns"
+              }
+            ]
+          },
+          {
+            "title": "The destination refuses TCP",
+            "narration": "No intended listener accepts port 8080 at that address. HTTP has not started.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Connection refused",
+                "type": "actor",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "server",
+                "label": "No :8080 listener",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "server",
+                "label": "TCP refused",
+                "state": "blocked",
+                "from": "client"
+              }
+            ]
+          },
+          {
+            "title": "Investigate the listener",
+            "narration": "Compare the resolved address, URL port, server binding, and forwarding rules. Retain the successful DNS result as evidence.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Inspect address + port",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "server",
+                "label": "Correct listener",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "server",
+                "label": "fix bind or route",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

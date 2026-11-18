@@ -1,0 +1,131 @@
+---
+{
+  "lessonId": "m12-l02",
+  "title": "Debug network and storage failures",
+  "description": "Use comparative probes to separate DNS, Service selection, forwarding, policy, binding and mounting.",
+  "level": "intermediate",
+  "module": "m12",
+  "order": 2,
+  "minutes": 18,
+  "prerequisites": [
+    "m12-l01"
+  ],
+  "objectives": [
+    "Locate a failed request using DNS, Service and direct endpoint probes",
+    "Distinguish no-ready-endpoint failures from a broken data plane",
+    "Classify storage failures as binding, attachment, mount or application access"
+  ],
+  "concepts": [
+    {
+      "id": "m12-l02-service-debugging",
+      "title": "Service and EndpointSlice debugging",
+      "scene": "m12-l02-network-ladder"
+    },
+    {
+      "id": "m12-l02-dns-debugging",
+      "title": "DNS and path comparison",
+      "scene": "m12-l02-network-ladder"
+    },
+    {
+      "id": "m12-l02-policy-debugging",
+      "title": "Network policy diagnosis",
+      "scene": "m12-l02-network-ladder"
+    },
+    {
+      "id": "m12-l02-storage-debugging",
+      "title": "Storage lifecycle diagnosis",
+      "scene": "m12-l02-storage-ladder"
+    },
+    {
+      "id": "m12-l02-filesystem-debugging",
+      "title": "Application filesystem access",
+      "scene": "m12-l02-storage-ladder"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Debug Services",
+      "url": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/"
+    },
+    {
+      "title": "Debug DNS resolution",
+      "url": "https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/"
+    },
+    {
+      "title": "Debug application storage",
+      "url": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/"
+    }
+  ],
+  "lab": "m12",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: compare paths while preserving the source
+
+A failed request has several possible boundaries: name resolution, Service selection, ready endpoint publication, data-plane forwarding, policy and the application listener. Test these in an order that turns each success into a constraint on the remaining hypotheses. Keep the same source Pod for comparisons because two sources may have different network policies, DNS settings, nodes or routes. A successful curl from your laptop is not equivalent to a successful in-cluster request.
+
+Begin with the symptom in precise terms: source Pod and node, destination name or address, protocol, port and observed timeout or response. A DNS error is different from a TCP connection refusal, and both differ from an HTTP 500 response. These observations guide the next test, but implementation-generated responses and timeouts are not absolute proof of one root cause. Record enough context to reproduce the result before editing the workload.
+
+<Scene id="m12-l02-network-ladder" />
+
+## Walkthrough: take discovery out of the path one step at a time
+
+```bash
+kubectl get service api -o yaml
+kubectl get pods -l app=api -o wide
+kubectl get endpointslices -l kubernetes.io/service-name=api -o yaml
+kubectl exec client -- nslookup api.learning.svc.cluster.local
+kubectl exec client -- cat /etc/resolv.conf
+kubectl exec client -- wget -T 3 -qO- http://api:80
+# Substitute a ready endpoint address and its actual target port.
+kubectl exec client -- wget -T 3 -qO- http://POD_IP:8080
+```
+
+If DNS fails, inspect the client's resolver configuration, DNS policy and namespace-qualified name. Then inspect the cluster DNS Service, its ready endpoints and DNS workload health. Egress isolation can block UDP or TCP DNS, while a custom cluster domain can make a copied fully qualified name wrong. Do not restart all DNS Pods simply because a short name in the wrong namespace failed.
+
+If DNS works, inspect whether the Service selector matches actual Pod labels and whether slices contain ready endpoints. Missing readiness can reflect a correct probe protecting clients from an unhealthy process or a misconfigured probe that never succeeds. If direct endpoint traffic works while the Service virtual address fails from the same source, investigate the Service data plane and port mapping. If both fail, compare listener state, ingress and egress policies, node reachability and provider-specific routing. A localhost test inside the destination does not prove the process listens on the Pod interface.
+
+<Scene id="m12-l02-storage-ladder" />
+
+## Practice: storage has its own checkpoint ladder
+
+```bash
+kubectl get pod writer -o wide
+kubectl describe pod writer
+kubectl get pvc
+kubectl describe pvc app-data
+kubectl get pv
+kubectl get storageclass
+kubectl get volumeattachments
+```
+
+The last command may require broader permissions and is relevant only to drivers using attachment. First decide whether the claim is Pending or Bound. For Pending, inspect class selection, provisioning events and delayed binding. WaitForFirstConsumer can be expected before a consuming workload is placed. For Bound claims with attachment errors, examine node topology, previous attachment ownership and supported access mode. Do not force-detach a disk until the old writer is known to be stopped or fenced.
+
+For `FailedMount`, read the exact message and node-side driver evidence: invalid mount options, inaccessible backend, missing credentials or filesystem setup are different causes. If the container starts but gets permission denied when accessing `/data`, mounting may already be healthy. Inspect process UID and groups, mount read-only settings, filesystem ownership and application path. A security context change should address a demonstrated permission requirement; privileged mode is too broad as a default diagnostic fix.
+
+Use the [diagnostics lab](/labs/#m12) to record the first successful checkpoint and the first failing checkpoint. Make one targeted correction, repeat the same probe, and also repeat a nearby negative case so that a broad accidental permission change is not mistaken for a precise repair. Keep persistent claims intact until the exercise's retention policy is understood.
+
+## Pitfalls: repair the failed boundary rather than its neighbors
+
+Changing a Service selector cannot repair a disk mount failure. Recreating a PVC cannot repair an HTTP route's hostname mismatch. Such changes can introduce new faults and destroy the comparison that made the investigation useful. Conversely, multiple simultaneous failures are possible: fixing DNS may reveal a policy denial that was already present. Treat the newly exposed symptom as the next boundary rather than claiming the previous diagnosis was necessarily wrong.
+
+## Check your understanding
+
+<details>
+<summary>The Service name resolves and direct Pod-IP traffic works from the same client, but the ClusterIP request fails. Where should you focus next?</summary>
+
+Focus on the Service's port mapping, usable endpoint state and the node's Service forwarding implementation. DNS and the tested direct endpoint path have passed useful checks. Continue with evidence about that virtual-address path rather than changing the backend image or DNS configuration without a new observation.
+
+</details>
+
+Next, preserve this evidence across Pod replacements using metrics, centralized logs and distributed traces, each with a defined question and retention boundary.
+
+## Primary documentation
+
+- [Debug Services](https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/)
+- [Debug DNS resolution](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/)
+- [Debug application storage](https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/)

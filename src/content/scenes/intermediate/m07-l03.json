@@ -1,0 +1,678 @@
+[
+  {
+    "title": "Count domains before choosing the next placement",
+    "kind": "scheduling",
+    "description": "Compare two zone counts as a fourth replica is scheduled and explain a hard-skew failure.",
+    "assumption": "Two eligible zones with consistent labels; examples omit advanced minDomains and inclusion-policy settings.",
+    "frames": [
+      {
+        "title": "Count matching replicas",
+        "narration": "The selector counts api Pods, not every Pod in the namespace. The current eligible zone counts are east=2 and west=1.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New api Pod",
+            "detail": "Selector counts app=api replicas",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Zone east",
+            "detail": "Two matching Pods",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Zone west",
+            "detail": "One matching Pod",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "maxSkew=1; DoNotSchedule",
+            "type": "control",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "count 2",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "count 1",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Test the crowded zone",
+        "narration": "Putting the new replica in east creates counts 3 and 1. Skew 2 exceeds the configured maximum 1.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New api Pod",
+            "detail": "Selector counts app=api replicas",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Zone east",
+            "detail": "Two matching Pods",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Zone west",
+            "detail": "One matching Pod",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "maxSkew=1; DoNotSchedule",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "3 versus 1",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Test the less crowded zone",
+        "narration": "Putting it in west creates counts 2 and 2, so this topology constraint allows the placement.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New api Pod",
+            "detail": "Selector counts app=api replicas",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Zone east",
+            "detail": "Two matching Pods",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Zone west",
+            "detail": "One matching Pod",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "maxSkew=1; DoNotSchedule",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "2 versus 2",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Bind after other filters",
+        "narration": "The scheduler can choose a fitting west node after all other resource and placement rules pass. Existing Pods do not move merely because this rule exists.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New api Pod",
+            "detail": "Selector counts app=api replicas",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Zone east",
+            "detail": "Two matching Pods",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Zone west",
+            "detail": "One matching Pod",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "Scheduler",
+            "detail": "maxSkew=1; DoNotSchedule",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "2",
+            "label": "bind new Pod",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "West has no fitting capacity",
+        "description": "West remains an eligible domain for counting but its nodes cannot fit this Pod.",
+        "frames": [
+          {
+            "title": "East would violate skew",
+            "narration": "Placing in the already crowded east zone violates the hard spread constraint.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "New api Pod",
+                "detail": "Selector counts app=api replicas",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Zone east",
+                "detail": "Two matching Pods",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Zone west",
+                "detail": "One matching Pod",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Scheduler",
+                "detail": "maxSkew=1; DoNotSchedule",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "skew too large",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "West fails resources",
+            "narration": "The preferred balancing domain exists but has insufficient resources for this Pod.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "New api Pod",
+                "detail": "Selector counts app=api replicas",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Zone east",
+                "detail": "Two matching Pods",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Zone west",
+                "detail": "One matching Pod",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Scheduler",
+                "detail": "maxSkew=1; DoNotSchedule",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "2",
+                "label": "insufficient memory",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Choose capacity or a softer rule",
+            "narration": "Add fitting capacity in west or deliberately choose ScheduleAnyway when temporary imbalance is acceptable.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "New api Pod",
+                "detail": "Selector counts app=api replicas",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Zone east",
+                "detail": "Two matching Pods",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Zone west",
+                "detail": "One matching Pod",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Scheduler",
+                "detail": "maxSkew=1; DoNotSchedule",
+                "type": "control",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "3",
+                "label": "policy decision",
+                "state": "active"
+              }
+            ],
+            "code": "whenUnsatisfiable: ScheduleAnyway"
+          }
+        ]
+      }
+    ],
+    "id": "m07-l03-spread"
+  },
+  {
+    "title": "Admission budget precedes placement",
+    "kind": "policy",
+    "description": "Follow LimitRange mutation into ResourceQuota accounting and then scheduler placement.",
+    "assumption": "One namespace and one CPU request budget; real quotas can track many resources.",
+    "frames": [
+      {
+        "title": "Submit incomplete resources",
+        "narration": "The submitted Pod has no CPU request, but admission has not yet completed.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Submitted Pod",
+            "detail": "CPU request omitted",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "LimitRange",
+            "detail": "Default CPU request 100m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ResourceQuota",
+            "detail": "1 CPU hard; 950m already used",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API admission",
+            "detail": "Mutate, validate, persist",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Uses admitted requests",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "create request",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Apply defaults",
+        "narration": "LimitRange supplies a 100m CPU request, changing the amount quota and scheduling must account for.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Defaulted Pod",
+            "detail": "CPU request now 100m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "LimitRange",
+            "detail": "Default CPU request 100m",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "ResourceQuota",
+            "detail": "1 CPU hard; 950m already used",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API admission",
+            "detail": "Mutate, validate, persist",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Uses admitted requests",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "default 100m",
+            "state": "active"
+          }
+        ],
+        "code": "defaultRequest:\n  cpu: 100m"
+      },
+      {
+        "title": "Reject an over-budget create",
+        "narration": "950m plus 100m exceeds the 1 CPU namespace quota. Admission rejects the Pod rather than leaving that Pod Pending.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Rejected proposal",
+            "detail": "Defaulted CPU request 100m; not persisted",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "LimitRange",
+            "detail": "Default CPU request 100m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ResourceQuota",
+            "detail": "1 CPU hard; 950m already used",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "API admission",
+            "detail": "Mutate, validate, persist",
+            "type": "control",
+            "state": "failed"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Uses admitted requests",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "2",
+            "label": "1050m > 1000m",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Free budget then place",
+        "narration": "After accounted requests fall sufficiently, a new create can pass quota. The scheduler still independently checks node capacity.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New Pod create",
+            "detail": "CPU request 100m; admitted after budget is freed",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "LimitRange",
+            "detail": "Default CPU request 100m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "ResourceQuota",
+            "detail": "1 CPU hard; 800m already used before this create",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "API admission",
+            "detail": "Mutate, validate, persist",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Uses admitted requests",
+            "type": "control",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "persisted Pod",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl describe resourcequota team-budget"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Surge exceeds a fitting final state",
+        "description": "A rollout needs temporary additional Pods that exceed quota.",
+        "frames": [
+          {
+            "title": "Final state would fit",
+            "narration": "Eight replicas at 100m request total 800m, below the 1 CPU budget.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Eight desired replicas",
+                "detail": "100m each; final total 800m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "LimitRange",
+                "detail": "Default CPU request 100m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ResourceQuota",
+                "detail": "1 CPU hard; final 800m; proposed overlap 1100m",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "3",
+                "label": "API admission",
+                "detail": "Mutate, validate, persist",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Scheduler",
+                "detail": "Uses admitted requests",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Overlap exceeds quota",
+            "narration": "Three surge replicas would raise requests to 1100m. The ReplicaSet receives creation failures for the excess.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Eight desired replicas",
+                "detail": "100m each; final total 800m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "LimitRange",
+                "detail": "Default CPU request 100m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ResourceQuota",
+                "detail": "1 CPU hard; final 800m; proposed overlap 1100m",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "API admission",
+                "detail": "Mutate, validate, persist",
+                "type": "control",
+                "state": "failed"
+              },
+              {
+                "id": "4",
+                "label": "Scheduler",
+                "detail": "Uses admitted requests",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "2",
+                "label": "surge rejected",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect the controller events",
+            "narration": "Describe the ReplicaSet and adjust surge, budget or resource settings with the intended availability trade-off.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Eight desired replicas",
+                "detail": "100m each; final total 800m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "LimitRange",
+                "detail": "Default CPU request 100m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "ResourceQuota",
+                "detail": "1 CPU hard; final 800m; proposed overlap 1100m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API admission",
+                "detail": "Mutate, validate, persist",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Scheduler",
+                "detail": "Uses admitted requests",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "no new Pod yet",
+                "state": "blocked"
+              }
+            ],
+            "code": "kubectl describe replicaset"
+          }
+        ]
+      }
+    ],
+    "id": "m07-l03-budget"
+  }
+]

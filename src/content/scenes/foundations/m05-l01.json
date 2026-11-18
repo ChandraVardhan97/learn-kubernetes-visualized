@@ -1,0 +1,591 @@
+[
+  {
+    "id": "m05-l01-ownership",
+    "title": "A Deployment owns a release hierarchy",
+    "kind": "ownership",
+    "description": "Show the actual controller and resource ownership boundaries.",
+    "assumption": "One active ReplicaSet is shown; later lessons add an old revision during rollout.",
+    "frames": [
+      {
+        "title": "Declare the parent",
+        "narration": "The Deployment declares replicas and a Pod template. Its controller creates or reuses the ReplicaSet representing that template.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment replicas: 3",
+            "type": "object",
+            "state": "active",
+            "detail": "",
+            "x": 34,
+            "y": 28
+          },
+          {
+            "id": "dc",
+            "label": "Deployment controller",
+            "type": "control",
+            "state": "active",
+            "detail": "",
+            "x": 560,
+            "y": 28
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet target: 3",
+            "type": "object",
+            "state": "ready",
+            "detail": "",
+            "x": 297,
+            "y": 28
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "create / set target",
+            "state": "active",
+            "from": "dc"
+          },
+          {
+            "to": "rs",
+            "label": "owns",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      },
+      {
+        "title": "The ReplicaSet creates Pods",
+        "narration": "The ReplicaSet controller observes its target and creates three Pod objects. It is the immediate controller responsible for this count.",
+        "nodes": [
+          {
+            "id": "rs",
+            "label": "ReplicaSet",
+            "type": "object",
+            "state": "active",
+            "detail": "",
+            "x": 297,
+            "y": 28
+          },
+          {
+            "id": "rc",
+            "label": "ReplicaSet controller",
+            "type": "control",
+            "state": "active",
+            "detail": "",
+            "x": 34,
+            "y": 28
+          },
+          {
+            "id": "a",
+            "label": "Pod A",
+            "type": "pod",
+            "state": "active",
+            "detail": "",
+            "x": 34,
+            "y": 194
+          },
+          {
+            "id": "b",
+            "label": "Pod B",
+            "type": "pod",
+            "state": "active",
+            "detail": "",
+            "x": 297,
+            "y": 194
+          },
+          {
+            "id": "c",
+            "label": "Pod C",
+            "type": "pod",
+            "state": "active",
+            "detail": "",
+            "x": 560,
+            "y": 194
+          }
+        ],
+        "edges": [
+          {
+            "from": "rc",
+            "to": "rs",
+            "label": "reconciles target",
+            "state": "active"
+          },
+          {
+            "to": "a",
+            "label": "owns",
+            "state": "active",
+            "from": "rs"
+          },
+          {
+            "from": "rs",
+            "to": "b",
+            "label": "owns",
+            "state": "active"
+          },
+          {
+            "from": "rs",
+            "to": "c",
+            "label": "owns",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Other components place and execute",
+        "narration": "The scheduler binds new Pods; node kubelets use runtimes to start them. Neither task is performed by the replica counter.",
+        "nodes": [
+          {
+            "id": "sched",
+            "label": "Scheduler",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "node",
+            "label": "Worker kubelet + runtime",
+            "type": "node",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Managed Pod ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "bind node",
+            "state": "active",
+            "from": "sched"
+          },
+          {
+            "to": "pod",
+            "label": "start assigned containers",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m05-l01-ownership-failure",
+        "label": "Failure: editing a managed child",
+        "description": "Failure: editing a managed child",
+        "frames": [
+          {
+            "title": "An operator changes a child target",
+            "narration": "The Deployment requests three replicas, while a manual change sets its ReplicaSet target to one.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "Deployment target: 3",
+                "type": "object",
+                "state": "active",
+                "detail": "",
+                "x": 34,
+                "y": 28
+              },
+              {
+                "id": "rs",
+                "label": "Manually changed target: 1",
+                "type": "object",
+                "state": "warning",
+                "detail": "",
+                "x": 297,
+                "y": 28
+              }
+            ],
+            "edges": [
+              {
+                "to": "rs",
+                "label": "conflicting desired inputs",
+                "state": "active",
+                "from": "deploy"
+              }
+            ]
+          },
+          {
+            "title": "The owner reconciles its plan",
+            "narration": "The Deployment controller can restore the ReplicaSet target. A child edit is not a durable change to the parent\u2019s intention.",
+            "nodes": [
+              {
+                "id": "dc",
+                "label": "Deployment controller",
+                "type": "control",
+                "state": "active",
+                "detail": "",
+                "x": 560,
+                "y": 28
+              },
+              {
+                "id": "rs",
+                "label": "Target returns to 3",
+                "type": "object",
+                "state": "active",
+                "detail": "",
+                "x": 297,
+                "y": 28
+              }
+            ],
+            "edges": [
+              {
+                "to": "rs",
+                "label": "reconcile parent plan",
+                "state": "active",
+                "from": "dc"
+              }
+            ]
+          },
+          {
+            "title": "Change the owning workload",
+            "narration": "Edit the Deployment and source manifest deliberately. Inspect children for evidence without treating them as independent release controls.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Update Deployment manifest",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "deploy",
+                "label": "Consistent target",
+                "type": "object",
+                "state": "ready",
+                "detail": "",
+                "x": 34,
+                "y": 28
+              },
+              {
+                "id": "rs",
+                "label": "Managed target",
+                "type": "object",
+                "state": "ready",
+                "detail": "",
+                "x": 297,
+                "y": 28
+              }
+            ],
+            "edges": [
+              {
+                "to": "deploy",
+                "label": "author desired state",
+                "state": "active",
+                "from": "operator"
+              },
+              {
+                "to": "rs",
+                "label": "managed plan",
+                "state": "active",
+                "from": "deploy"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m05-l01-scale",
+    "title": "Replica count is not usable capacity",
+    "kind": "chart",
+    "description": "Compare desired, existing, and ready instances.",
+    "assumption": "Three replicas share no special topology constraints; readiness is a simplified per-Pod signal.",
+    "frames": [
+      {
+        "title": "Request three instances",
+        "narration": "The desired count is three. The objects can exist before the application is usable.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Desired: 3",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "Pod A starting",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Pod B starting",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "c",
+            "label": "Pod C starting",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "managed replica",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "b",
+            "label": "managed replica",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "c",
+            "label": "managed replica",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      },
+      {
+        "title": "Observe readiness separately",
+        "narration": "A and B are ready but C is not. Three existing replicas and two ready replicas answer different questions.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Existing: 3, ready: 2",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "A ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "B ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "c",
+            "label": "C not ready",
+            "type": "pod",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "usable",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "b",
+            "label": "usable",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "c",
+            "label": "not yet usable",
+            "state": "blocked",
+            "from": "deploy"
+          }
+        ]
+      },
+      {
+        "title": "Scale the enduring target",
+        "narration": "A deliberate scale changes the desired replica count. It does not increase per-Pod resources or guarantee a throughput result.",
+        "nodes": [
+          {
+            "id": "operator",
+            "label": "Scale target to 2",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "deploy",
+            "label": "Desired: 2",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet target: 2",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "deploy",
+            "label": "accepted scale",
+            "state": "active",
+            "from": "operator"
+          },
+          {
+            "to": "rs",
+            "label": "adjust target",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m05-l01-scale-failure",
+        "label": "Failure: all replicas share a bad dependency",
+        "description": "Failure: all replicas share a bad dependency",
+        "frames": [
+          {
+            "title": "Three processes are running",
+            "narration": "All replicas start, but each depends on one external database that is unavailable.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Pod A",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "Pod B",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "c",
+                "label": "Pod C",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Database unavailable",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "dependency",
+                "state": "blocked",
+                "from": "a"
+              },
+              {
+                "to": "db",
+                "label": "dependency",
+                "state": "blocked",
+                "from": "b"
+              },
+              {
+                "to": "db",
+                "label": "dependency",
+                "state": "blocked",
+                "from": "c"
+              }
+            ]
+          },
+          {
+            "title": "More replicas repeat the failure",
+            "narration": "Increasing the desired count creates additional clients of the same broken dependency. Count does not repair that dependency.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "More replicas requested",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "new",
+                "label": "New replica also fails",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Same dependency failure",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "still unavailable",
+                "state": "blocked",
+                "from": "new"
+              }
+            ]
+          },
+          {
+            "title": "Repair the responsible boundary",
+            "narration": "Investigate dependency availability and application readiness behavior. Scale only when evidence identifies a capacity problem.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Inspect shared dependency",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Dependency restored",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pods",
+                "label": "Replicas become useful",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "repair cause",
+                "state": "active",
+                "from": "operator"
+              },
+              {
+                "to": "db",
+                "label": "healthy access",
+                "state": "active",
+                "from": "pods"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

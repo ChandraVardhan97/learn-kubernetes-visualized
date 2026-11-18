@@ -1,0 +1,737 @@
+[
+  {
+    "title": "Serving identity and client identity are separate",
+    "kind": "policy",
+    "description": "etcd credentials, service-account signing keys and encryption keys have their own purposes and recovery needs.",
+    "assumption": "The diagram groups several PKI directions; exact files and renewal responsibilities depend on cluster ownership.",
+    "frames": [
+      {
+        "title": "Verify the server",
+        "narration": "A client checks trust, validity and the endpoint identity on the serving certificate.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "kubectl / kubelet",
+            "type": "actor",
+            "detail": "Trusts API serving CA",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "server",
+            "label": "API serving certificate",
+            "type": "object",
+            "detail": "Endpoint SAN + valid dates",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "auth",
+            "label": "Client authentication",
+            "type": "control",
+            "detail": "Validate client credential",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "etcd",
+            "label": "etcd TLS identity",
+            "type": "storage",
+            "detail": "Separate trust path",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "keys",
+            "label": "Signing / encryption keys",
+            "type": "object",
+            "detail": "Separate recovery assets",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "server",
+            "label": "verify endpoint identity",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      },
+      {
+        "title": "Authenticate the caller",
+        "narration": "The API validates the client credential independently from client-side server verification.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "kubectl / kubelet",
+            "type": "actor",
+            "detail": "Trusts API serving CA",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "server",
+            "label": "API serving certificate",
+            "type": "object",
+            "detail": "Endpoint SAN + valid dates",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "auth",
+            "label": "Client authentication",
+            "type": "control",
+            "detail": "Validate client credential",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "etcd",
+            "label": "etcd TLS identity",
+            "type": "storage",
+            "detail": "Separate trust path",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "keys",
+            "label": "Signing / encryption keys",
+            "type": "object",
+            "detail": "Separate recovery assets",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "auth",
+            "label": "present credential",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      },
+      {
+        "title": "Inventory other trust material",
+        "narration": "etcd credentials, service-account signing keys and encryption keys have their own purposes and recovery needs.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "kubectl / kubelet",
+            "type": "actor",
+            "detail": "Trusts API serving CA",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "server",
+            "label": "API serving certificate",
+            "type": "object",
+            "detail": "Endpoint SAN + valid dates",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "auth",
+            "label": "Client authentication",
+            "type": "control",
+            "detail": "Validate client credential",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "etcd",
+            "label": "etcd TLS identity",
+            "type": "storage",
+            "detail": "Separate trust path",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "keys",
+            "label": "Signing / encryption keys",
+            "type": "object",
+            "detail": "Separate recovery assets",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": []
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Renewed file not loaded",
+        "description": "Changing a certificate on disk does not ensure the running component uses it.",
+        "frames": [
+          {
+            "title": "New leaf file is written",
+            "narration": "The intended certificate has been renewed under the chosen CA.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "kubectl / kubelet",
+                "type": "actor",
+                "detail": "Trusts API serving CA",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "server",
+                "label": "API serving certificate",
+                "type": "object",
+                "detail": "Renewed leaf certificate written to disk",
+                "x": 290,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "auth",
+                "label": "Client authentication",
+                "type": "control",
+                "detail": "Validate client credential",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "etcd",
+                "label": "etcd TLS identity",
+                "type": "storage",
+                "detail": "Separate trust path",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "keys",
+                "label": "Signing / encryption keys",
+                "type": "object",
+                "detail": "Separate recovery assets",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Process still uses old data",
+            "narration": "A component or embedded kubeconfig continues presenting the previous credential.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "kubectl / kubelet",
+                "type": "actor",
+                "detail": "Still uses the previous credential",
+                "x": 35,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "server",
+                "label": "API serving certificate",
+                "type": "object",
+                "detail": "Endpoint SAN + valid dates",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "auth",
+                "label": "Client authentication",
+                "type": "control",
+                "detail": "Validate client credential",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "etcd",
+                "label": "etcd TLS identity",
+                "type": "storage",
+                "detail": "Separate trust path",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "keys",
+                "label": "Signing / encryption keys",
+                "type": "object",
+                "detail": "Separate recovery assets",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "auth",
+                "label": "present credential",
+                "state": "active",
+                "from": "client"
+              }
+            ]
+          },
+          {
+            "title": "Verify the active connection",
+            "narration": "Follow documented reload or restart steps and inspect the identity actually used, without disabling TLS verification.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "kubectl / kubelet",
+                "type": "actor",
+                "detail": "Trusts API serving CA",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "server",
+                "label": "API serving certificate",
+                "type": "object",
+                "detail": "Endpoint SAN + valid dates",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "auth",
+                "label": "Client authentication",
+                "type": "control",
+                "detail": "Validate client credential",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "etcd",
+                "label": "etcd TLS identity",
+                "type": "storage",
+                "detail": "Separate trust path",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "keys",
+                "label": "Signing / encryption keys",
+                "type": "object",
+                "detail": "Separate recovery assets",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "server",
+                "label": "verify endpoint identity",
+                "state": "active",
+                "from": "client"
+              },
+              {
+                "to": "auth",
+                "label": "present credential",
+                "state": "active",
+                "from": "client"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m18-l02-pki-paths"
+  },
+  {
+    "title": "Every intermediate version combination must be supported",
+    "kind": "lifecycle",
+    "description": "Verify API readiness, critical controllers and workload behavior before continuing worker maintenance.",
+    "assumption": "No specific live-cluster upgrade command is prescribed; kind, kubeadm and managed providers have different lifecycle procedures.",
+    "frames": [
+      {
+        "title": "Inventory before mutation",
+        "narration": "Record exact versions, removed APIs and add-on compatibility; verify usable backups.",
+        "nodes": [
+          {
+            "id": "inventory",
+            "label": "Current versions",
+            "type": "object",
+            "detail": "Components + add-ons",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "policy",
+            "label": "Skew / release guides",
+            "type": "object",
+            "detail": "Supported intermediate states",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "control",
+            "label": "Control-plane upgrade",
+            "type": "control",
+            "detail": "Sequential maintenance",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "workers",
+            "label": "Worker upgrade",
+            "type": "node",
+            "detail": "Drain and replace / upgrade",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Verification gate",
+            "type": "actor",
+            "detail": "API + workload health",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "policy",
+            "label": "check compatibility",
+            "state": "active",
+            "from": "inventory"
+          }
+        ]
+      },
+      {
+        "title": "Follow the release path",
+        "narration": "Use the documented supported minor-version sequence and inspect skew at each intermediate state.",
+        "nodes": [
+          {
+            "id": "inventory",
+            "label": "Current versions",
+            "type": "object",
+            "detail": "Components + add-ons",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "policy",
+            "label": "Skew / release guides",
+            "type": "object",
+            "detail": "Supported intermediate states",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "control",
+            "label": "Control-plane upgrade",
+            "type": "control",
+            "detail": "Sequential maintenance",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "workers",
+            "label": "Worker upgrade",
+            "type": "node",
+            "detail": "Drain and replace / upgrade",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Verification gate",
+            "type": "actor",
+            "detail": "API + workload health",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "control",
+            "label": "supported next step",
+            "state": "active",
+            "from": "policy"
+          },
+          {
+            "to": "workers",
+            "label": "permitted component order",
+            "state": "active",
+            "from": "control"
+          }
+        ]
+      },
+      {
+        "title": "Gate each next step",
+        "narration": "Verify API readiness, critical controllers and workload behavior before continuing worker maintenance.",
+        "nodes": [
+          {
+            "id": "inventory",
+            "label": "Current versions",
+            "type": "object",
+            "detail": "Components + add-ons",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "policy",
+            "label": "Skew / release guides",
+            "type": "object",
+            "detail": "Supported intermediate states",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "control",
+            "label": "Control-plane upgrade",
+            "type": "control",
+            "detail": "Sequential maintenance",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "workers",
+            "label": "Worker upgrade",
+            "type": "node",
+            "detail": "Drain and replace / upgrade",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Verification gate",
+            "type": "actor",
+            "detail": "API + workload health",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "verify",
+            "label": "evidence before continuing",
+            "state": "active",
+            "from": "workers"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Skip unsupported intermediate versions",
+        "description": "A target version being supported does not make every path to it supported.",
+        "frames": [
+          {
+            "title": "Only target was checked",
+            "narration": "The plan ignores older clients, webhooks or workers still present during maintenance.",
+            "nodes": [
+              {
+                "id": "inventory",
+                "label": "Current versions",
+                "type": "object",
+                "detail": "Components + add-ons",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "policy",
+                "label": "Skew / release guides",
+                "type": "object",
+                "detail": "Intermediate compatibility was skipped",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "control",
+                "label": "Control-plane upgrade",
+                "type": "control",
+                "detail": "Sequential maintenance",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "workers",
+                "label": "Worker upgrade",
+                "type": "node",
+                "detail": "Drain and replace / upgrade",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "verify",
+                "label": "Verification gate",
+                "type": "actor",
+                "detail": "API + workload health",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "policy",
+                "label": "skew check skipped",
+                "state": "blocked",
+                "from": "inventory"
+              }
+            ]
+          },
+          {
+            "title": "Compatibility breaks midway",
+            "narration": "A component uses an unsupported API or version relationship during the transition.",
+            "nodes": [
+              {
+                "id": "inventory",
+                "label": "Current versions",
+                "type": "object",
+                "detail": "Components + add-ons",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "policy",
+                "label": "Skew / release guides",
+                "type": "object",
+                "detail": "Supported intermediate states",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "control",
+                "label": "Control-plane upgrade",
+                "type": "control",
+                "detail": "Sequential maintenance",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "workers",
+                "label": "Worker upgrade",
+                "type": "node",
+                "detail": "Drain and replace / upgrade",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "verify",
+                "label": "Verification gate",
+                "type": "actor",
+                "detail": "API + workload health",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "workers",
+                "label": "permitted component order",
+                "state": "blocked",
+                "from": "control"
+              }
+            ]
+          },
+          {
+            "title": "Use a defined recovery boundary",
+            "narration": "Stop and follow the tested recovery procedure; binary downgrade is not a universal storage rollback.",
+            "nodes": [
+              {
+                "id": "inventory",
+                "label": "Current versions",
+                "type": "object",
+                "detail": "Components + add-ons",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "policy",
+                "label": "Skew / release guides",
+                "type": "object",
+                "detail": "Supported intermediate states",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "control",
+                "label": "Control-plane upgrade",
+                "type": "control",
+                "detail": "Sequential maintenance",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "workers",
+                "label": "Worker upgrade",
+                "type": "node",
+                "detail": "Drain and replace / upgrade",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "verify",
+                "label": "Verification gate",
+                "type": "actor",
+                "detail": "Pause and follow the tested recovery procedure",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m18-l02-safe-upgrade"
+  }
+]

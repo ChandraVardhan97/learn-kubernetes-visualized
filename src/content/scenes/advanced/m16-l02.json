@@ -1,0 +1,734 @@
+[
+  {
+    "title": "WebApp intent becomes ordinary resources",
+    "kind": "flow",
+    "description": "Deployment controllers and kubelets create ready Pods; the custom controller does not synchronously start containers.",
+    "assumption": "The downloadable controller polls through kubectl and intentionally omits production informer and queue machinery.",
+    "frames": [
+      {
+        "title": "Derive desired children",
+        "narration": "The operator maps one WebApp to stable ConfigMap and Deployment names.",
+        "nodes": [
+          {
+            "id": "cr",
+            "label": "WebApp m16",
+            "type": "object",
+            "detail": "replicas + page message",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Python reconcile",
+            "type": "control",
+            "detail": "Compute desired children",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap m16",
+            "type": "object",
+            "detail": "index.html from message",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment m16",
+            "type": "object",
+            "detail": "replicas from spec",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "nginx Pods",
+            "type": "pod",
+            "detail": "Normal Deployment rollout",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "read intention",
+            "state": "active",
+            "from": "cr"
+          }
+        ]
+      },
+      {
+        "title": "Apply owned fields",
+        "narration": "It checks owner identity and applies fields with kv-webapp-operator without forcing competing ownership.",
+        "nodes": [
+          {
+            "id": "cr",
+            "label": "WebApp m16",
+            "type": "object",
+            "detail": "replicas + page message",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Python reconcile",
+            "type": "control",
+            "detail": "Compute desired children",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap m16",
+            "type": "object",
+            "detail": "index.html from message",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment m16",
+            "type": "object",
+            "detail": "replicas from spec",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "pods",
+            "label": "nginx Pods",
+            "type": "pod",
+            "detail": "Normal Deployment rollout",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cm",
+            "label": "server-side apply",
+            "state": "active",
+            "from": "op"
+          },
+          {
+            "to": "dep",
+            "label": "server-side apply",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      },
+      {
+        "title": "Delegate workload behavior",
+        "narration": "Deployment controllers and kubelets create ready Pods; the custom controller does not synchronously start containers.",
+        "nodes": [
+          {
+            "id": "cr",
+            "label": "WebApp m16",
+            "type": "object",
+            "detail": "replicas + page message",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Python reconcile",
+            "type": "control",
+            "detail": "Compute desired children",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap m16",
+            "type": "object",
+            "detail": "index.html from message",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment m16",
+            "type": "object",
+            "detail": "replicas from spec",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "nginx Pods",
+            "type": "pod",
+            "detail": "Normal Deployment rollout",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pods",
+            "label": "mounted page",
+            "state": "active",
+            "from": "cm"
+          },
+          {
+            "to": "pods",
+            "label": "replica control",
+            "state": "active",
+            "from": "dep"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Child write fails midway",
+        "description": "Successful writes are not rolled back as one API transaction.",
+        "frames": [
+          {
+            "title": "ConfigMap exists",
+            "narration": "The first child write committed successfully.",
+            "nodes": [
+              {
+                "id": "cr",
+                "label": "WebApp m16",
+                "type": "object",
+                "detail": "replicas + page message",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Python reconcile",
+                "type": "control",
+                "detail": "Compute desired children",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap m16",
+                "type": "object",
+                "detail": "ConfigMap applied successfully",
+                "x": 545,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment m16",
+                "type": "object",
+                "detail": "replicas from spec",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "pods",
+                "label": "nginx Pods",
+                "type": "pod",
+                "detail": "Normal Deployment rollout",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cm",
+                "label": "server-side apply",
+                "state": "active",
+                "from": "op"
+              }
+            ]
+          },
+          {
+            "title": "Deployment apply fails",
+            "narration": "A permission or field ownership error blocks the next operation.",
+            "nodes": [
+              {
+                "id": "cr",
+                "label": "WebApp m16",
+                "type": "object",
+                "detail": "replicas + page message",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Python reconcile",
+                "type": "control",
+                "detail": "Compute desired children",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap m16",
+                "type": "object",
+                "detail": "index.html from message",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment m16",
+                "type": "object",
+                "detail": "Apply denied or field ownership conflict",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "pods",
+                "label": "nginx Pods",
+                "type": "pod",
+                "detail": "Normal Deployment rollout",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "dep",
+                "label": "apply failed",
+                "state": "blocked",
+                "from": "op"
+              }
+            ]
+          },
+          {
+            "title": "Next pass resumes",
+            "narration": "Fix the cause and rerun reconciliation; the existing correctly owned ConfigMap is reused.",
+            "nodes": [
+              {
+                "id": "cr",
+                "label": "WebApp m16",
+                "type": "object",
+                "detail": "replicas + page message",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "op",
+                "label": "Python reconcile",
+                "type": "control",
+                "detail": "Compute desired children",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap m16",
+                "type": "object",
+                "detail": "index.html from message",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment m16",
+                "type": "object",
+                "detail": "replicas from spec",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "pods",
+                "label": "nginx Pods",
+                "type": "pod",
+                "detail": "Normal Deployment rollout",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "op",
+                "label": "read intention",
+                "state": "active",
+                "from": "cr"
+              },
+              {
+                "to": "cm",
+                "label": "server-side apply",
+                "state": "active",
+                "from": "op"
+              },
+              {
+                "to": "dep",
+                "label": "server-side apply",
+                "state": "active",
+                "from": "op"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m16-l02-operator-derive"
+  },
+  {
+    "title": "Identity is stable while observation advances",
+    "kind": "lifecycle",
+    "description": "Status records the desired generation processed and the ready count actually observed, which may still be zero.",
+    "assumption": "The minimal API lacks a Ready condition; sampled readyReplicas may reflect an earlier Deployment generation and does not prove current-revision readiness.",
+    "frames": [
+      {
+        "title": "Repeat the same intention",
+        "narration": "Another pass applies the same child name and ownership instead of creating a replacement Deployment.",
+        "nodes": [
+          {
+            "id": "intent",
+            "label": "WebApp generation",
+            "type": "object",
+            "detail": "Desired generation G",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment UID D",
+            "type": "object",
+            "detail": "Stable generated child",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "op",
+            "label": "Reconcile pass",
+            "type": "control",
+            "detail": "Read current Deployment status",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "WebApp status",
+            "type": "object",
+            "detail": "observedGeneration + readyReplicas",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "current spec",
+            "state": "active",
+            "from": "intent"
+          },
+          {
+            "to": "dep",
+            "label": "repeat intended apply",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      },
+      {
+        "title": "Sample workload status",
+        "narration": "The operator reads readyReplicas after applying; rollout may still be progressing.",
+        "nodes": [
+          {
+            "id": "intent",
+            "label": "WebApp generation",
+            "type": "object",
+            "detail": "Desired generation G",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment UID D",
+            "type": "object",
+            "detail": "Stable generated child",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Reconcile pass",
+            "type": "control",
+            "detail": "Read current Deployment status",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "status",
+            "label": "WebApp status",
+            "type": "object",
+            "detail": "observedGeneration + readyReplicas",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "observed ready count",
+            "state": "active",
+            "from": "dep"
+          }
+        ]
+      },
+      {
+        "title": "Report processed generation",
+        "narration": "Status records the desired generation processed and the ready count actually observed, which may still be zero.",
+        "nodes": [
+          {
+            "id": "intent",
+            "label": "WebApp generation",
+            "type": "object",
+            "detail": "Desired generation G",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment UID D",
+            "type": "object",
+            "detail": "Stable generated child",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Reconcile pass",
+            "type": "control",
+            "detail": "Read current Deployment status",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "WebApp status",
+            "type": "object",
+            "detail": "observedGeneration + readyReplicas",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "status",
+            "label": "status patch",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Readiness has not converged",
+        "description": "Processed desired state is different from an available application.",
+        "frames": [
+          {
+            "title": "New generation accepted",
+            "narration": "The WebApp spec changes to request two replicas.",
+            "nodes": [
+              {
+                "id": "intent",
+                "label": "WebApp generation",
+                "type": "object",
+                "detail": "Current spec requests 2 replicas",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment UID D",
+                "type": "object",
+                "detail": "Stable generated child",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Reconcile pass",
+                "type": "control",
+                "detail": "Read current Deployment status",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "status",
+                "label": "WebApp status",
+                "type": "object",
+                "detail": "observedGeneration + readyReplicas",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "op",
+                "label": "current spec",
+                "state": "active",
+                "from": "intent"
+              }
+            ]
+          },
+          {
+            "title": "Controller processes generation",
+            "narration": "The operator applies the new count and records its observation before the new Pod is ready.",
+            "nodes": [
+              {
+                "id": "intent",
+                "label": "WebApp generation",
+                "type": "object",
+                "detail": "Current spec requests 2 replicas",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment UID D",
+                "type": "object",
+                "detail": "Stable generated child",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "op",
+                "label": "Reconcile pass",
+                "type": "control",
+                "detail": "Read current Deployment status",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "status",
+                "label": "WebApp status",
+                "type": "object",
+                "detail": "observedGeneration + readyReplicas",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "dep",
+                "label": "repeat intended apply",
+                "state": "active",
+                "from": "op"
+              },
+              {
+                "to": "op",
+                "label": "observed ready count",
+                "state": "active",
+                "from": "dep"
+              },
+              {
+                "to": "status",
+                "label": "status patch",
+                "state": "active",
+                "from": "op"
+              }
+            ]
+          },
+          {
+            "title": "Status is honest but incomplete",
+            "narration": "observedGeneration can match current generation while readyReplicas is below desired; run another pass after rollout.",
+            "nodes": [
+              {
+                "id": "intent",
+                "label": "WebApp generation",
+                "type": "object",
+                "detail": "Current spec requests 2 replicas",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment UID D",
+                "type": "object",
+                "detail": "Stable generated child",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Reconcile pass",
+                "type": "control",
+                "detail": "Read current Deployment status",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "status",
+                "label": "WebApp status",
+                "type": "object",
+                "detail": "Generation processed; ready count still below 2",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "status",
+                "label": "status patch",
+                "state": "active",
+                "from": "op"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m16-l02-operator-status"
+  }
+]

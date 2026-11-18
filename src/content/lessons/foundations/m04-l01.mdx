@@ -1,0 +1,131 @@
+---
+{
+  "lessonId": "m04-l01",
+  "title": "The Pod lifecycle",
+  "description": "Separate Pod identity, container states, restart policy, and shared resources.",
+  "level": "foundations",
+  "module": "m04",
+  "order": 1,
+  "minutes": 14,
+  "prerequisites": [
+    "m03-l03"
+  ],
+  "objectives": [
+    "Explain what a Pod shares and what it does not",
+    "Read phase, conditions, and container termination state",
+    "Predict restart behavior without inventing Pod migration"
+  ],
+  "concepts": [
+    {
+      "id": "m04-l01-pods",
+      "title": "Pods and shared resources",
+      "scene": "m04-l01-boundary"
+    },
+    {
+      "id": "m04-l01-shared-resources",
+      "title": "Shared network and volumes",
+      "scene": "m04-l01-boundary"
+    },
+    {
+      "id": "m04-l01-pod-lifecycle",
+      "title": "Pod lifecycle and identity",
+      "scene": "m04-l01-restart"
+    },
+    {
+      "id": "m04-l01-restart-policy",
+      "title": "Restart policy",
+      "scene": "m04-l01-restart"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Pods",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/"
+    },
+    {
+      "title": "Pod lifecycle",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/"
+    },
+    {
+      "title": "emptyDir volumes",
+      "url": "https://kubernetes.io/docs/concepts/storage/volumes/#emptydir"
+    }
+  ],
+  "lab": "m04",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: one scheduling and lifecycle unit
+
+A Pod groups one or more containers that need a shared placement and lifecycle boundary. Kubernetes schedules the Pod to one node; its ordinary containers do not independently land on different workers. Most application replicas use one main container per Pod. Put tightly cooperating helpers together when they need Pod-local sharing, not simply because they belong to the same business application. Independent frontends and databases usually need independent replica counts and release lifecycles.
+
+Containers in a Pod share a network namespace, including the Pod IP, interfaces, and port space. They can reach each other over `localhost`. Two containers cannot normally bind the same address and port at once. They do not automatically share their root filesystems. To exchange files, declare a volume and mount it in each container at intentional paths. Process namespace sharing is not implied by ordinary Pod networking; it is a separate setting when required.
+
+An `emptyDir` is created for a Pod's lifetime. It can preserve files across a container restart in that same Pod, while files written solely into a container's writable layer are lost when that container is recreated. Deleting and replacing the Pod removes its emptyDir. Persistent storage is a later topic; naming an emptyDir `data` does not make it durable.
+
+<Scene id="m04-l01-boundary" />
+
+## Walkthrough: run a finite executable
+
+Save this as `lifecycle-demo.yaml` and apply it in a disposable namespace. The command emits one line and exits deliberately with code 7. This is an expected training failure, not an image pull failure.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lifecycle-demo
+spec:
+  restartPolicy: Never # Do not retry this app container after it exits.
+  containers:
+    - name: worker
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo deliberate-exit; exit 7"]
+```
+
+```bash
+kubectl apply -f lifecycle-demo.yaml
+kubectl get pod lifecycle-demo -w
+kubectl describe pod lifecycle-demo
+kubectl logs lifecycle-demo -c worker
+kubectl get pod lifecycle-demo -o jsonpath='{.status.containerStatuses[0].state.terminated}'
+```
+
+The terminated state should include exit code 7, and the Pod should eventually be Failed. The failure occurs after successful execution began, so application output is available. If the image cannot be downloaded, the process never starts and those expected logs will not exist.
+
+A container can be Waiting, Running, or Terminated. A Pod's phase is a coarse summary: Pending includes scheduling and preparation, Running describes a started/bound Pod with running or restarting activity, Succeeded indicates successful completion without further restarts, Failed indicates terminal failure, and Unknown indicates unavailable state information. Conditions such as PodScheduled and Ready answer more specific questions. `CrashLoopBackOff` and `Terminating` can appear in kubectl's display column without being Pod phase values.
+
+<Scene id="m04-l01-restart" />
+
+## Practice: compare restart policies
+
+For a new named Pod, change the policy to `OnFailure` while retaining exit code 7. Expect the kubelet to attempt container restarts, with backoff for repeated failures. Change the executable to exit 0: `OnFailure` does not restart a successful completion. With `Always`, ordinary app containers restart after either successful or unsuccessful exit. These examples use the basic Pod-level rules without per-container restart overrides; restartable init sidecars have their own behavior introduced next. Deployment and ReplicaSet Pod templates permit only Pod-level `Always`, so perform the `Never` and `OnFailure` comparisons with standalone Pods. Do not assume that changing a policy on an existing Pod is an allowed in-place update; use a new disposable Pod name for comparisons.
+
+Record the Pod UID and node name as restart counts rise. A container restart is local supervision inside the same Pod identity. If that Pod is deleted or lost, a workload controller can create a new Pod with a new UID. The scheduler binds that new object. Kubernetes does not take the original Pod UID and migrate it to another worker.
+
+## Pitfalls
+
+A Pod can be Running while its application repeatedly crashes. Ready is a separate condition, and the application needs meaningful readiness checks to express actual usability. A sidecar that stays alive can also complicate a superficial “some process is running” interpretation. Read per-container state rather than only the top-level display.
+
+Restarting is not a repair for every failure. A bad argument, missing configuration key, or unavailable dependency can reproduce immediately after each restart. Investigate termination reason, exit code, logs, and recent configuration changes before increasing retries or adding aggressive liveness checks.
+
+## Check your understanding
+
+<details>
+
+<summary>A container restarts in its Pod after writing to both /tmp and a mounted emptyDir. Which data should you expect to retain?</summary>
+
+Data written into the mounted emptyDir can remain because that volume follows the Pod lifetime. Data written only into the replaced container's writable filesystem does not. If the entire Pod is replaced, its emptyDir is also new. The path string is not enough to predict durability; identify the mounted storage and the lifecycle boundary that owns it.
+
+</details>
+
+Use the [module lab](/labs/#m04) to compare finite execution, local restart, and controller replacement. Next, put initialization and tightly coupled helpers into this shared boundary deliberately.
+
+## Primary documentation
+
+- [Pods](https://kubernetes.io/docs/concepts/workloads/pods/)
+- [Pod lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)
+- [emptyDir volumes](https://kubernetes.io/docs/concepts/storage/volumes/#emptydir)

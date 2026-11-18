@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m04
+  namespace: kv-lab
+  labels:
+    lab: m04
+data:
+  message: hello-from-config
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: m04
+  namespace: kv-lab
+  labels:
+    lab: m04
+type: Opaque
+stringData:
+  password: disposable-demo-value
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m04
+  namespace: kv-lab
+  labels:
+    lab: m04
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - cat /work/ready && echo "$GREETING" && test -n "$DEMO_PASSWORD" && sleep 3600
+      env:
+        - name: GREETING
+          valueFrom:
+            configMapKeyRef:
+              name: m04
+              key: message
+        - name: DEMO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: m04
+              key: password
+      volumeMounts:
+        - name: work
+          mountPath: /work
+    - name: companion
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - while true; do test -f /work/ready && echo companion-sees-ready; sleep
+          30; done
+      volumeMounts:
+        - name: work
+          mountPath: /work
+  initContainers:
+    - name: prepare
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - echo prepared > /work/ready
+      volumeMounts:
+        - name: work
+          mountPath: /work
+  volumes:
+    - name: work
+      emptyDir: {}

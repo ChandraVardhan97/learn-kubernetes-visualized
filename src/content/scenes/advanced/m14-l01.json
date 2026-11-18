@@ -1,0 +1,764 @@
+[
+  {
+    "title": "Identity, permission, admission, persistence",
+    "kind": "flow",
+    "description": "Admission accepts the proposed object; storage records desired state. No Pod readiness is implied by this response.",
+    "assumption": "Decoding, conversion, defaulting and detailed validation stages are summarized; this is the security decision sequence for a write.",
+    "frames": [
+      {
+        "title": "Establish identity",
+        "narration": "The API server authenticates the credential; a rejected credential never reaches object policy evaluation.",
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "kubectl",
+            "type": "actor",
+            "detail": "Authenticated user credential",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "authn",
+            "label": "Authentication",
+            "type": "control",
+            "detail": "Who is making the request?",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "authz",
+            "label": "Authorization",
+            "type": "control",
+            "detail": "May this user create?",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "admit",
+            "label": "Admission",
+            "type": "control",
+            "detail": "Is this proposal acceptable?",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "API storage",
+            "type": "storage",
+            "detail": "Accepted desired state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "authn",
+            "label": "credential",
+            "state": "active",
+            "from": "caller"
+          },
+          {
+            "to": "authz",
+            "label": "identity",
+            "state": "active",
+            "from": "authn"
+          }
+        ]
+      },
+      {
+        "title": "Authorize the operation",
+        "narration": "Authorization evaluates caller, verb, resource and scope. It does not inspect all application policy requirements.",
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "kubectl",
+            "type": "actor",
+            "detail": "Authenticated user credential",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "authn",
+            "label": "Authentication",
+            "type": "control",
+            "detail": "Who is making the request?",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "authz",
+            "label": "Authorization",
+            "type": "control",
+            "detail": "May this user create?",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "admit",
+            "label": "Admission",
+            "type": "control",
+            "detail": "Is this proposal acceptable?",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "API storage",
+            "type": "storage",
+            "detail": "Accepted desired state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "admit",
+            "label": "allowed verb",
+            "state": "active",
+            "from": "authz"
+          }
+        ]
+      },
+      {
+        "title": "Admit then persist",
+        "narration": "Admission accepts the proposed object; storage records desired state. No Pod readiness is implied by this response.",
+        "nodes": [
+          {
+            "id": "caller",
+            "label": "kubectl",
+            "type": "actor",
+            "detail": "Authenticated user credential",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "authn",
+            "label": "Authentication",
+            "type": "control",
+            "detail": "Who is making the request?",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "authz",
+            "label": "Authorization",
+            "type": "control",
+            "detail": "May this user create?",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "admit",
+            "label": "Admission",
+            "type": "control",
+            "detail": "Is this proposal acceptable?",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "API storage",
+            "type": "storage",
+            "detail": "Accepted desired state",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "store",
+            "label": "accepted write",
+            "state": "active",
+            "from": "admit"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Identity is allowed, object is denied",
+        "description": "A content policy rejects a request after authorization.",
+        "frames": [
+          {
+            "title": "Allowed verb",
+            "narration": "The caller can create Deployments in this namespace, so the authorization boundary passes.",
+            "nodes": [
+              {
+                "id": "caller",
+                "label": "kubectl",
+                "type": "actor",
+                "detail": "Authenticated user credential",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "authn",
+                "label": "Authentication",
+                "type": "control",
+                "detail": "Who is making the request?",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "authz",
+                "label": "Authorization",
+                "type": "control",
+                "detail": "Can create Deployments",
+                "x": 545,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "admit",
+                "label": "Admission",
+                "type": "control",
+                "detail": "Is this proposal acceptable?",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "store",
+                "label": "API storage",
+                "type": "storage",
+                "detail": "Accepted desired state",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "admit",
+                "label": "allowed verb",
+                "state": "active",
+                "from": "authz"
+              }
+            ]
+          },
+          {
+            "title": "Policy rejection",
+            "narration": "Admission finds the required team label missing and denies the request.",
+            "nodes": [
+              {
+                "id": "caller",
+                "label": "kubectl",
+                "type": "actor",
+                "detail": "Authenticated user credential",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "authn",
+                "label": "Authentication",
+                "type": "control",
+                "detail": "Who is making the request?",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "authz",
+                "label": "Authorization",
+                "type": "control",
+                "detail": "May this user create?",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "admit",
+                "label": "Admission",
+                "type": "control",
+                "detail": "Rejected: missing team label",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "store",
+                "label": "API storage",
+                "type": "storage",
+                "detail": "No object persisted",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "store",
+                "label": "write denied",
+                "state": "blocked",
+                "from": "admit"
+              }
+            ]
+          },
+          {
+            "title": "No stored proposal",
+            "narration": "No new desired-state object reaches storage; restarting a kubelet cannot repair this failure.",
+            "nodes": [
+              {
+                "id": "caller",
+                "label": "kubectl",
+                "type": "actor",
+                "detail": "Authenticated user credential",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "authn",
+                "label": "Authentication",
+                "type": "control",
+                "detail": "Who is making the request?",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "authz",
+                "label": "Authorization",
+                "type": "control",
+                "detail": "May this user create?",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "admit",
+                "label": "Admission",
+                "type": "control",
+                "detail": "Rejected: missing team label",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "store",
+                "label": "API storage",
+                "type": "storage",
+                "detail": "No object persisted",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "store",
+                "label": "write denied",
+                "state": "blocked",
+                "from": "admit"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m14-l01-request-gates"
+  },
+  {
+    "title": "Mutating webhook and CEL validation",
+    "kind": "policy",
+    "description": "The required label now exists, so validation accepts the write. CEL evaluation does not require a separate webhook service.",
+    "assumption": "One optional mutator is illustrated; real clusters may have multiple admission plugins and selected webhook reinvocation.",
+    "frames": [
+      {
+        "title": "Mutation is repeatable",
+        "narration": "A selected mutating webhook supplies a missing label. It must tolerate reinvocation and avoid irreversible side effects.",
+        "nodes": [
+          {
+            "id": "proposal",
+            "label": "Deployment proposal",
+            "type": "object",
+            "detail": "team label absent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mutate",
+            "label": "Mutating webhook",
+            "type": "control",
+            "detail": "May add team label",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "validate",
+            "label": "Validating policy",
+            "type": "control",
+            "detail": "CEL checks final proposal",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "binding",
+            "label": "Policy binding",
+            "type": "object",
+            "detail": "Namespace scope + Deny",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "Accepted object",
+            "type": "storage",
+            "detail": "Persist after checks",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "mutate",
+            "label": "admission review",
+            "state": "active",
+            "from": "proposal"
+          },
+          {
+            "to": "validate",
+            "label": "mutated proposal",
+            "state": "active",
+            "from": "mutate"
+          }
+        ]
+      },
+      {
+        "title": "A binding activates enforcement",
+        "narration": "The binding selects namespaces and requests Deny action; the policy expression checks the resulting object.",
+        "nodes": [
+          {
+            "id": "proposal",
+            "label": "Deployment proposal",
+            "type": "object",
+            "detail": "team label absent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mutate",
+            "label": "Mutating webhook",
+            "type": "control",
+            "detail": "May add team label",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "validate",
+            "label": "Validating policy",
+            "type": "control",
+            "detail": "CEL checks final proposal",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "binding",
+            "label": "Policy binding",
+            "type": "object",
+            "detail": "Namespace scope + Deny",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "store",
+            "label": "Accepted object",
+            "type": "storage",
+            "detail": "Persist after checks",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "validate",
+            "label": "select + enforce",
+            "state": "active",
+            "from": "binding"
+          }
+        ]
+      },
+      {
+        "title": "Validation observes the proposal",
+        "narration": "The required label now exists, so validation accepts the write. CEL evaluation does not require a separate webhook service.",
+        "nodes": [
+          {
+            "id": "proposal",
+            "label": "Deployment proposal",
+            "type": "object",
+            "detail": "team label absent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mutate",
+            "label": "Mutating webhook",
+            "type": "control",
+            "detail": "May add team label",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "validate",
+            "label": "Validating policy",
+            "type": "control",
+            "detail": "CEL checks final proposal",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "binding",
+            "label": "Policy binding",
+            "type": "object",
+            "detail": "Namespace scope + Deny",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "Accepted object",
+            "type": "storage",
+            "detail": "Persist after checks",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "validate",
+            "label": "mutated proposal",
+            "state": "active",
+            "from": "mutate"
+          },
+          {
+            "to": "store",
+            "label": "allow",
+            "state": "active",
+            "from": "validate"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Webhook unavailable",
+        "description": "A fail-closed mutator makes a dependency outage visible as a failed write.",
+        "frames": [
+          {
+            "title": "Call is attempted",
+            "narration": "A matching request requires the mutating webhook before final validation.",
+            "nodes": [
+              {
+                "id": "proposal",
+                "label": "Deployment proposal",
+                "type": "object",
+                "detail": "team label absent",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "mutate",
+                "label": "Mutating webhook",
+                "type": "control",
+                "detail": "May add team label",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "validate",
+                "label": "Validating policy",
+                "type": "control",
+                "detail": "CEL checks final proposal",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "binding",
+                "label": "Policy binding",
+                "type": "object",
+                "detail": "Namespace scope + Deny",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "store",
+                "label": "Accepted object",
+                "type": "storage",
+                "detail": "Persist after checks",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "mutate",
+                "label": "admission review",
+                "state": "active",
+                "from": "proposal"
+              }
+            ]
+          },
+          {
+            "title": "Timeout with Fail",
+            "narration": "The external webhook cannot be reached and failurePolicy Fail rejects the operation.",
+            "nodes": [
+              {
+                "id": "proposal",
+                "label": "Deployment proposal",
+                "type": "object",
+                "detail": "team label absent",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "mutate",
+                "label": "Mutating webhook",
+                "type": "control",
+                "detail": "Webhook timed out",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "validate",
+                "label": "Validating policy",
+                "type": "control",
+                "detail": "CEL checks final proposal",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "binding",
+                "label": "Policy binding",
+                "type": "object",
+                "detail": "Namespace scope + Deny",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "store",
+                "label": "API storage",
+                "type": "storage",
+                "detail": "Request rejected before persistence",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "validate",
+                "label": "timeout stops admission",
+                "state": "blocked",
+                "from": "mutate"
+              }
+            ]
+          },
+          {
+            "title": "Storage unchanged",
+            "narration": "The new object is not persisted; investigate webhook endpoints, TLS and API-server reachability.",
+            "nodes": [
+              {
+                "id": "proposal",
+                "label": "Deployment proposal",
+                "type": "object",
+                "detail": "team label absent",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "mutate",
+                "label": "Mutating webhook",
+                "type": "control",
+                "detail": "Webhook timed out",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "validate",
+                "label": "Validating policy",
+                "type": "control",
+                "detail": "CEL checks final proposal",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "binding",
+                "label": "Policy binding",
+                "type": "object",
+                "detail": "Namespace scope + Deny",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "store",
+                "label": "API storage",
+                "type": "storage",
+                "detail": "Request rejected before persistence",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "store",
+                "label": "write rejected upstream",
+                "state": "blocked",
+                "from": "validate"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m14-l01-admission-mechanisms"
+  }
+]

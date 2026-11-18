@@ -1,0 +1,487 @@
+[
+  {
+    "id": "m01-l02-image-layers",
+    "title": "Image identity and writable changes",
+    "kind": "storage",
+    "description": "Separate image layers, a tag reference, and a container writable layer.",
+    "assumption": "A single-platform image is shown; registries can instead return a multi-platform index.",
+    "frames": [
+      {
+        "title": "Publish layered content",
+        "narration": "The image manifest describes immutable layer content and configuration. A repository tag points to a manifest identity.",
+        "nodes": [
+          {
+            "id": "tag",
+            "label": "web:training",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "manifest",
+            "label": "Manifest digest",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "layers",
+            "label": "Read-only layers",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "manifest",
+            "label": "resolves to",
+            "state": "active",
+            "from": "tag"
+          },
+          {
+            "to": "layers",
+            "label": "references hashes",
+            "state": "active",
+            "from": "manifest"
+          }
+        ]
+      },
+      {
+        "title": "Create a container",
+        "narration": "The runtime assembles the image filesystem and adds a writable layer for this container instance.",
+        "nodes": [
+          {
+            "id": "layers",
+            "label": "Read-only layers",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "write",
+            "label": "Container writable layer",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "process",
+            "label": "Web executable",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "process",
+            "label": "starting files",
+            "state": "active",
+            "from": "layers"
+          },
+          {
+            "to": "write",
+            "label": "runtime writes",
+            "state": "active",
+            "from": "process"
+          }
+        ]
+      },
+      {
+        "title": "Move a tag, preserve identity",
+        "narration": "A tag may point somewhere new. A recorded digest still identifies the original content; the existing process does not silently switch.",
+        "nodes": [
+          {
+            "id": "tag",
+            "label": "Tag now points to B",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "old",
+            "label": "Digest A",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "Digest B",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "process",
+            "label": "Running digest A",
+            "type": "actor",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "new",
+            "label": "new resolution",
+            "state": "active",
+            "from": "tag"
+          },
+          {
+            "to": "process",
+            "label": "original content",
+            "state": "active",
+            "from": "old"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m01-l02-image-layers-failure",
+        "label": "Failure: runtime writes are mistaken for image changes",
+        "description": "Failure: runtime writes are mistaken for image changes",
+        "frames": [
+          {
+            "title": "Write application state",
+            "narration": "The process writes a file into its container filesystem, above the immutable image layers.",
+            "nodes": [
+              {
+                "id": "process",
+                "label": "Application",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "write",
+                "label": "Writable state file",
+                "type": "storage",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "layers",
+                "label": "Image layers",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "write",
+                "label": "write",
+                "state": "active",
+                "from": "process"
+              }
+            ]
+          },
+          {
+            "title": "Replace the container",
+            "narration": "A replacement starts from the same image but receives a fresh writable layer. The old runtime file is absent.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old container removed",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "new",
+                "label": "New writable layer",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "layers",
+                "label": "Same image layers",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "new",
+                "label": "fresh starting state",
+                "state": "active",
+                "from": "layers"
+              }
+            ]
+          },
+          {
+            "title": "Choose the right state lifetime",
+            "narration": "Use an explicit volume for state that must follow a Pod or outlive it. Rebuilding an image and mounting storage solve different problems.",
+            "nodes": [
+              {
+                "id": "process",
+                "label": "Application",
+                "type": "actor",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "volume",
+                "label": "Explicit volume",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "volume",
+                "label": "state written to mount",
+                "state": "active",
+                "from": "process"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m01-l02-registry-pull",
+    "title": "The node pulls the image",
+    "kind": "flow",
+    "description": "Follow a kubelet/runtime image request through registry resolution and cache reuse.",
+    "assumption": "Registry access is from the worker runtime; one node and one image are shown.",
+    "frames": [
+      {
+        "title": "Pod names an image",
+        "narration": "The assigned Pod asks for nginx:1.27.5. The kubelet delegates image work through the container runtime interface.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Pod image reference",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "Container runtime",
+            "type": "control",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kubelet",
+            "label": "assigned specification",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "runtime",
+            "label": "ensure image",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      },
+      {
+        "title": "Resolve and reuse content",
+        "narration": "When a pull is required, the runtime resolves the manifest and downloads only missing layers. Cached content can still be reused with Always.",
+        "nodes": [
+          {
+            "id": "runtime",
+            "label": "Runtime + cache",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "registry",
+            "label": "Image registry",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "layers",
+            "label": "Verified layer content",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "registry",
+            "label": "resolve / authenticate",
+            "state": "active",
+            "from": "runtime"
+          },
+          {
+            "to": "layers",
+            "label": "missing content",
+            "state": "active",
+            "from": "registry"
+          },
+          {
+            "to": "runtime",
+            "label": "local cache",
+            "state": "active",
+            "from": "layers"
+          }
+        ]
+      },
+      {
+        "title": "Start the executable",
+        "narration": "After image preparation and sandbox setup, the runtime creates the container. The required image must be available, either from a permitted local cache or a pull; that does not establish application health.",
+        "nodes": [
+          {
+            "id": "runtime",
+            "label": "Container runtime",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "web",
+            "label": "nginx process",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet reports status",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "web",
+            "label": "start",
+            "state": "active",
+            "from": "runtime"
+          },
+          {
+            "to": "kubelet",
+            "label": "container status",
+            "state": "active",
+            "from": "runtime"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m01-l02-registry-pull-failure",
+        "label": "Failure: registry refuses the pull",
+        "description": "Failure: registry refuses the pull",
+        "frames": [
+          {
+            "title": "Invalid image reference",
+            "narration": "The Pod object exists, but its image tag cannot be resolved at the registry.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pod Pending",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "runtime",
+                "label": "Runtime pulling",
+                "type": "control",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "registry",
+                "label": "Tag not found",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "registry",
+                "label": "manifest request",
+                "state": "active",
+                "from": "runtime"
+              }
+            ]
+          },
+          {
+            "title": "Retry with backoff",
+            "narration": "The kubelet reports image pull failure and delayed retry. No application process exists to produce application logs.",
+            "nodes": [
+              {
+                "id": "kubelet",
+                "label": "ImagePullBackOff",
+                "type": "control",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "No running container",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "waiting status",
+                "state": "active",
+                "from": "kubelet"
+              }
+            ]
+          },
+          {
+            "title": "Inspect the concrete reason",
+            "narration": "Describe the Pod and correct the reference or credentials. Do not treat this as a liveness or application exit problem.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Read Pod events",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Correct image reference",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "fix manifest",
+                "state": "active",
+                "from": "operator"
+              }
+            ],
+            "code": "kubectl describe pod image-demo"
+          }
+        ]
+      }
+    ]
+  }
+]

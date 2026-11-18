@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m01
+  namespace: kv-lab
+  labels:
+    lab: m01
+spec:
+  containers:
+    - name: web
+      image: nginx:1.28.0-alpine
+      ports:
+        - containerPort: 80

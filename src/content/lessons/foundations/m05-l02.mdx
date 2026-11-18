@@ -1,0 +1,154 @@
+---
+{
+  "lessonId": "m05-l02",
+  "title": "Rolling updates and rollback",
+  "description": "Follow old and new ReplicaSets under explicit availability and surge limits.",
+  "level": "foundations",
+  "module": "m05",
+  "order": 2,
+  "minutes": 14,
+  "prerequisites": [
+    "m05-l01"
+  ],
+  "objectives": [
+    "Explain what triggers a Deployment rollout",
+    "Calculate simple surge and unavailable bounds",
+    "Perform a rollback without assuming data or config is restored"
+  ],
+  "concepts": [
+    {
+      "id": "m05-l02-rollouts",
+      "title": "Rolling updates",
+      "scene": "m05-l02-rollout"
+    },
+    {
+      "id": "m05-l02-rollout-budgets",
+      "title": "Surge and availability budgets",
+      "scene": "m05-l02-rollout"
+    },
+    {
+      "id": "m05-l02-rollback",
+      "title": "Revision history and rollback",
+      "scene": "m05-l02-rollback"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Deployment updates and rollback",
+      "url": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"
+    },
+    {
+      "title": "kubectl rollout status",
+      "url": "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_status/"
+    },
+    {
+      "title": "kubectl rollout undo",
+      "url": "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_undo/"
+    }
+  ],
+  "lab": "m05",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: two release recipes, one controlled transition
+
+A Deployment rollout starts when its Pod template changes. Updating the container image, an environment value in that template, or template annotations can create a new revision. Changing only `spec.replicas` scales the workload without creating a new Pod-template revision. Editing a ConfigMap under the same name does not by itself change the Deployment template, so it does not automatically trigger this rollout machinery.
+
+The Deployment controller manages an old and a new ReplicaSet during a rolling update. Each ReplicaSet creates or removes its own Pods according to its current target. The scheduler and kubelets still perform placement and execution. Existing Pods do not swap their process binary in place when an image field changes in the parent. New Pods run the new template while old Pods are terminated according to the update plan.
+
+`maxSurge` allows temporary extra replicas above the desired count. `maxUnavailable` bounds how many desired replicas may be unavailable during the transition. With desired three, surge one, and unavailable zero, the controller can normally introduce a fourth non-terminating replica and should keep at least three available before removing another old replica. Terminating Pods and asynchronous observations can cause visible totals or resource usage above a naive desired-plus-surge count. Budget arithmetic is a controller policy, not instantaneous accounting of every process.
+
+<Scene id="m05-l02-rollout" />
+
+## Walkthrough: state the update budget
+
+Use this complete Deployment as `rollout-demo.yaml` in a disposable namespace. The HTTP probe uses nginx's existing root page. It demonstrates HTTP availability, not deep business correctness. Resource requests and placement constraints are intentionally deferred to the next level.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rollout-demo
+spec:
+  replicas: 3
+  minReadySeconds: 5 # Stay ready before counting as available.
+  progressDeadlineSeconds: 120 # Report a stalled rollout; not auto-rollback.
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: rollout-demo
+  template:
+    metadata:
+      labels:
+        app: rollout-demo
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27.5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+```
+
+```bash
+kubectl apply -f rollout-demo.yaml
+kubectl rollout status deployment/rollout-demo --timeout=180s
+kubectl rollout history deployment/rollout-demo
+# Inspect a controlled image update in your disposable lab.
+kubectl set image deployment/rollout-demo web=nginx:1.28.0
+kubectl get rs -l app=rollout-demo -w
+```
+
+The training image versions are examples, not claims that an upgrade is appropriate for your application. For a real release, use verified image identities and compatibility checks. After the image update, inspect both ReplicaSets and Pods. The new replica must become ready and satisfy `minReadySeconds` before the controller can count it as available under these settings.
+
+<Scene id="m05-l02-rollback" />
+
+## Practice: stall deliberately, then restore a template
+
+In a dedicated lab, update to an intentionally nonexistent image tag. New Pods should fail image preparation while the old available replicas are retained as far as the strategy permits. The Deployment reports lack of progress after its configured deadline; Kubernetes does not automatically select a previous application release merely because `progressDeadlineSeconds` expires.
+
+```bash
+kubectl describe deployment rollout-demo
+kubectl get pods -l app=rollout-demo
+kubectl rollout history deployment/rollout-demo
+# Choose the actual known-good revision from your own history.
+kubectl rollout undo deployment/rollout-demo --to-revision=ACTUAL_GOOD_REVISION
+kubectl rollout status deployment/rollout-demo --timeout=180s
+```
+
+Rollback restores a retained earlier Pod template through another reconciliation. It does not rewind a database migration, restore external state, revert a ConfigMap changed in place, or revoke credentials. Old and new application versions can overlap during both forward rollout and rollback, so compatible protocols and schema transitions are application responsibilities. Keep the source manifest consistent after recovery; otherwise the next apply can reintroduce the failed release.
+
+## Pitfalls
+
+A surge budget requires enough capacity for extra Pods. With `maxUnavailable: 0`, a full cluster can stall safely because no new Pod can fit and old replicas cannot be removed yet. With a looser unavailable budget, you trade some availability headroom for room to progress. Percent-based settings also have documented rounding rules; use simple integer budgets while learning and calculate actual bounds before using percentages.
+
+Revision history is bounded by retained ReplicaSets. Deleting old history removes straightforward template rollback options. A successful rollout status only confirms controller progress and availability criteria; use request tests and observability to establish that the release behaves correctly for users.
+
+## Check your understanding
+
+<details>
+
+<summary>A new replica never becomes ready with maxUnavailable zero. Should the controller delete an old healthy replica to force progress?</summary>
+
+Not under that availability policy. Keeping old available capacity is the intended safety property. Inspect why the new Pod is unready or unschedulable, and repair the release or choose a deliberate different budget. A stalled rollout can be a safer outcome than discarding the last known-good replicas.
+
+</details>
+
+Practice a bad-image rollout and explicit recovery in the [module lab](/labs/#m05), then compare rollout health with the probe semantics in the next lesson.
+
+## Primary documentation
+
+- [Deployment updates and rollback](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [kubectl rollout status](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_status/)
+- [kubectl rollout undo](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/kubectl_rollout_undo/)

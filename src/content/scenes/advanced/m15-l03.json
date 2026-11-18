@@ -1,0 +1,679 @@
+[
+  {
+    "title": "Renewal and takeover through the API",
+    "kind": "ownership",
+    "description": "If renewal stops, another participant can acquire according to election timing and optimistic concurrency.",
+    "assumption": "One generic client-go-style election is illustrated; exact durations and coordinated election options depend on component configuration.",
+    "frames": [
+      {
+        "title": "Acquire leadership",
+        "narration": "A participant successfully updates the coordination record according to the election algorithm.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Controller A",
+            "type": "control",
+            "detail": "Current participant",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "lease",
+            "label": "Lease object",
+            "type": "object",
+            "detail": "holderIdentity + renewal",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API / etcd",
+            "type": "storage",
+            "detail": "Concurrent update boundary",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Controller B",
+            "type": "control",
+            "detail": "Standby participant",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "lease",
+            "label": "renew holder",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "api",
+            "label": "versioned write",
+            "state": "active",
+            "from": "lease"
+          }
+        ]
+      },
+      {
+        "title": "Keep renewing",
+        "narration": "The active participant renews through API writes; standby participants observe the record.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Controller A",
+            "type": "control",
+            "detail": "Current participant",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "lease",
+            "label": "Lease object",
+            "type": "object",
+            "detail": "holderIdentity + renewal",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "api",
+            "label": "API / etcd",
+            "type": "storage",
+            "detail": "Concurrent update boundary",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Controller B",
+            "type": "control",
+            "detail": "Standby participant",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "lease",
+            "label": "renew holder",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "api",
+            "label": "versioned write",
+            "state": "active",
+            "from": "lease"
+          }
+        ]
+      },
+      {
+        "title": "Take over after failure",
+        "narration": "If renewal stops, another participant can acquire according to election timing and optimistic concurrency.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Controller A",
+            "type": "control",
+            "detail": "No longer renewing",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "lease",
+            "label": "Lease object",
+            "type": "object",
+            "detail": "holderIdentity + renewal",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API / etcd",
+            "type": "storage",
+            "detail": "Concurrent update boundary",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Controller B",
+            "type": "control",
+            "detail": "Acquires leadership after expiry",
+            "x": 35,
+            "y": 230,
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "to": "lease",
+            "label": "observe / acquire",
+            "state": "active",
+            "from": "b"
+          },
+          {
+            "to": "api",
+            "label": "versioned write",
+            "state": "active",
+            "from": "lease"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "API renewal fails",
+        "description": "Participants cannot assume a healthy election record when the coordination API is unavailable.",
+        "frames": [
+          {
+            "title": "Leader cannot renew",
+            "narration": "A loses API connectivity and renewal attempts fail.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Controller A",
+                "type": "control",
+                "detail": "Current participant",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "lease",
+                "label": "Lease object",
+                "type": "object",
+                "detail": "holderIdentity + renewal",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "api",
+                "label": "API / etcd",
+                "type": "storage",
+                "detail": "Concurrent update boundary",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "b",
+                "label": "Controller B",
+                "type": "control",
+                "detail": "Standby participant",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "lease",
+                "label": "renew holder",
+                "state": "active",
+                "from": "a"
+              },
+              {
+                "to": "api",
+                "label": "versioned write",
+                "state": "blocked",
+                "from": "lease"
+              }
+            ]
+          },
+          {
+            "title": "Cancel active work",
+            "narration": "A well-behaved leader stops its leading loop after its renewal deadline is exceeded.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Controller A",
+                "type": "control",
+                "detail": "Leading loop stopped",
+                "x": 35,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "lease",
+                "label": "Lease object",
+                "type": "object",
+                "detail": "holderIdentity + renewal",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API / etcd",
+                "type": "storage",
+                "detail": "Concurrent update boundary",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "b",
+                "label": "Controller B",
+                "type": "control",
+                "detail": "Standby participant",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "No magical availability",
+            "narration": "B also needs a working API to acquire leadership; extra replicas do not replace storage quorum.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Controller A",
+                "type": "control",
+                "detail": "Current participant",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "lease",
+                "label": "Lease object",
+                "type": "object",
+                "detail": "holderIdentity + renewal",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "api",
+                "label": "API / etcd",
+                "type": "storage",
+                "detail": "API unavailable to both participants",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "b",
+                "label": "Controller B",
+                "type": "control",
+                "detail": "Standby participant",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "lease",
+                "label": "observe / acquire",
+                "state": "active",
+                "from": "b"
+              },
+              {
+                "to": "api",
+                "label": "versioned write",
+                "state": "blocked",
+                "from": "lease"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m15-l03-lease-election"
+  },
+  {
+    "title": "A Lease does not reject stale external writes",
+    "kind": "flow",
+    "description": "A target that validates a monotonic fencing epoch can reject stale writes; idempotency addresses a different duplicate-work boundary.",
+    "assumption": "The external system must implement the protection; client-go leader election alone offers no fencing guarantee.",
+    "frames": [
+      {
+        "title": "External work begins",
+        "narration": "A sends a request while leading; the request may remain in flight after A pauses.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Old leader A",
+            "type": "control",
+            "detail": "Delayed external request",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "new",
+            "label": "New leader B",
+            "type": "control",
+            "detail": "B has yet to take over",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "lease",
+            "label": "Lease",
+            "type": "object",
+            "detail": "Still held by A",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "target",
+            "label": "External system",
+            "type": "storage",
+            "detail": "Must enforce fencing if required",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "target",
+            "label": "in-flight write",
+            "state": "active",
+            "from": "old"
+          }
+        ]
+      },
+      {
+        "title": "Leadership changes",
+        "narration": "B acquires the Lease after A stops renewing, but the Lease cannot revoke the old request.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Old leader A",
+            "type": "control",
+            "detail": "Delayed external request",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "new",
+            "label": "New leader B",
+            "type": "control",
+            "detail": "Acquired coordination Lease",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "lease",
+            "label": "Lease",
+            "type": "object",
+            "detail": "Records B as holder",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "target",
+            "label": "External system",
+            "type": "storage",
+            "detail": "Must enforce fencing if required",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "lease",
+            "label": "acquired",
+            "state": "active",
+            "from": "new"
+          }
+        ]
+      },
+      {
+        "title": "Enforce at the target",
+        "narration": "A target that validates a monotonic fencing epoch can reject stale writes; idempotency addresses a different duplicate-work boundary.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Old leader A",
+            "type": "control",
+            "detail": "Delayed external request",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "new",
+            "label": "New leader B",
+            "type": "control",
+            "detail": "Acquired coordination Lease",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "lease",
+            "label": "Lease",
+            "type": "object",
+            "detail": "Records B as holder",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "target",
+            "label": "External system",
+            "type": "storage",
+            "detail": "Must enforce fencing if required",
+            "x": 35,
+            "y": 230,
+            "state": "warning"
+          }
+        ],
+        "edges": [
+          {
+            "to": "target",
+            "label": "current write",
+            "state": "active",
+            "from": "new"
+          },
+          {
+            "to": "target",
+            "label": "in-flight write",
+            "state": "blocked",
+            "from": "old"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No target-side protection",
+        "description": "Both requests can affect a dependency that does not check leader identity or operation identity.",
+        "frames": [
+          {
+            "title": "Delayed request survives",
+            "narration": "A is no longer the agreed leader, but its network request still exists.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old leader A",
+                "type": "control",
+                "detail": "Delayed external request",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "new",
+                "label": "New leader B",
+                "type": "control",
+                "detail": "Acquired coordination Lease",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "lease",
+                "label": "Lease",
+                "type": "object",
+                "detail": "Records B as holder",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "target",
+                "label": "External system",
+                "type": "storage",
+                "detail": "Must enforce fencing if required",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "target",
+                "label": "in-flight write",
+                "state": "active",
+                "from": "old"
+              }
+            ]
+          },
+          {
+            "title": "Current writer proceeds",
+            "narration": "B issues work after acquisition; its Lease does not cancel A at the target.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old leader A",
+                "type": "control",
+                "detail": "Delayed external request",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "new",
+                "label": "New leader B",
+                "type": "control",
+                "detail": "Acquired coordination Lease",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "lease",
+                "label": "Lease",
+                "type": "object",
+                "detail": "Records B as holder",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "target",
+                "label": "External system",
+                "type": "storage",
+                "detail": "Must enforce fencing if required",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "lease",
+                "label": "acquired",
+                "state": "active",
+                "from": "new"
+              },
+              {
+                "to": "target",
+                "label": "current write",
+                "state": "active",
+                "from": "new"
+              }
+            ]
+          },
+          {
+            "title": "Conflicting external effects",
+            "narration": "Without suitable fencing or transaction rules, the dependency can accept unsafe stale work.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old leader A",
+                "type": "control",
+                "detail": "Delayed external request",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "new",
+                "label": "New leader B",
+                "type": "control",
+                "detail": "Acquired coordination Lease",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "lease",
+                "label": "Lease",
+                "type": "object",
+                "detail": "Records B as holder",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "target",
+                "label": "External system",
+                "type": "storage",
+                "detail": "May accept stale and current writes",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "target",
+                "label": "in-flight write",
+                "state": "active",
+                "from": "old"
+              },
+              {
+                "to": "target",
+                "label": "current write",
+                "state": "active",
+                "from": "new"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m15-l03-lease-fencing"
+  }
+]

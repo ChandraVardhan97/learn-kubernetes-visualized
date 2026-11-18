@@ -1,0 +1,789 @@
+[
+  {
+    "title": "Remove one indirection from the failing request",
+    "kind": "flow",
+    "description": "Compare DNS, ClusterIP and direct endpoint traffic from one diagnostic client.",
+    "assumption": "One healthy-looking backend; actual provider may transform packet addresses at different points.",
+    "frames": [
+      {
+        "title": "Test resolution",
+        "narration": "Resolve the Service name from the same client and inspect resolver configuration if this fails.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Keep source constant",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "DNS",
+            "detail": "Resolve api Service name",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Service VIP",
+            "detail": "ClusterIP:80",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "EndpointSlice",
+            "detail": "Ready Pod address",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Backend Pod",
+            "detail": "Listens on 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Data plane / policy",
+            "detail": "Implementation-specific forwarding",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "DNS query",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl exec client -- nslookup api"
+      },
+      {
+        "title": "Check usable selection",
+        "narration": "Inspect selector labels and readiness conditions. A Service with no usable backend can still resolve successfully.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Keep source constant",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "DNS",
+            "detail": "Resolve api Service name",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Service VIP",
+            "detail": "ClusterIP:80",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "EndpointSlice",
+            "detail": "Ready Pod address",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Backend Pod",
+            "detail": "Listens on 8080",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Data plane / policy",
+            "detail": "Implementation-specific forwarding",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "address + ready",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Probe the Service path",
+        "narration": "Send to ClusterIP and Service port. This tests virtual-address forwarding plus the remaining backend path.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Keep source constant",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "DNS",
+            "detail": "Resolve api Service name",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Service VIP",
+            "detail": "ClusterIP:80",
+            "type": "service",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "EndpointSlice",
+            "detail": "Ready Pod address",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Backend Pod",
+            "detail": "Listens on 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Data plane / policy",
+            "detail": "Implementation-specific forwarding",
+            "type": "node",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "ClusterIP:80",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "5",
+            "label": "forward",
+            "state": "active"
+          },
+          {
+            "from": "5",
+            "to": "4",
+            "label": "targetPort 8080",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Compare direct endpoint traffic",
+        "narration": "Bypass DNS and Service selection using the ready Pod address and target port from the same client. A difference narrows the failing boundary.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Keep source constant",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "DNS",
+            "detail": "Resolve api Service name",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Service VIP",
+            "detail": "ClusterIP:80",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "EndpointSlice",
+            "detail": "Ready Pod address",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Backend Pod",
+            "detail": "Listens on 8080",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Data plane / policy",
+            "detail": "Implementation-specific forwarding",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "4",
+            "label": "PodIP:8080",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "DNS egress is blocked",
+        "description": "The client cannot resolve names but direct address traffic is permitted.",
+        "frames": [
+          {
+            "title": "Name lookup times out",
+            "narration": "An egress-isolated client has no suitable DNS allow rule.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client Pod",
+                "detail": "Keep source constant",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "DNS",
+                "detail": "Resolve api Service name",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Service VIP",
+                "detail": "ClusterIP:80",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "EndpointSlice",
+                "detail": "Ready Pod address",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Backend Pod",
+                "detail": "Listens on 8080",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Data plane / policy",
+                "detail": "Implementation-specific forwarding",
+                "type": "node",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "DNS blocked",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Direct address request works",
+            "narration": "The application path can work when discovery is bypassed; this does not prove DNS is healthy.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client Pod",
+                "detail": "Keep source constant",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "DNS",
+                "detail": "Resolve api Service name",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Service VIP",
+                "detail": "ClusterIP:80",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "EndpointSlice",
+                "detail": "Ready Pod address",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Backend Pod",
+                "detail": "Listens on 8080",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "5",
+                "label": "Data plane / policy",
+                "detail": "Implementation-specific forwarding",
+                "type": "node",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "direct IP succeeds",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Repair DNS access deliberately",
+            "narration": "Verify DNS workload health and actual labels, then allow the required UDP/TCP DNS path rather than opening every egress destination.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client Pod",
+                "detail": "Keep source constant",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "DNS",
+                "detail": "Resolve api Service name",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Service VIP",
+                "detail": "ClusterIP:80",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "EndpointSlice",
+                "detail": "Ready Pod address",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Backend Pod",
+                "detail": "Listens on 8080",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Data plane / policy",
+                "detail": "Implementation-specific forwarding",
+                "type": "node",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "5",
+                "label": "narrow DNS policy",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl get networkpolicy -o yaml"
+          }
+        ]
+      }
+    ],
+    "id": "m12-l02-network-ladder"
+  },
+  {
+    "title": "Follow claim, attach, mount and file access separately",
+    "kind": "storage",
+    "description": "Classify storage errors using PVC status, Pod events and process permissions.",
+    "assumption": "A CSI driver with attachment is illustrated; some drivers skip that checkpoint.",
+    "frames": [
+      {
+        "title": "Check binding first",
+        "narration": "A Pending claim needs class, provisioner and consumer-topology evidence. A Bound claim has passed that checkpoint.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC",
+            "detail": "Pending or Bound",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Provisioner",
+            "detail": "Class and topology",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Attachment",
+            "detail": "Backend → selected worker",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node mount",
+            "detail": "Publish filesystem into Pod",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "App process",
+            "detail": "UID/GID accesses /data",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "provision or bind",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Check attachment ownership",
+        "narration": "An attachment error can reflect topology or another active node attachment. Establish writer ownership before forcing detach.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC",
+            "detail": "Pending or Bound",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Provisioner",
+            "detail": "Class and topology",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Attachment",
+            "detail": "Backend → selected worker",
+            "type": "storage",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Node mount",
+            "detail": "Publish filesystem into Pod",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "App process",
+            "detail": "UID/GID accesses /data",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "attach request",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Check node publication",
+        "narration": "FailedMount points to a later checkpoint such as backend connectivity, mount options, credentials or filesystem setup.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC",
+            "detail": "Pending or Bound",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Provisioner",
+            "detail": "Class and topology",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Attachment",
+            "detail": "Backend → selected worker",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node mount",
+            "detail": "Publish filesystem into Pod",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "App process",
+            "detail": "UID/GID accesses /data",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "node publication",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Check application permission",
+        "narration": "A running container with permission denied may have a healthy mount but incompatible UID, group, mode or read-only settings.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "PVC",
+            "detail": "Pending or Bound",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Provisioner",
+            "detail": "Class and topology",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Attachment",
+            "detail": "Backend → selected worker",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node mount",
+            "detail": "Publish filesystem into Pod",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "App process",
+            "detail": "UID/GID accesses /data",
+            "type": "pod",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "open /data",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl exec writer -- id"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Filesystem permission denied after mount",
+        "description": "The claim is Bound and mounted but the process cannot write its intended directory.",
+        "frames": [
+          {
+            "title": "Infrastructure checkpoints pass",
+            "narration": "The backend attaches and the filesystem appears in the Pod.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC",
+                "detail": "Pending or Bound",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Provisioner",
+                "detail": "Class and topology",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Attachment",
+                "detail": "Backend → selected worker",
+                "type": "storage",
+                "state": "ready"
+              },
+              {
+                "id": "3",
+                "label": "Node mount",
+                "detail": "Publish filesystem into Pod",
+                "type": "node",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "App process",
+                "detail": "UID/GID accesses /data",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "mounted",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Application write fails",
+            "narration": "The process UID/group lacks write permission, or the mounted path is intentionally read-only.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC",
+                "detail": "Pending or Bound",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Provisioner",
+                "detail": "Class and topology",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Attachment",
+                "detail": "Backend → selected worker",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node mount",
+                "detail": "Publish filesystem into Pod",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "App process",
+                "detail": "UID/GID accesses /data",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "3",
+                "label": "permission denied",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Fix the precise access requirement",
+            "narration": "Inspect ownership, mount flags and the security context. Recreating the PVC risks data without addressing the demonstrated access mismatch.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "PVC",
+                "detail": "Pending or Bound",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Provisioner",
+                "detail": "Class and topology",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Attachment",
+                "detail": "Backend → selected worker",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node mount",
+                "detail": "Publish filesystem into Pod",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "App process",
+                "detail": "UID/GID accesses /data",
+                "type": "pod",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "compatible permissions",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod writer"
+          }
+        ]
+      }
+    ],
+    "id": "m12-l02-storage-ladder"
+  }
+]

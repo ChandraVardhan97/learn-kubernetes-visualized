@@ -1,0 +1,91 @@
+---
+lessonId: "m19-l03"
+title: "Service meshes and platform boundaries"
+description: "Place service identity, traffic control, and provider responsibility precisely."
+level: "advanced"
+module: "m19"
+order: 3
+minutes: 16
+prerequisites: ["m19-l02", "m11-l03"]
+objectives: ["Explain mesh data-plane and control-plane responsibilities.", "Distinguish mesh mTLS from network reachability policy.", "Assign managed-provider and application-owner operational duties."]
+concepts: [{"id": "m19-l03-mesh-identity", "title": "A mesh secures a defined traffic path", "scene": "m19-l03-mesh-identity"}, {"id": "m19-l03-platform-boundaries", "title": "Network policy, mesh policy, and provider ownership differ", "scene": "m19-l03-platform-boundaries"}]
+sources: [{"title": "Istio security concepts", "url": "https://istio.io/latest/docs/concepts/security/"}, {"title": "Istio traffic management", "url": "https://istio.io/latest/docs/concepts/traffic-management/"}, {"title": "Kubernetes NetworkPolicy", "url": "https://kubernetes.io/docs/concepts/services-networking/network-policies/"}, {"title": "Cluster components", "url": "https://kubernetes.io/docs/concepts/overview/components/"}]
+lab: "m19"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: a mesh introduces another control and data path
+
+A service mesh commonly adds a data plane that handles application traffic and a control plane that distributes configuration and identity material. Deployment modes differ: sidecar proxies place a proxy beside a workload, while ambient or node-oriented designs move some functions elsewhere. Avoid assuming every mesh always injects a sidecar or that every request necessarily crosses the same proxy path. Choose the implementation and mode before reasoning about coverage, resources or failure behavior.
+
+Mesh mTLS can authenticate workload peers and encrypt covered connections. Authorization policy can then evaluate service identity and request attributes supported by that data path. This protects a particular communication boundary. It does not authenticate an application's end user automatically, make the application correct, or ensure every cluster connection is covered. Plaintext exclusions, workloads outside the mesh and external dependencies need explicit handling and observation.
+
+<Scene id="m19-l03-mesh-identity" />
+
+## Walkthrough: traffic features change application failure behavior
+
+A mesh can provide routing, retries, timeouts, telemetry and access policy, depending on its implementation. Retries can improve transient-failure handling for safe operations, but can multiply load or duplicate side effects for non-idempotent requests. Configure retry budgets, deadlines and application semantics together. A retry at the client, another at the proxy and another in an upstream service can amplify an outage even when each team believes it configured only a small retry count.
+
+NetworkPolicy remains a separate reachability boundary enforced by the networking implementation. A mesh does not replace it. NetworkPolicy can constrain which selected Pods or addresses connect at the supported network layers; mesh policy can add identity and application-aware decisions on covered traffic. Their interactions depend on proxy placement and networking behavior. Test the exact mode, including DNS, control-plane communication, metrics and external egress, rather than assuming one broad deny rule is always compatible with mesh operation.
+
+<Scene id="m19-l03-platform-boundaries" />
+
+This policy selects labeled web Pods for ingress isolation and adds an allow rule for labeled clients on TCP 80 within the same namespace. It is valid without a mesh, but depends on NetworkPolicy enforcement. Existing policies selecting the same Pods are additive, and documented exceptions such as traffic from the Pod's own node still apply. It is an isolated teaching example, not a complete mesh installation policy.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: m19-web-ingress
+  namespace: kv-lab
+  labels:
+    lab: m19
+spec:
+  podSelector:
+    matchLabels:
+      app: m19-web
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: m19-client
+      ports:
+        - protocol: TCP
+          port: 80
+```
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab get networkpolicies
+kubectl --context kind-kv-lab -n kv-lab get pods -o wide
+# Add-on discovery is read-only; absence is an expected local outcome.
+kubectl --context kind-kv-lab get crd -o name
+kubectl --context kind-kv-lab get namespaces
+```
+
+## Practice: write an ownership map before installing an add-on
+
+Use the [m19 local exercise](/labs/#m19) for a controlled declaration-and-drift experiment. No mesh is required. For a mesh evaluation, first identify the intended covered workloads, trust root, certificate rotation owner, policy author, telemetry destination and upgrade owner. Choose an actual mesh mode, then test a permitted call, a denied call, an unmeshed caller and control-plane interruption. Observe established versus new connections according to the implementation rather than promising universal outage behavior.
+
+Now consider a managed Kubernetes service. The provider may operate control-plane hosts and storage while the customer still owns workload images, RBAC grants, namespaces, application data, add-ons and much of network policy. The exact boundary depends on the service and configuration. A provider's control-plane backup does not automatically become a customer-accessible application restore procedure. Document responsibilities using that provider's current contract before assuming that a platform team or cloud vendor will rotate a particular certificate or recover a database.
+
+## Pitfalls: extra machinery has costs and blind spots
+
+Proxies and agents consume resources, add configuration and change debugging paths. An application can fail because of DNS, service selection, missing endpoints, mesh policy, certificate validity, routing configuration or the application itself. Start with evidence at each boundary instead of treating every connection failure as a mesh bug. Encryption in transit does not protect plaintext logs or credentials exposed through overly broad Kubernetes permissions.
+
+A shared platform should offer a small, documented interface with explicit defaults and escape routes. If teams must understand every internal mesh resource to deploy a simple service, the abstraction may be leaking operational complexity. Still preserve enough diagnostics for users to identify which owner needs to act. A managed service reduces some ownership, but it does not remove the need for application-level recovery drills.
+
+## Check your understanding
+
+<details>
+
+<summary>Mesh mTLS is enabled. Can NetworkPolicy and application authorization be removed?</summary>
+
+No. mTLS supplies peer authentication and encryption for covered traffic. Network reachability and application or user authorization are separate decisions, and coverage depends on the mesh implementation and mode. Keep and test each required boundary.
+
+</details>
+
+Next, combine these layers in three recovery capstones. Each investigation starts with a specific failure and ends with observable recovery evidence rather than a claim that every platform layer was validated.

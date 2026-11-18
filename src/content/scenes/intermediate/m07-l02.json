@@ -1,0 +1,756 @@
+[
+  {
+    "title": "Build the feasible node set",
+    "kind": "scheduling",
+    "description": "Show node labels, required affinity and preferred inter-Pod locality contributing different decisions.",
+    "assumption": "Two labeled worker nodes and a cache Pod; real scoring combines multiple plugins.",
+    "frames": [
+      {
+        "title": "Read node labels",
+        "narration": "The required node selector admits Worker A and rejects Worker B, regardless of current CPU usage.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Needs workload=tools; prefers cache zone",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "workload=tools; zone=east",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "workload=general; zone=west",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "Cache Pod",
+            "detail": "app=cache; zone=east",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Filter, score, bind",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "label matches",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "2",
+            "label": "label mismatch",
+            "state": "blocked"
+          }
+        ],
+        "code": "nodeSelector:\n  workload: tools"
+      },
+      {
+        "title": "Resolve Pod affinity",
+        "narration": "The cache Pod is selected by its Pod label. Its node zone identifies the locality domain for the preference.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Needs workload=tools; prefers cache zone",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "workload=tools; zone=east",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "workload=general; zone=west",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Cache Pod",
+            "detail": "app=cache; zone=east",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Filter, score, bind",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "1",
+            "label": "same zone",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Score feasible nodes",
+        "narration": "Preferred Pod affinity only scores nodes that survived the hard filters; it cannot rescue Worker B.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Needs workload=tools; prefers cache zone",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "workload=tools; zone=east",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "workload=general; zone=west",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Cache Pod",
+            "detail": "app=cache; zone=east",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Filter, score, bind",
+            "type": "control",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "4",
+            "label": "feasible + preferred",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "4",
+            "label": "filtered out",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Bind without continual relocation",
+        "narration": "Binding assigns the client to Worker A. IgnoredDuringExecution affinity does not continually reschedule it after label changes.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client Pod",
+            "detail": "Needs workload=tools; prefers cache zone",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "workload=tools; zone=east",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "workload=general; zone=west",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Cache Pod",
+            "detail": "app=cache; zone=east",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Scheduler",
+            "detail": "Filter, score, bind",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "1",
+            "label": "bind client",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Required anti-affinity cannot fit",
+        "description": "Two replicas require different hostnames but only one worker is eligible.",
+        "frames": [
+          {
+            "title": "First replica occupies Worker A",
+            "narration": "An existing replica occupies the only eligible hostname domain; the next replica must avoid that hostname.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Next replica",
+                "detail": "app=client; workload=tools; required hostname anti-affinity",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "workload=tools; zone=east",
+                "type": "node",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "Worker B",
+                "detail": "workload=general; zone=west",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Existing replica",
+                "detail": "app=client; occupies Worker A hostname",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "Scheduler",
+                "detail": "Filter, score, bind",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "1",
+                "label": "first replica already placed",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Second replica waits",
+            "narration": "Required anti-affinity rejects the occupied domain; the node-label mismatch rejects the other worker.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Next replica",
+                "detail": "app=client; workload=tools; required hostname anti-affinity",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "workload=tools; zone=east",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker B",
+                "detail": "workload=general; zone=west",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Existing replica",
+                "detail": "app=client; occupies Worker A hostname",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Scheduler",
+                "detail": "Filter, score, bind",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "anti-affinity conflict",
+                "state": "blocked"
+              },
+              {
+                "from": "0",
+                "to": "2",
+                "label": "wrong pool",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Choose a conscious trade-off",
+            "narration": "Add an eligible domain or make separation a preference if co-location is acceptable. More retries cannot satisfy an impossible constraint.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Next replica",
+                "detail": "app=client; workload=tools; required hostname anti-affinity",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "workload=tools; zone=east",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker B",
+                "detail": "workload=general; zone=west",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Existing replica",
+                "detail": "app=client; occupies Worker A hostname",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Scheduler",
+                "detail": "Filter, score, bind",
+                "type": "control",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "4",
+                "label": "re-evaluate policy",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m07-l02-affinity"
+  },
+  {
+    "title": "Permission to enter is not an attraction",
+    "kind": "policy",
+    "description": "Follow a dedicated pool taint and distinguish NoSchedule from NoExecute.",
+    "assumption": "A single training taint; other scheduler filters are assumed satisfied.",
+    "frames": [
+      {
+        "title": "Repel ordinary placement",
+        "narration": "The dedicated NoSchedule taint rejects a new ordinary Pod without the matching toleration.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ordinary Pod",
+            "detail": "No matching toleration",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "1",
+            "label": "Tools Pod",
+            "detail": "Tolerates dedicated=tools",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Tools node",
+            "detail": "dedicated=tools:NoSchedule",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "General node",
+            "detail": "Untainted",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Running Pod",
+            "detail": "Already on tools node",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "untolerated",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Permit tools placement",
+        "narration": "A matching toleration lets the tools Pod pass this check. It says nothing about which feasible node wins.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ordinary Pod",
+            "detail": "No matching toleration",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Tools Pod",
+            "detail": "Tolerates dedicated=tools",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Tools node",
+            "detail": "dedicated=tools:NoSchedule",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "General node",
+            "detail": "Untainted",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Running Pod",
+            "detail": "Already on tools node",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "taint tolerated",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "3",
+            "label": "also eligible",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Select the intended pool",
+        "narration": "Adding workload=tools as a required selector restricts the tools Pod to the labeled pool.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ordinary Pod",
+            "detail": "No matching toleration",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Tools Pod",
+            "detail": "Tolerates dedicated=tools; requires workload=tools",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Tools node",
+            "detail": "dedicated=tools:NoSchedule; workload=tools",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "General node",
+            "detail": "Untainted; workload=general",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "4",
+            "label": "Running Pod",
+            "detail": "Already on tools node",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "selector + toleration",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "3",
+            "label": "selector mismatch",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Leave existing Pods alone",
+        "narration": "NoSchedule does not remove the already running Pod. It restricts future scheduler placements on this node.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Ordinary Pod",
+            "detail": "No matching toleration",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Tools Pod",
+            "detail": "Tolerates dedicated=tools",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Tools node",
+            "detail": "dedicated=tools:NoSchedule",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "General node",
+            "detail": "Untainted",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Running Pod",
+            "detail": "Already on tools node",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "2",
+            "label": "remains assigned",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Change to NoExecute",
+        "description": "A new NoExecute taint also affects existing Pods.",
+        "frames": [
+          {
+            "title": "Taint effect changes",
+            "narration": "NoExecute is evaluated for already assigned Pods as well as new candidates.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Ordinary Pod",
+                "detail": "No matching toleration",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Tools Pod",
+                "detail": "Tolerates dedicated=tools",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Tools node",
+                "detail": "dedicated=tools:NoExecute",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "General node",
+                "detail": "Untainted",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Running Pod",
+                "detail": "Already on tools node",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "4",
+                "label": "evaluate toleration",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Untolerated Pod evicted",
+            "narration": "The running Pod without a matching NoExecute toleration becomes subject to taint-based eviction.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Ordinary Pod",
+                "detail": "No matching toleration",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Tools Pod",
+                "detail": "Tolerates dedicated=tools",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Tools node",
+                "detail": "dedicated=tools:NoExecute",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "General node",
+                "detail": "Untainted",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Running Pod",
+                "detail": "Already on tools node",
+                "type": "pod",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "4",
+                "label": "evict",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Bound the stay deliberately",
+            "narration": "A matching NoExecute toleration may include tolerationSeconds. Expiration ends the temporary permission to remain.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Ordinary Pod",
+                "detail": "No matching toleration",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Tools Pod",
+                "detail": "Tolerates dedicated=tools",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Tools node",
+                "detail": "dedicated=tools:NoExecute",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "General node",
+                "detail": "Untainted",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Running Pod",
+                "detail": "Already on tools node",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "temporary tolerance",
+                "state": "active"
+              }
+            ],
+            "code": "tolerations:\n- key: dedicated\n  operator: Equal\n  value: tools\n  effect: NoExecute\n  tolerationSeconds: 60"
+          }
+        ]
+      }
+    ],
+    "id": "m07-l02-taints"
+  }
+]

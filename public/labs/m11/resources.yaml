@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: m11-reader
+  namespace: kv-lab
+  labels:
+    lab: m11
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: m11-reader
+  namespace: kv-lab
+  labels:
+    lab: m11
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: m11-reader
+  namespace: kv-lab
+  labels:
+    lab: m11
+subjects:
+  - kind: ServiceAccount
+    name: m11-reader
+    namespace: kv-lab
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: m11-reader
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m11
+  namespace: kv-lab
+  labels:
+    lab: m11
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command:
+        - sleep
+        - "3600"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+  serviceAccountName: m11-reader
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    seccompProfile:
+      type: RuntimeDefault

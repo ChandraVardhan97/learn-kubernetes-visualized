@@ -1,0 +1,749 @@
+[
+  {
+    "title": "A connection crosses two independent policy gates",
+    "kind": "policy",
+    "description": "Trace frontend-to-api traffic through egress and ingress isolation with additive allow rules.",
+    "assumption": "An enforcing implementation and ordinary cross-Pod TCP connection; reply traffic is implicit; self and own-node exceptions are outside this path.",
+    "frames": [
+      {
+        "title": "Isolate API ingress",
+        "narration": "An ingress policy selects the API. An empty allow set blocks new inbound connections in that direction.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Frontend",
+            "detail": "role=frontend",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Egress gate",
+            "detail": "Policies selecting frontend",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Ingress gate",
+            "detail": "Policies selecting api",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "API",
+            "detail": "app=api; TCP 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Extra allow policy",
+            "detail": "Permissions are unioned",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "no ingress allow",
+            "state": "blocked"
+          }
+        ],
+        "code": "policyTypes: [Ingress]\ningress: []"
+      },
+      {
+        "title": "Add the required ingress edge",
+        "narration": "A second policy can allow frontend TCP 8080. It adds permission even while default-deny remains present.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Frontend",
+            "detail": "role=frontend",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Egress gate",
+            "detail": "Policies selecting frontend",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Ingress gate",
+            "detail": "Policies selecting api",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "API",
+            "detail": "app=api; TCP 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Extra allow policy",
+            "detail": "Permissions are unioned",
+            "type": "object",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "2",
+            "label": "add allowed edge",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "TCP 8080",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Check source egress too",
+        "narration": "If frontend egress is isolated without a matching allow, the connection still fails before reaching the permitted destination.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Frontend",
+            "detail": "role=frontend",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Egress gate",
+            "detail": "Policies selecting frontend",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Ingress gate",
+            "detail": "Policies selecting api",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API",
+            "detail": "app=api; TCP 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Extra allow policy",
+            "detail": "Permissions are unioned",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "egress denied",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Both directions permit",
+        "narration": "Once the relevant source egress and destination ingress allow this edge, the connection and its return traffic can pass.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Frontend",
+            "detail": "role=frontend",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Egress gate",
+            "detail": "Policies selecting frontend",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Ingress gate",
+            "detail": "Policies selecting api",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "API",
+            "detail": "app=api; TCP 8080",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Extra allow policy",
+            "detail": "Permissions are unioned",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "allow",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "2",
+            "label": "TCP 8080",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "allow",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "An unexpected allow-all exists",
+        "description": "An additional policy broadens API ingress because policies do not have deny precedence.",
+        "frames": [
+          {
+            "title": "Default deny is selected",
+            "narration": "The direction is isolated and appears restrictive when viewed alone.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Frontend",
+                "detail": "role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Egress gate",
+                "detail": "Policies selecting frontend",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Ingress gate",
+                "detail": "Policies selecting api",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "API",
+                "detail": "app=api; TCP 8080",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Extra allow policy",
+                "detail": "Permissions are unioned",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Broad policy adds all peers",
+            "narration": "Another selected policy permits all peers. The union now allows those peers despite the default-deny object.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Frontend",
+                "detail": "role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Egress gate",
+                "detail": "Policies selecting frontend",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Ingress gate",
+                "detail": "Policies selecting api",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "3",
+                "label": "API",
+                "detail": "app=api; TCP 8080",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Extra allow policy",
+                "detail": "Permissions are unioned",
+                "type": "object",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "2",
+                "label": "union adds all",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Audit the full selected set",
+            "narration": "Inspect every selected policy rather than ordering objects by creation time; there is no last-rule-wins behavior.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Frontend",
+                "detail": "role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Egress gate",
+                "detail": "Policies selecting frontend",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Ingress gate",
+                "detail": "Policies selecting api",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API",
+                "detail": "app=api; TCP 8080",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Extra allow policy",
+                "detail": "Permissions are unioned",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "broad access",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl get networkpolicy -o yaml"
+          }
+        ]
+      }
+    ],
+    "id": "m08-l02-directions"
+  },
+  {
+    "title": "One peer means AND; separate peers mean OR",
+    "kind": "policy",
+    "description": "Compare namespace and Pod selector combinations and validate enforcement with positive and negative probes.",
+    "assumption": "Labels shown on the two source Pods and their namespaces are the only peer attributes used.",
+    "frames": [
+      {
+        "title": "Select the destination",
+        "narration": "Top-level podSelector selects the API Pods in the policy namespace; it does not select the clients.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Shop frontend",
+            "detail": "namespace team=shop; role=frontend",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Other frontend",
+            "detail": "namespace team=other; role=frontend",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Shop batch",
+            "detail": "namespace team=shop; role=batch",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API policy",
+            "detail": "Namespace AND Pod selector",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "API Pod",
+            "detail": "TCP 8080",
+            "type": "pod",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "app=api",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Combine inside one peer",
+        "narration": "Both namespace team=shop and Pod role=frontend must match, allowing only the shop frontend among these sources.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Shop frontend",
+            "detail": "namespace team=shop; role=frontend",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Other frontend",
+            "detail": "namespace team=other; role=frontend",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Shop batch",
+            "detail": "namespace team=shop; role=batch",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "API policy",
+            "detail": "Namespace AND Pod selector",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "API Pod",
+            "detail": "TCP 8080",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "both match",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "3",
+            "label": "namespace mismatch",
+            "state": "blocked"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "Pod label mismatch",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Separate peers broaden access",
+        "narration": "If namespaceSelector and podSelector become separate list entries, either peer can match. Shop batch would then match the namespace peer.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Shop frontend",
+            "detail": "namespace team=shop; role=frontend",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Other frontend",
+            "detail": "namespace team=other; role=frontend",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Shop batch",
+            "detail": "namespace team=shop; role=batch",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "API policy",
+            "detail": "Namespace AND Pod selector",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "4",
+            "label": "API Pod",
+            "detail": "TCP 8080",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "namespace peer alone",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Prove real enforcement",
+        "narration": "Run baseline, denied and allowed requests on the actual cluster. Persisted policy YAML alone proves no data-plane behavior.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Shop frontend",
+            "detail": "namespace team=shop; role=frontend",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Other frontend",
+            "detail": "namespace team=other; role=frontend",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Shop batch",
+            "detail": "namespace team=shop; role=batch",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API policy",
+            "detail": "Namespace AND Pod selector",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "API Pod",
+            "detail": "TCP 8080",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "4",
+            "label": "positive probe",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "4",
+            "label": "negative probe",
+            "state": "blocked"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Policy API exists without enforcement",
+        "description": "A provider accepts policy objects but is not enforcing the tested direction.",
+        "frames": [
+          {
+            "title": "Policy creation succeeds",
+            "narration": "The API stores a valid NetworkPolicy regardless of whether the data plane implements it.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Shop frontend",
+                "detail": "namespace team=shop; role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Other frontend",
+                "detail": "namespace team=other; role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Shop batch",
+                "detail": "namespace team=shop; role=batch",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API policy",
+                "detail": "Namespace AND Pod selector",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "API Pod",
+                "detail": "TCP 8080",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [],
+            "code": "kubectl get networkpolicy"
+          },
+          {
+            "title": "Negative probe still connects",
+            "narration": "A deliberately unallowed client can connect after isolation, so the expected boundary has not been established.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Shop frontend",
+                "detail": "namespace team=shop; role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Other frontend",
+                "detail": "namespace team=other; role=frontend",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Shop batch",
+                "detail": "namespace team=shop; role=batch",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API policy",
+                "detail": "Namespace AND Pod selector",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "API Pod",
+                "detail": "TCP 8080",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "4",
+                "label": "unexpected success",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Inspect chosen implementation",
+            "narration": "Check provider capability and configuration, then repeat deny/allow tests in a documented disposable setup.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Shop frontend",
+                "detail": "namespace team=shop; role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Other frontend",
+                "detail": "namespace team=other; role=frontend",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Shop batch",
+                "detail": "namespace team=shop; role=batch",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API policy",
+                "detail": "Namespace AND Pod selector",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "API Pod",
+                "detail": "TCP 8080",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "verify provider",
+                "state": "blocked"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m08-l02-selectors"
+  }
+]

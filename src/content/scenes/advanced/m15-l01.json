@@ -1,0 +1,806 @@
+[
+  {
+    "title": "Observation feeds a cache and a queue",
+    "kind": "queue",
+    "description": "A worker reads cached state and compares desired state with dependents; it may need another pass after cache lag.",
+    "assumption": "A single informer is shown; production controllers often depend on several caches and must synchronize them.",
+    "frames": [
+      {
+        "title": "Build a baseline",
+        "narration": "The informer lists and watches resources, storing observed objects in its local cache.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API list/watch",
+            "type": "control",
+            "detail": "Current objects + changes",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cache",
+            "label": "Informer cache",
+            "type": "storage",
+            "detail": "Local eventual snapshot",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "handler",
+            "label": "Event handler",
+            "type": "control",
+            "detail": "Enqueue namespace/name",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "queue",
+            "label": "Key queue",
+            "type": "object",
+            "detail": "Pending resource keys",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "worker",
+            "label": "Reconcile worker",
+            "type": "control",
+            "detail": "Reads current desired state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cache",
+            "label": "update objects",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Keep handlers short",
+        "narration": "A handler enqueues the object key instead of performing a slow external request in the watch path.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API list/watch",
+            "type": "control",
+            "detail": "Current objects + changes",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cache",
+            "label": "Informer cache",
+            "type": "storage",
+            "detail": "Local eventual snapshot",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "handler",
+            "label": "Event handler",
+            "type": "control",
+            "detail": "Enqueue namespace/name",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "queue",
+            "label": "Key queue",
+            "type": "object",
+            "detail": "Pending resource keys",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "worker",
+            "label": "Reconcile worker",
+            "type": "control",
+            "detail": "Reads current desired state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "handler",
+            "label": "notify change",
+            "state": "active",
+            "from": "cache"
+          },
+          {
+            "to": "queue",
+            "label": "enqueue key",
+            "state": "active",
+            "from": "handler"
+          }
+        ]
+      },
+      {
+        "title": "Reconcile the latest observation",
+        "narration": "A worker reads cached state and compares desired state with dependents; it may need another pass after cache lag.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API list/watch",
+            "type": "control",
+            "detail": "Current objects + changes",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cache",
+            "label": "Informer cache",
+            "type": "storage",
+            "detail": "Local eventual snapshot",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "handler",
+            "label": "Event handler",
+            "type": "control",
+            "detail": "Enqueue namespace/name",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "queue",
+            "label": "Key queue",
+            "type": "object",
+            "detail": "Pending resource keys",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "worker",
+            "label": "Reconcile worker",
+            "type": "control",
+            "detail": "Reads current desired state",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "worker",
+            "label": "dequeue",
+            "state": "active",
+            "from": "queue"
+          },
+          {
+            "to": "cache",
+            "label": "read observations",
+            "state": "active",
+            "from": "worker"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Read after write is stale",
+        "description": "A successful API write may not yet be reflected in the local cache.",
+        "frames": [
+          {
+            "title": "Write completed",
+            "narration": "The worker created a dependent through the API, but its informer has not observed that change yet.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API list/watch",
+                "type": "control",
+                "detail": "Current objects + changes",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cache",
+                "label": "Informer cache",
+                "type": "storage",
+                "detail": "Creation event has not arrived",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "handler",
+                "label": "Event handler",
+                "type": "control",
+                "detail": "Enqueue namespace/name",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "queue",
+                "label": "Key queue",
+                "type": "object",
+                "detail": "Pending resource keys",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "worker",
+                "label": "Reconcile worker",
+                "type": "control",
+                "detail": "Reads current desired state",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cache",
+                "label": "update objects",
+                "state": "blocked",
+                "from": "api"
+              },
+              {
+                "to": "api",
+                "label": "create succeeds",
+                "state": "active",
+                "from": "worker"
+              }
+            ]
+          },
+          {
+            "title": "Old observation returns",
+            "narration": "The cache still reports no child. A blind second create can meet AlreadyExists.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API list/watch",
+                "type": "control",
+                "detail": "Current objects + changes",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cache",
+                "label": "Informer cache",
+                "type": "storage",
+                "detail": "Cached snapshot has no child yet",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "handler",
+                "label": "Event handler",
+                "type": "control",
+                "detail": "Enqueue namespace/name",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "queue",
+                "label": "Key queue",
+                "type": "object",
+                "detail": "Pending resource keys",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "worker",
+                "label": "Reconcile worker",
+                "type": "control",
+                "detail": "Reads current desired state",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cache",
+                "label": "reads stale snapshot",
+                "state": "active",
+                "from": "worker"
+              }
+            ]
+          },
+          {
+            "title": "Recover by comparison",
+            "narration": "Treat the conflict as new information, requeue appropriately, and reuse the stable child identity.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API list/watch",
+                "type": "control",
+                "detail": "Current objects + changes",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cache",
+                "label": "Informer cache",
+                "type": "storage",
+                "detail": "Local eventual snapshot",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "handler",
+                "label": "Event handler",
+                "type": "control",
+                "detail": "Enqueue namespace/name",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "queue",
+                "label": "Key queue",
+                "type": "object",
+                "detail": "Pending resource keys",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "worker",
+                "label": "Reconcile worker",
+                "type": "control",
+                "detail": "Reads current desired state",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "queue",
+                "label": "enqueue key",
+                "state": "active",
+                "from": "handler"
+              },
+              {
+                "to": "worker",
+                "label": "dequeue",
+                "state": "active",
+                "from": "queue"
+              },
+              {
+                "to": "cache",
+                "label": "read observations",
+                "state": "active",
+                "from": "worker"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m15-l01-informer-cache"
+  },
+  {
+    "title": "Dedupe, delay, and retry safely",
+    "kind": "queue",
+    "description": "Success resets failure history; transient failure requeues with backoff instead of a tight loop.",
+    "assumption": "The scene illustrates standard workqueue behavior without prescribing one library version or retry duration.",
+    "frames": [
+      {
+        "title": "Collapse redundant work",
+        "narration": "Multiple pending notifications for one key can produce one current-state reconciliation.",
+        "nodes": [
+          {
+            "id": "events",
+            "label": "Object changes",
+            "type": "object",
+            "detail": "Many notifications per key",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "queue",
+            "label": "Rate-limited queue",
+            "type": "object",
+            "detail": "Dedupe pending key",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "worker",
+            "label": "Worker",
+            "type": "control",
+            "detail": "One reconcile attempt",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Dependency API",
+            "type": "control",
+            "detail": "May succeed before timeout",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Observed result",
+            "type": "object",
+            "detail": "Conditions or successful state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "queue",
+            "label": "add key",
+            "state": "active",
+            "from": "events"
+          }
+        ]
+      },
+      {
+        "title": "Attempt bounded work",
+        "narration": "The worker reads current intent and issues repeatable operations with stable identities.",
+        "nodes": [
+          {
+            "id": "events",
+            "label": "Object changes",
+            "type": "object",
+            "detail": "Many notifications per key",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "queue",
+            "label": "Rate-limited queue",
+            "type": "object",
+            "detail": "Dedupe pending key",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "worker",
+            "label": "Worker",
+            "type": "control",
+            "detail": "One reconcile attempt",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "api",
+            "label": "Dependency API",
+            "type": "control",
+            "detail": "May succeed before timeout",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Observed result",
+            "type": "object",
+            "detail": "Conditions or successful state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "worker",
+            "label": "get key",
+            "state": "active",
+            "from": "queue"
+          },
+          {
+            "to": "api",
+            "label": "idempotent operation",
+            "state": "active",
+            "from": "worker"
+          }
+        ]
+      },
+      {
+        "title": "Forget or rate-limit",
+        "narration": "Success resets failure history; transient failure requeues with backoff instead of a tight loop.",
+        "nodes": [
+          {
+            "id": "events",
+            "label": "Object changes",
+            "type": "object",
+            "detail": "Many notifications per key",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "queue",
+            "label": "Rate-limited queue",
+            "type": "object",
+            "detail": "Dedupe pending key",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "worker",
+            "label": "Worker",
+            "type": "control",
+            "detail": "One reconcile attempt",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Dependency API",
+            "type": "control",
+            "detail": "May succeed before timeout",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Observed result",
+            "type": "object",
+            "detail": "Conditions or successful state",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "status",
+            "label": "observed state",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "queue",
+            "label": "retry with delay",
+            "state": "active",
+            "from": "worker"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Timeout after partial success",
+        "description": "The next pass must discover work already committed by the dependency.",
+        "frames": [
+          {
+            "title": "Remote create committed",
+            "narration": "The dependency created the resource but its response was lost.",
+            "nodes": [
+              {
+                "id": "events",
+                "label": "Object changes",
+                "type": "object",
+                "detail": "Many notifications per key",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "queue",
+                "label": "Rate-limited queue",
+                "type": "object",
+                "detail": "Dedupe pending key",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "worker",
+                "label": "Worker",
+                "type": "control",
+                "detail": "One reconcile attempt",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "api",
+                "label": "Dependency API",
+                "type": "control",
+                "detail": "Resource committed",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "status",
+                "label": "Observed result",
+                "type": "object",
+                "detail": "Response lost before acknowledgement",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "idempotent operation",
+                "state": "active",
+                "from": "worker"
+              },
+              {
+                "to": "status",
+                "label": "response lost",
+                "state": "blocked",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "Retry is delayed",
+            "narration": "Backoff protects the dependency while the key remains eligible for another attempt.",
+            "nodes": [
+              {
+                "id": "events",
+                "label": "Object changes",
+                "type": "object",
+                "detail": "Many notifications per key",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "queue",
+                "label": "Rate-limited queue",
+                "type": "object",
+                "detail": "Key delayed before retry",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "worker",
+                "label": "Worker",
+                "type": "control",
+                "detail": "One reconcile attempt",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "api",
+                "label": "Dependency API",
+                "type": "control",
+                "detail": "May succeed before timeout",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "Observed result",
+                "type": "object",
+                "detail": "Conditions or successful state",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "queue",
+                "label": "retry with delay",
+                "state": "active",
+                "from": "worker"
+              }
+            ]
+          },
+          {
+            "title": "Discover before replacing",
+            "narration": "A stable identity lets reconciliation find the existing resource and complete status without duplication.",
+            "nodes": [
+              {
+                "id": "events",
+                "label": "Object changes",
+                "type": "object",
+                "detail": "Many notifications per key",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "queue",
+                "label": "Rate-limited queue",
+                "type": "object",
+                "detail": "Dedupe pending key",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "worker",
+                "label": "Worker",
+                "type": "control",
+                "detail": "One reconcile attempt",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "api",
+                "label": "Dependency API",
+                "type": "control",
+                "detail": "May succeed before timeout",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "status",
+                "label": "Observed result",
+                "type": "object",
+                "detail": "Existing resource recognized",
+                "x": 290,
+                "y": 230,
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "to": "worker",
+                "label": "get key",
+                "state": "active",
+                "from": "queue"
+              },
+              {
+                "to": "api",
+                "label": "idempotent operation",
+                "state": "active",
+                "from": "worker"
+              },
+              {
+                "to": "status",
+                "label": "observed state",
+                "state": "active",
+                "from": "api"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m15-l01-queue-retries"
+  }
+]

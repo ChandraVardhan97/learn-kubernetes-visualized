@@ -1,0 +1,84 @@
+---
+lessonId: "m18-l03"
+title: "Backup, restore, and disaster recovery"
+description: "Recover API state without confusing it with application data."
+level: "advanced"
+module: "m18"
+order: 3
+minutes: 16
+prerequisites: ["m18-l02", "m10-l03"]
+objectives: ["Identify assets missing from an etcd snapshot.", "Explain offline restore, new membership and revision handling.", "Verify recovery from an isolated target before declaring success."]
+concepts: [{"id": "m18-l03-backup-boundaries", "title": "API state and data-plane bytes need separate backups", "scene": "m18-l03-backup-boundaries"}, {"id": "m18-l03-offline-restore", "title": "Restore isolated membership and invalidate stale watch history", "scene": "m18-l03-offline-restore"}]
+sources: [{"title": "Operating etcd for Kubernetes", "url": "https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/"}, {"title": "etcd disaster recovery", "url": "https://etcd.io/docs/v3.7/op-guide/recovery/"}, {"title": "Persistent volumes", "url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/"}]
+lab: "m18"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: back up the state you intend to recover
+
+An etcd snapshot captures Kubernetes API data stored in etcd, including workload specifications, resource relationships and Secrets. It does not capture the bytes inside PersistentVolumes, external databases, object stores, container images or every file under a control-plane host. PKI, service-account signing keys, encryption-at-rest configuration and keys, and infrastructure configuration require their own protected recovery plan. A PVC object in the snapshot is a claim describing storage, not a copy of the application's records.
+
+Backup usefulness therefore depends on a recovery objective. Define the acceptable loss of recent changes and the acceptable time to restore useful service, then choose a schedule and verification process. A file that exists is evidence of capture, not proof that the environment can decrypt it, restore it with compatible tooling, rebuild member identities or recover application data consistently. Protect snapshots as sensitive credentials-bearing material, even if the learning environment contains only disposable Secrets.
+
+<Scene id="m18-l03-backup-boundaries" />
+
+## Walkthrough: restore is an isolated reconstruction
+
+The m18 exercise captures a snapshot from the named kind control plane and copies it outside the cluster. Its optional offline rehearsal creates a separate `kv-recovery` cluster and refuses an existing target of that name. It stops the target API server and etcd static Pods, waits for their containers to exit, restores to a new data directory with the target's new single-member identity, retains the previous directory, and restarts the components. Read the downloaded recovery guide and script before running it.
+
+Restoring older state can move the apparent revision history backward for Kubernetes watchers. The documented etcd recovery approach includes revision bump and compaction marking so clients with newer observations are forced to rebuild their state rather than continue from incompatible history. This is an etcd recovery concern; Kubernetes resourceVersion is not a wall clock or a client-side restore control. Choose the bump using a reasoned bound and the tool version's instructions, not an arbitrary number copied without understanding.
+
+<Scene id="m18-l03-offline-restore" />
+
+This marker is a small API object you can inspect before and after the rehearsal. It is not an application backup artifact.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m18
+  namespace: kv-lab
+  labels:
+    lab: m18
+data:
+  marker: captured-before-disaster
+```
+
+```bash
+# In the downloaded m18 directory: captures to a private host directory.
+bash run.sh
+backup_dir=$(python3 backup-path.py m18)
+# Inspect RECOVERY.md and restore-offline.sh before this optional step.
+bash restore-offline.sh
+# Use the separate file produced by the recovery script, never your active context.
+KUBECONFIG="$backup_dir/recovery.kubeconfig" kubectl -n kv-lab get configmap m18 -o yaml
+# Discard only the isolated rehearsal target after inspection.
+KUBECONFIG="$backup_dir/recovery.kubeconfig" kind delete cluster --name kv-recovery
+```
+
+## Practice: verify the boundary of the rehearsal
+
+Use the [m18 local exercise](/labs/#m18) only when Docker has capacity for the additional control plane. Expect a snapshot file outside the source cluster, then the API marker accessible through the recovery kubeconfig after the optional restore. The snapshot may also contain source Node objects. Their appearance in the restored API does not prove that a working worker fleet, networking or storage was migrated. This exercise demonstrates API-data recovery into an isolated target, not a supported kind cluster migration.
+
+Write a recovery checklist that includes snapshot integrity, compatible etcd tools, encryption and trust assets, member topology, API readiness, controller startup and application verification. Keep source and target identities explicit in every command. For a stateful application, use its native consistent backup or a validated quiescing/snapshot protocol and test transaction-level correctness after restore. The m20 stateful capstone deliberately uses a quiescent single file so that boundary can be observed without claiming database consistency.
+
+## Pitfalls: restored intent can immediately act
+
+When controllers return, they reconcile the restored desired state. An old custom resource may cause an operator to recreate infrastructure, change replicas or remove objects according to old policy. Isolate the recovery target from production dependencies until ownership and intent are understood. Retain evidence of the previous environment and avoid letting the old and restored control planes compete over the same external resources.
+
+Do not restore over a live etcd data directory while its process is writing. Do not treat copying a volume directory as an application-consistent backup while the database is mutating it. A checksum can detect some file corruption but cannot prove transaction consistency or missing-key recovery. Restoration must be tested at the API and application levels appropriate to the recovery objective.
+
+## Check your understanding
+
+<details>
+
+<summary>The restored API contains the PVC and StatefulSet. Are database records restored?</summary>
+
+Not from that evidence. etcd restored their API objects, while database bytes belong to the storage and application backup path. Verify the recovered volume contents and application consistency using the database's supported recovery procedure.
+
+</details>
+
+Next, examine GitOps as another controller that may act after recovery. A source repository and a snapshot can describe different intended states, so startup ordering and ownership need an explicit plan.

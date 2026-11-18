@@ -1,0 +1,499 @@
+[
+  {
+    "id": "m05-l03-probes",
+    "title": "Three probes, three decisions",
+    "kind": "lifecycle",
+    "description": "Show startup gating, readiness eligibility, and liveness-driven local recovery.",
+    "assumption": "One ordinary container uses Always restart policy; Service routing behavior is the normal non-publishNotReadyAddresses case.",
+    "frames": [
+      {
+        "title": "Startup has its own budget",
+        "narration": "The startup probe runs while initialization proceeds. Readiness and liveness wait until it succeeds. Reaching its consecutive failure threshold makes the kubelet terminate and restart this container under the assumed Always policy.",
+        "nodes": [
+          {
+            "id": "kubelet",
+            "label": "Kubelet probes",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "startup",
+            "label": "Startup not yet successful",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "Application initializing",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "other",
+            "label": "Readiness/liveness gated",
+            "type": "object",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "startup checks",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "other",
+            "label": "wait until success",
+            "state": "blocked",
+            "from": "startup"
+          }
+        ]
+      },
+      {
+        "title": "Readiness controls eligibility",
+        "narration": "After startup succeeds, readiness can mark the Pod unready. The process stays running and endpoint readiness is updated asynchronously.",
+        "nodes": [
+          {
+            "id": "app",
+            "label": "Process still running",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "ready",
+            "label": "Readiness fails",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "Endpoint not ready",
+            "type": "service",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "propagate readiness",
+            "state": "active",
+            "from": "ready"
+          },
+          {
+            "to": "ready",
+            "label": "probe result",
+            "state": "active",
+            "from": "app"
+          }
+        ]
+      },
+      {
+        "title": "Liveness requests a restart",
+        "narration": "If liveness repeatedly fails beyond tolerance, the kubelet terminates and restarts this container under its restart policy. This is local recovery, not a new Pod UID.",
+        "nodes": [
+          {
+            "id": "live",
+            "label": "Liveness threshold reached",
+            "type": "object",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet restart action",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "New container attempt",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kubelet",
+            "label": "restart decision",
+            "state": "active",
+            "from": "live"
+          },
+          {
+            "to": "app",
+            "label": "terminate + restart",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m05-l03-probes-failure",
+        "label": "Failure: shared dependency used as liveness",
+        "description": "Failure: shared dependency used as liveness",
+        "frames": [
+          {
+            "title": "The database becomes unavailable",
+            "narration": "Every app process is alive, but a liveness check includes the same failed database dependency.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "App A alive",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "App B alive",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Database unavailable",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "liveness dependency",
+                "state": "blocked",
+                "from": "a"
+              },
+              {
+                "to": "db",
+                "label": "liveness dependency",
+                "state": "blocked",
+                "from": "b"
+              }
+            ]
+          },
+          {
+            "title": "Healthy processes restart together",
+            "narration": "The kubelets restart apps even though restarting cannot repair the database. Reconnection traffic can worsen recovery.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "A restarting",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "B restarting",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Same outage",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "reconnect storm",
+                "state": "blocked",
+                "from": "a"
+              },
+              {
+                "to": "db",
+                "label": "reconnect storm",
+                "state": "blocked",
+                "from": "b"
+              }
+            ]
+          },
+          {
+            "title": "Match signal to repair",
+            "narration": "Use liveness for locally recoverable stalls. Model dependency degradation with carefully designed readiness and application retry behavior.",
+            "nodes": [
+              {
+                "id": "live",
+                "label": "Local progress check",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "ready",
+                "label": "Traffic eligibility check",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "app",
+                "label": "Controlled dependency retries",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "app",
+                "label": "restart only when useful",
+                "state": "active",
+                "from": "live"
+              },
+              {
+                "to": "app",
+                "label": "temporary eligibility",
+                "state": "active",
+                "from": "ready"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m05-l03-termination",
+    "title": "Spend the grace period deliberately",
+    "kind": "lifecycle",
+    "description": "Trace deletion, endpoint eligibility changes, hooks, and bounded exit.",
+    "assumption": "Traffic propagation and kubelet termination happen concurrently; default graceful deletion is shown.",
+    "frames": [
+      {
+        "title": "Deletion begins two asynchronous paths",
+        "narration": "The Pod receives a deletion timestamp. Endpoint observers update terminating/readiness conditions while the kubelet begins local shutdown.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Pod terminating",
+            "type": "pod",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "Endpoint updates",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet shutdown",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "observe deletion",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "kubelet",
+            "label": "observe deletion",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      },
+      {
+        "title": "Run the hook inside the budget",
+        "narration": "A preStop hook asks nginx to quit gracefully. The hook consumes the existing grace period; it does not add unlimited draining time.",
+        "nodes": [
+          {
+            "id": "hook",
+            "label": "preStop: nginx -s quit",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "Stop accepting; finish work",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "budget",
+            "label": "30-second grace budget",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "graceful quit",
+            "state": "active",
+            "from": "hook"
+          },
+          {
+            "to": "hook",
+            "label": "time counted",
+            "state": "active",
+            "from": "budget"
+          }
+        ]
+      },
+      {
+        "title": "Exit before the deadline",
+        "narration": "The app finishes bounded work and exits. New traffic eligibility and existing connections depend on propagation and the actual networking implementation.",
+        "nodes": [
+          {
+            "id": "app",
+            "label": "Application exited",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "No ordinary new traffic",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Local cleanup",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "observe exit",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m05-l03-termination-failure",
+        "label": "Failure: hook consumes the whole grace period",
+        "description": "Failure: hook consumes the whole grace period",
+        "frames": [
+          {
+            "title": "A slow hook blocks progress",
+            "narration": "preStop sleeps for most of the grace period while the app still has work to drain.",
+            "nodes": [
+              {
+                "id": "hook",
+                "label": "Long-running preStop",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "app",
+                "label": "Requests still in flight",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "budget",
+                "label": "Grace time running down",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "hook",
+                "label": "same deadline",
+                "state": "active",
+                "from": "budget"
+              }
+            ]
+          },
+          {
+            "title": "Little shutdown time remains",
+            "narration": "The app receives its termination handling opportunity late. Requests may still be active when the grace budget expires.",
+            "nodes": [
+              {
+                "id": "app",
+                "label": "Insufficient drain time",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "budget",
+                "label": "Deadline reached",
+                "type": "object",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "app",
+                "label": "shutdown deadline",
+                "state": "active",
+                "from": "budget"
+              }
+            ]
+          },
+          {
+            "title": "Remaining processes can be killed",
+            "narration": "Design a bounded hook and a signal-aware application, then test real request draining against the actual load-balancer path.",
+            "nodes": [
+              {
+                "id": "app",
+                "label": "Forced termination risk",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "operator",
+                "label": "Measure and tune shutdown",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "app",
+                "label": "fix shutdown behavior",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

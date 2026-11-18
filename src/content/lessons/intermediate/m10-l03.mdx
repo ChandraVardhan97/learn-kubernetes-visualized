@@ -1,0 +1,128 @@
+---
+{
+  "lessonId": "m10-l03",
+  "title": "Termination, disruption, and drain",
+  "description": "Connect graceful shutdown to readiness, voluntary eviction budgets and node maintenance.",
+  "level": "intermediate",
+  "module": "m10",
+  "order": 3,
+  "minutes": 18,
+  "prerequisites": [
+    "m10-l02"
+  ],
+  "objectives": [
+    "Trace the Pod termination grace period and application signal handling",
+    "Calculate whether a PDB permits a voluntary eviction",
+    "Drain a node while recognizing failures that a PDB cannot prevent"
+  ],
+  "concepts": [
+    {
+      "id": "m10-l03-termination",
+      "title": "Graceful Pod termination",
+      "scene": "m10-l03-termination"
+    },
+    {
+      "id": "m10-l03-connection-draining",
+      "title": "Endpoint removal and connection draining",
+      "scene": "m10-l03-termination"
+    },
+    {
+      "id": "m10-l03-pdb",
+      "title": "PodDisruptionBudget",
+      "scene": "m10-l03-drain"
+    },
+    {
+      "id": "m10-l03-drain",
+      "title": "Node cordon and drain",
+      "scene": "m10-l03-drain"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Pod termination",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination"
+    },
+    {
+      "title": "Disruptions",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/disruptions/"
+    },
+    {
+      "title": "Safely drain a node",
+      "url": "https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/"
+    }
+  ],
+  "lab": "m10",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: shutdown is a coordinated transition with a deadline
+
+Deleting a Pod starts a **termination** workflow rather than instantly erasing every process and connection. The kubelet observes the grace period and arranges shutdown of containers. If configured, a `preStop` hook runs as part of that grace-period budget before the normal stop signal. The application should handle its stop signal, stop admitting new work, complete or hand off existing requests, and exit within the available time. If it does not exit in time, the runtime can force termination.
+
+Endpoint changes occur alongside shutdown, not as one atomic global switch. A terminating endpoint is marked accordingly and ordinarily not ready for new normal traffic; implementations may use additional serving information for graceful handling. Load balancers, proxies and clients learn these changes asynchronously, and existing connections may remain active. A fixed sleep in preStop can allow propagation time, but it is not a substitute for a correct application shutdown protocol or a guarantee about every network device.
+
+<Scene id="m10-l03-termination" />
+
+## Walkthrough: allow maintenance without removing too many healthy replicas
+
+A **PodDisruptionBudget**, or PDB, expresses the availability that should remain during covered voluntary disruptions. It is normally enforced through the Eviction API used by maintenance tooling. This PDB requires two healthy matching Pods to remain available.
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-availability
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api
+```
+
+With three healthy selected replicas, one voluntary eviction can usually proceed while respecting this requirement. Once only two healthy replicas remain, another covered eviction must wait until health recovers. The budget does not create replicas or enough capacity for replacements. A Deployment must maintain the intended count, and the scheduler needs somewhere eligible to put the replacements. A single-replica application with `minAvailable: 1` can block ordinary maintenance indefinitely unless another healthy instance can be introduced.
+
+A PDB does not prevent involuntary node crashes, kernel failures, storage failures or every direct Pod deletion. It is not a cap on unavailability caused by a Deployment's own rolling-update strategy. Rollout controls such as `maxUnavailable` and `maxSurge` govern that controller's behavior separately. Empty selectors in policy/v1 can select every Pod in the namespace, so keep the intended label boundary explicit.
+
+<Scene id="m10-l03-drain" />
+
+## Practice: read the budget before touching the node
+
+```bash
+kubectl get pdb api-availability
+kubectl describe pdb api-availability
+kubectl get pods -l app=api -o wide
+# Only use a disposable worker obtained from kubectl get nodes.
+kubectl cordon LAB_WORKER
+kubectl drain LAB_WORKER --ignore-daemonsets
+# After maintenance and health checks:
+kubectl uncordon LAB_WORKER
+```
+
+**Cordon** marks a node unschedulable for ordinary new placement. It does not move existing Pods. **Drain** attempts to remove appropriate workloads, normally using evictions that respect PDBs, while handling node-local and unmanaged workloads according to its flags. DaemonSet Pods are normally handled separately; `--ignore-daemonsets` permits drain to proceed without deleting those agents. Local `emptyDir` data and Pods without suitable controllers require conscious choices; do not add force or deletion flags merely to make an error disappear.
+
+Watch the replacement Pods, events and PDB `disruptionsAllowed` while a disposable node is drained in the [workload lab](/labs/#m10). If drain waits, first ask whether enough matching Pods are healthy, whether a replacement is Pending, and whether storage topology or affinity prevents relocation. A budget reporting zero permitted disruptions may be doing exactly what was requested. Increasing a timeout does not create missing capacity.
+
+## Pitfalls: a force action changes the safety boundary
+
+Direct deletion, forceful termination and bypassing eviction checks can trade a blocked maintenance operation for an availability or data-integrity problem. This is particularly serious for stateful members on unreachable nodes: API deletion is not evidence that the old process has stopped writing. Establish node fencing or application-specific ownership before allowing a replacement writer. Test shutdown with long-lived requests so you can observe both application completion and traffic removal rather than relying only on a Pod phase.
+
+## Check your understanding
+
+<details>
+<summary>Three replicas have minAvailable=2, but one is already unready. Can drain evict another healthy replica immediately?</summary>
+
+Normally no. Only two are currently healthy, so evicting another healthy member would violate the requested availability. Investigate and restore health or deliberately change the availability and maintenance plan. The PDB cannot compensate for the pre-existing unhealthy replica, and bypassing it removes the protection it was designed to provide.
+
+</details>
+
+Next, define who can perform these operations. Availability policy is meaningful only when identities and permissions also constrain who can change it or bypass its workflow.
+
+## Primary documentation
+
+- [Pod termination](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination)
+- [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/)
+- [Safely drain a node](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/)

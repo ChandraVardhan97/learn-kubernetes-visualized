@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: m12
+  namespace: kv-lab
+  labels:
+    lab: m12
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: m12
+  template:
+    metadata:
+      labels:
+        app: m12
+        lab: m12
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.28.0-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 250m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: m12
+  namespace: kv-lab
+  labels:
+    lab: m12
+spec:
+  selector:
+    app: wrong-label
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m12-client
+  namespace: kv-lab
+  labels:
+    lab: m12
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - sleep 3600
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: m12-crash
+  namespace: kv-lab
+  labels:
+    lab: m12
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: app
+      image: busybox:1.37.0
+      command:
+        - sh
+        - -c
+        - 'echo "fatal: missing required config" >&2; exit 1'

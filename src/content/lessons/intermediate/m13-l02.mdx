@@ -1,0 +1,142 @@
+---
+{
+  "lessonId": "m13-l02",
+  "title": "HPA, VPA, and node autoscaling",
+  "description": "Separate replica demand, per-Pod sizing and infrastructure capacity into interacting feedback loops.",
+  "level": "intermediate",
+  "module": "m13",
+  "order": 2,
+  "minutes": 18,
+  "prerequisites": [
+    "m13-l01"
+  ],
+  "objectives": [
+    "Calculate a simple HPA recommendation from metrics and requests",
+    "Explain VPA recommendations and update risks",
+    "Predict when node autoscaling can and cannot place Pending Pods"
+  ],
+  "concepts": [
+    {
+      "id": "m13-l02-hpa",
+      "title": "Horizontal Pod Autoscaler",
+      "scene": "m13-l02-hpa-loop"
+    },
+    {
+      "id": "m13-l02-scaling-metrics",
+      "title": "Metrics and request-based utilization",
+      "scene": "m13-l02-hpa-loop"
+    },
+    {
+      "id": "m13-l02-vpa",
+      "title": "Vertical Pod Autoscaler",
+      "scene": "m13-l02-capacity-loops"
+    },
+    {
+      "id": "m13-l02-node-autoscaling",
+      "title": "Node autoscaling",
+      "scene": "m13-l02-capacity-loops"
+    },
+    {
+      "id": "m13-l02-scaling-interactions",
+      "title": "Scaling feedback interactions",
+      "scene": "m13-l02-capacity-loops"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Horizontal Pod Autoscaling",
+      "url": "https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/"
+    },
+    {
+      "title": "Vertical Pod Autoscaler project",
+      "url": "https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler"
+    },
+    {
+      "title": "Node autoscaling",
+      "url": "https://kubernetes.io/docs/concepts/cluster-administration/node-autoscaling/"
+    }
+  ],
+  "lab": "m13",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: three actuators solve three different shortages
+
+The **Horizontal Pod Autoscaler**, or HPA, adjusts the desired replica count of a scalable workload using observed metrics. It adds more application instances, not more CPUs to an existing process or more worker nodes. **Vertical Pod Autoscaler**, or VPA, recommends or changes per-Pod resource requests according to its installed components and update policy. **Node autoscaling** changes infrastructure capacity through a provider integration. These loops can cooperate, but each has prerequisites and a different delay before useful capacity appears.
+
+The HPA controller is part of Kubernetes control-plane operation. Its metrics pipeline is not automatically present: resource metrics commonly require Metrics Server, while custom and external metrics require appropriate adapters. VPA and node autoscalers are separately installed add-ons with their own permissions, configuration and implementation capabilities. A local kind cluster should not be assumed to acquire new physical machines when an HPA creates more Pods.
+
+<Scene id="m13-l02-hpa-loop" />
+
+## Walkthrough: utilization has a denominator
+
+For a simple CPU utilization target, HPA compares observed CPU use to requested CPU. A Pod using 200m with a 400m CPU request has 50 percent utilization by that measure, even if it has a 1 CPU limit. Requests are therefore both placement inputs and part of the autoscaling signal. Missing requests for relevant containers can make the corresponding utilization undefined. Missing metrics, unready Pods, stabilization rules and tolerances make real recommendations more conservative than a single algebraic expression.
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+```
+
+In the simplified ratio calculation, desired replicas equal the current replicas multiplied by observed utilization divided by target utilization, rounded up. Four replicas at 80 percent against a 50 percent target yield a raw recommendation of seven. Bounds and controller behavior still apply. This calculation is a model of proportional demand, not a throughput guarantee; CPU scaling cannot repair a serialized database lock or an exhausted external API quota.
+
+<Scene id="m13-l02-capacity-loops" />
+
+## Practice: watch all checkpoints, not just the desired count
+
+```bash
+kubectl top pods -n learning
+kubectl apply -n learning -f api-hpa.yaml
+kubectl get hpa api -n learning -w
+kubectl describe hpa api -n learning
+kubectl get deployment api -n learning
+kubectl get pods -n learning -l app=api -o wide
+kubectl get events -n learning --sort-by=.metadata.creationTimestamp
+```
+
+Use a bounded load generator only in the [delivery and scaling lab](/labs/#m13), with explicit stop conditions. Expect `<unknown>` or metric-fetch errors if the required pipeline is absent. When desired replicas rise, check whether new Pods actually become scheduled and ready. Node startup, image pulls, application warm-up and downstream capacity can delay the useful result. A growing Pending count is a capacity or constraint signal, not proof that more replicas are already serving.
+
+VPA recommendation-only operation can help evaluate sizing before allowing automated changes. An enabled update mechanism may recreate Pods or use supported in-place resizing paths depending on the installed version, policy and platform capabilities. Review disruption behavior and PDB interactions. Avoid using HPA CPU-utilization targets and VPA CPU-request changes together without a deliberate design: changing the request changes HPA's denominator, potentially altering replica demand even when actual CPU use is unchanged.
+
+## Pitfalls: more nodes only help satisfiable demand
+
+Node autoscalers evaluate unschedulable demand and available infrastructure choices. A new suitable node can resolve insufficient CPU, but it cannot fix a typo in required affinity if no offered node type can satisfy it. Cloud quota, maximum pool size, unavailable instance types, storage topology and PDB-constrained scale-down also matter. Scale-down must consider workload relocation and disruption, not just a low utilization chart. Set cost and capacity bounds, and verify that newly added nodes have the required labels, taints and network/storage integrations.
+
+## Check your understanding
+
+<details>
+<summary>HPA changes desired replicas from two to six, but four Pods remain Pending. Has horizontal scaling finished?</summary>
+
+No. Replica demand increased, but useful serving capacity has not reached six. Inspect scheduling events, requests, affinity and storage constraints, then determine whether an installed node autoscaler can supply suitable nodes. The Deployment replica count is an intermediate control signal; readiness and actual application throughput establish the outcome.
+
+</details>
+
+Next, coordinate these loops with safe release configuration so that delivery does not repeatedly overwrite autoscaler decisions or consume all available rollout headroom.
+
+## Primary documentation
+
+- [Horizontal Pod Autoscaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)
+- [Vertical Pod Autoscaler project](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler)
+- [Node autoscaling](https://kubernetes.io/docs/concepts/cluster-administration/node-autoscaling/)

@@ -1,0 +1,459 @@
+[
+  {
+    "id": "m03-l03-context",
+    "title": "A context chooses three defaults",
+    "kind": "flow",
+    "description": "Map the friendly context name to endpoint, credentials, and namespace.",
+    "assumption": "One kubeconfig context is selected; credential values are intentionally never shown.",
+    "frames": [
+      {
+        "title": "Read the context mapping",
+        "narration": "The current context references a cluster definition, a user configuration, and a default namespace. Its display name alone proves none of these.",
+        "nodes": [
+          {
+            "id": "ctx",
+            "label": "Context: lab",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "cluster",
+            "label": "API endpoint",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "user",
+            "label": "Credential configuration",
+            "type": "actor",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "ns",
+            "label": "Namespace: training",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "cluster",
+            "label": "cluster reference",
+            "state": "active",
+            "from": "ctx"
+          },
+          {
+            "to": "user",
+            "label": "user reference",
+            "state": "active",
+            "from": "ctx"
+          },
+          {
+            "to": "ns",
+            "label": "namespace default",
+            "state": "active",
+            "from": "ctx"
+          }
+        ]
+      },
+      {
+        "title": "Make a scoped request",
+        "narration": "kubectl uses the selected endpoint and credentials, then addresses a namespaced resource in training. Server authorization still applies.",
+        "nodes": [
+          {
+            "id": "cli",
+            "label": "kubectl get pods",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "Chosen API endpoint",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "ns",
+            "label": "training Pods",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "authenticated request",
+            "state": "active",
+            "from": "cli"
+          },
+          {
+            "to": "ns",
+            "label": "namespace scope",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Override explicitly when needed",
+        "narration": "--context and -n make the destination visible for this command. They do not create namespaces or grant permissions.",
+        "nodes": [
+          {
+            "id": "cli",
+            "label": "Explicit context + namespace",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "Verified lab API",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "ns",
+            "label": "selection-lab",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "chosen endpoint",
+            "state": "active",
+            "from": "cli"
+          },
+          {
+            "to": "ns",
+            "label": "explicit request scope",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m03-l03-context-failure",
+        "label": "Failure: a reassuring name points elsewhere",
+        "description": "Failure: a reassuring name points elsewhere",
+        "frames": [
+          {
+            "title": "The context name looks safe",
+            "narration": "A local context is named training, but its referenced cluster definition points to a different endpoint.",
+            "nodes": [
+              {
+                "id": "ctx",
+                "label": "Name: training",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Unintended API endpoint",
+                "type": "control",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "actual cluster reference",
+                "state": "active",
+                "from": "ctx"
+              }
+            ]
+          },
+          {
+            "title": "A short command uses hidden defaults",
+            "narration": "A mutation without explicit verified targeting can reach the unintended cluster with the configured credentials.",
+            "nodes": [
+              {
+                "id": "cli",
+                "label": "kubectl apply",
+                "type": "actor",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Wrong cluster",
+                "type": "control",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "unintended request",
+                "state": "active",
+                "from": "cli"
+              }
+            ]
+          },
+          {
+            "title": "Verify mappings before writes",
+            "narration": "Inspect the endpoint and namespace, then use an explicit verified context. Renaming a context does not change its server mapping.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Inspect context mapping",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Verified lab destination",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "read-only confirmation",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m03-l03-evidence",
+    "title": "Choose a tool for the question",
+    "kind": "flow",
+    "description": "Separate object state, schema, events, and process output.",
+    "assumption": "One Pod is the investigation target; commands use the already verified context.",
+    "frames": [
+      {
+        "title": "Ask what exists",
+        "narration": "get returns the live API representation or summary. It answers which object and state the API currently reports.",
+        "nodes": [
+          {
+            "id": "cli",
+            "label": "kubectl get pod",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "Live Pod object",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "read current object",
+            "state": "active",
+            "from": "cli"
+          }
+        ]
+      },
+      {
+        "title": "Ask why startup stalled",
+        "narration": "describe combines fields and events. explain reads schema documentation rather than the running application.",
+        "nodes": [
+          {
+            "id": "describe",
+            "label": "kubectl describe",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "events",
+            "label": "Pod events + conditions",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "explain",
+            "label": "kubectl explain",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "schema",
+            "label": "API field schema",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "events",
+            "label": "inspect symptoms",
+            "state": "active",
+            "from": "describe"
+          },
+          {
+            "to": "schema",
+            "label": "learn field meaning",
+            "state": "active",
+            "from": "explain"
+          }
+        ]
+      },
+      {
+        "title": "Ask what the process emitted",
+        "narration": "logs reads container output. Select the container and use previous when inspecting the last terminated instance.",
+        "nodes": [
+          {
+            "id": "cli",
+            "label": "kubectl logs -c web",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "output",
+            "label": "Container stdout/stderr",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Target Pod",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "output",
+            "label": "process emits",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "cli",
+            "label": "read output",
+            "state": "active",
+            "from": "output"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m03-l03-evidence-failure",
+        "label": "Failure: empty listing from the wrong scope",
+        "description": "Failure: empty listing from the wrong scope",
+        "frames": [
+          {
+            "title": "Change the namespace default",
+            "narration": "The context now defaults to selection-lab, while the target Pod lives in path-lab.",
+            "nodes": [
+              {
+                "id": "ctx",
+                "label": "Default: selection-lab",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "path-lab / path-demo",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Get returns no matching objects",
+            "narration": "The request succeeds but returns an empty set in selection-lab. This does not prove the path-lab object was deleted.",
+            "nodes": [
+              {
+                "id": "cli",
+                "label": "get pods: empty set",
+                "type": "actor",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "ns",
+                "label": "selection-lab scope",
+                "type": "object",
+                "state": "idle",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Still in path-lab",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "ns",
+                "label": "request scope",
+                "state": "active",
+                "from": "cli"
+              }
+            ]
+          },
+          {
+            "title": "Address the original namespace",
+            "narration": "Query path-lab explicitly with the verified context. Preserve resource scope as part of every diagnosis.",
+            "nodes": [
+              {
+                "id": "cli",
+                "label": "get pods -n path-lab",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "path-demo visible",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "correctly scoped read",
+                "state": "active",
+                "from": "cli"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

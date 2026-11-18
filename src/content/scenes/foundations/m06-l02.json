@@ -1,0 +1,473 @@
+[
+  {
+    "id": "m06-l02-dns",
+    "title": "A short name depends on the caller namespace",
+    "kind": "flow",
+    "description": "Resolve a normal ClusterIP Service name through Pod resolver search domains.",
+    "assumption": "The diagram uses the common cluster.local domain for illustration; the actual cluster domain is configurable.",
+    "frames": [
+      {
+        "title": "The caller uses a short name",
+        "narration": "A Pod in training queries catalog. Its resolver search domains include training.svc.cluster.local.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Client Pod in training",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "resolver",
+            "label": "Pod resolver search list",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "dns",
+            "label": "Cluster DNS",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "resolver",
+            "label": "catalog",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "dns",
+            "label": "catalog.training.svc.cluster.local",
+            "state": "active",
+            "from": "resolver"
+          }
+        ]
+      },
+      {
+        "title": "DNS returns the Service frontend",
+        "narration": "For a normal ClusterIP Service, the answer contains the Service virtual IP. DNS has not tested the backend HTTP application.",
+        "nodes": [
+          {
+            "id": "dns",
+            "label": "Cluster DNS",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "svc",
+            "label": "catalog ClusterIP",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "client",
+            "label": "Client receives address",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "dns",
+            "label": "Service discovery data",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "client",
+            "label": "address answer",
+            "state": "active",
+            "from": "dns"
+          }
+        ]
+      },
+      {
+        "title": "Connection follows resolution",
+        "narration": "The client separately connects to the returned IP and Service port. Endpoint readiness and forwarding now determine the usable backend path.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "HTTP client",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "svc",
+            "label": "ClusterIP + port",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "backend",
+            "label": "Ready backend Pod",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "svc",
+            "label": "TCP connection",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "backend",
+            "label": "data-plane forwarding",
+            "state": "active",
+            "from": "svc"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m06-l02-dns-failure",
+        "label": "Failure: short name looks in another namespace",
+        "description": "Failure: short name looks in another namespace",
+        "frames": [
+          {
+            "title": "Move only the caller",
+            "narration": "The client now runs in test but catalog still exists in training. The short name is unchanged.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Client Pod in test",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "training / catalog",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "The search path changes the question",
+            "narration": "catalog expands toward catalog.test.svc.cluster.local. It can fail or resolve a different Service in test.",
+            "nodes": [
+              {
+                "id": "query",
+                "label": "catalog.test.svc.cluster.local",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "dns",
+                "label": "No intended answer",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "training / catalog unchanged",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "dns",
+                "label": "wrong namespace question",
+                "state": "active",
+                "from": "query"
+              }
+            ]
+          },
+          {
+            "title": "Address the intended namespace",
+            "narration": "Use catalog.training or the verified full Service domain. The name should encode the scope the application actually intends.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Query catalog.training",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "training / catalog",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "svc",
+                "label": "namespace-aware discovery",
+                "state": "active",
+                "from": "client"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m06-l02-exposure",
+    "title": "Internal and external frontends have different owners",
+    "kind": "flow",
+    "description": "Compare ClusterIP, NodePort, and provider-backed LoadBalancer access.",
+    "assumption": "A common LoadBalancer-to-NodePort path is shown; implementations may instead target Pods directly.",
+    "frames": [
+      {
+        "title": "ClusterIP serves internal clients",
+        "narration": "A cluster workload can use the Service virtual IP when the network implementation supports that path. A laptop does not automatically have that route.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "In-cluster caller",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "svc",
+            "label": "ClusterIP:8080",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Backend Pod:80",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "svc",
+            "label": "internal path",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "pod",
+            "label": "forward",
+            "state": "active",
+            "from": "svc"
+          }
+        ]
+      },
+      {
+        "title": "NodePort adds a node entry point",
+        "narration": "An external caller needs a reachable node address and allocated node port. Network rules and local VM/container boundaries still apply.",
+        "nodes": [
+          {
+            "id": "external",
+            "label": "External caller",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "node",
+            "label": "Reachable node:nodePort",
+            "type": "node",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Selected backend Pod",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "node",
+            "label": "node network route",
+            "state": "active",
+            "from": "external"
+          },
+          {
+            "to": "pod",
+            "label": "Service forwarding",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      },
+      {
+        "title": "LoadBalancer requires an implementation",
+        "narration": "A provider/controller provisions an external frontend and connects it to a supported backend path. Creating the Service object alone is not provisioning software.",
+        "nodes": [
+          {
+            "id": "controller",
+            "label": "Load-balancer controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "lb",
+            "label": "External frontend",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "node",
+            "label": "Node entry/backend path",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Backend Pod",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "lb",
+            "label": "provision",
+            "state": "active",
+            "from": "controller"
+          },
+          {
+            "to": "node",
+            "label": "implementation routing",
+            "state": "active",
+            "from": "lb"
+          },
+          {
+            "to": "pod",
+            "label": "forward",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m06-l02-exposure-failure",
+        "label": "Failure: no LoadBalancer implementation is installed",
+        "description": "Failure: no LoadBalancer implementation is installed",
+        "frames": [
+          {
+            "title": "The Service request is accepted",
+            "narration": "A local cluster accepts type LoadBalancer as valid API configuration. Internal Service fields can still be allocated.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "LoadBalancer Service",
+                "type": "service",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "API accepts object",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "svc",
+                "label": "persist request",
+                "state": "active",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "External provisioning never occurs",
+            "narration": "No compatible controller provisions an external address. The internal workload can remain healthy while the external address is pending.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "External address pending",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Internal backend healthy",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "controller",
+                "label": "Implementation absent",
+                "type": "control",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "svc",
+                "label": "no provisioning",
+                "state": "blocked",
+                "from": "controller"
+              }
+            ]
+          },
+          {
+            "title": "Use the environment\u2019s supported access path",
+            "narration": "Install/configure the appropriate implementation through a deliberate platform setup, or use a local debugging tunnel for the exercise.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "kubectl port-forward",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Selected Pod",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "temporary debugging tunnel",
+                "state": "active",
+                "from": "client"
+              }
+            ],
+            "code": "kubectl port-forward service/service-demo 8080:8080"
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,715 @@
+[
+  {
+    "title": "A scheduling budget is not a usage meter",
+    "kind": "scheduling",
+    "description": "Trace a 200m request against allocatable CPU and then follow runtime CPU and memory enforcement.",
+    "assumption": "Single ordinary container on Linux; reservations and init-container accounting are omitted.",
+    "frames": [
+      {
+        "title": "Filter by requests",
+        "narration": "Node A has only 100m of its scheduling budget left; low observed CPU usage cannot make the 200m request fit.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New Pod",
+            "detail": "CPU request 200m; memory request 64Mi",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Node A",
+            "detail": "2 CPU allocatable; 1.9 CPU requested",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Node B",
+            "detail": "2 CPU allocatable; 1.5 CPU requested",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "CPU cgroup",
+            "detail": "CPU limit 500m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Memory cgroup",
+            "detail": "Memory limit 128Mi",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "200m > 100m",
+            "state": "blocked"
+          }
+        ],
+        "code": "kubectl describe pod resource-demo"
+      },
+      {
+        "title": "Bind to Node B",
+        "narration": "Node B has 500m unrequested, so this resource check passes and the scheduler may bind the Pod there.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New Pod",
+            "detail": "CPU request 200m; memory request 64Mi",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Node A",
+            "detail": "2 CPU allocatable; 1.9 CPU requested",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Node B",
+            "detail": "2 CPU allocatable; 1.5 CPU requested",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "CPU cgroup",
+            "detail": "CPU limit 500m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Memory cgroup",
+            "detail": "Memory limit 128Mi",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "200m fits",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Throttle CPU demand",
+        "narration": "A bound container may burst above its request. Sustained demand beyond its CPU limit can be throttled by the runtime boundary.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New Pod",
+            "detail": "CPU request 200m; memory request 64Mi",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Node A",
+            "detail": "2 CPU allocatable; 1.9 CPU requested",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Node B",
+            "detail": "2 CPU allocatable; 1.5 CPU requested",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "CPU cgroup",
+            "detail": "CPU limit 500m",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "4",
+            "label": "Memory cgroup",
+            "detail": "Memory limit 128Mi",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "CPU accounting",
+            "state": "active"
+          }
+        ],
+        "code": "limits:\n  cpu: 500m"
+      },
+      {
+        "title": "Memory allocation fails",
+        "narration": "A memory limit is a separate boundary. An allocation that cannot be satisfied within the cgroup may trigger an OOM kill.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "New Pod",
+            "detail": "CPU request 200m; memory request 64Mi",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Node A",
+            "detail": "2 CPU allocatable; 1.9 CPU requested",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Node B",
+            "detail": "2 CPU allocatable; 1.5 CPU requested",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "CPU cgroup",
+            "detail": "CPU limit 500m",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Memory cgroup",
+            "detail": "Memory limit 128Mi",
+            "type": "object",
+            "state": "failed"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "4",
+            "label": "allocation",
+            "state": "active"
+          }
+        ],
+        "code": "limits:\n  memory: 128Mi"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No node fits",
+        "description": "Both suitable nodes have less than 200m unrequested CPU.",
+        "frames": [
+          {
+            "title": "Budget exhausted",
+            "narration": "Existing admitted requests consume the placement budget on both nodes.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "New Pod",
+                "detail": "CPU request 200m; memory request 64Mi",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Node A",
+                "detail": "2 CPU allocatable; 1.9 CPU requested",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Node B",
+                "detail": "2 CPU allocatable; 1.9 CPU requested",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "CPU cgroup",
+                "detail": "CPU limit 500m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Memory cgroup",
+                "detail": "Memory limit 128Mi",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "insufficient CPU",
+                "state": "blocked"
+              },
+              {
+                "from": "0",
+                "to": "2",
+                "label": "insufficient CPU",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Pending is expected",
+            "narration": "The scheduler does not launch a container on an unsuitable node, so no runtime CPU limit can repair this placement failure.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "New Pod",
+                "detail": "CPU request 200m; memory request 64Mi",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Node A",
+                "detail": "2 CPU allocatable; 1.9 CPU requested",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Node B",
+                "detail": "2 CPU allocatable; 1.9 CPU requested",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "CPU cgroup",
+                "detail": "CPU limit 500m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Memory cgroup",
+                "detail": "Memory limit 128Mi",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [],
+            "code": "kubectl get events --field-selector reason=FailedScheduling"
+          },
+          {
+            "title": "Repair the right boundary",
+            "narration": "Add suitable capacity or deliberately revise requests; changing only a limit does not make the 200m request fit.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "New Pod",
+                "detail": "CPU request 200m; memory request 64Mi",
+                "type": "pod",
+                "state": "active"
+              },
+              {
+                "id": "1",
+                "label": "Node A",
+                "detail": "2 CPU allocatable; 1.9 CPU requested",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Node B",
+                "detail": "2 CPU allocatable; 1.5 CPU requested",
+                "type": "node",
+                "state": "ready"
+              },
+              {
+                "id": "3",
+                "label": "CPU cgroup",
+                "detail": "CPU limit 500m",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Memory cgroup",
+                "detail": "Memory limit 128Mi",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "2",
+                "label": "capacity added",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m07-l01-accounting"
+  },
+  {
+    "title": "Classify configuration before diagnosing pressure",
+    "kind": "policy",
+    "description": "Compare Guaranteed, Burstable and BestEffort configuration and their relationship to node pressure.",
+    "assumption": "Uses ordinary per-container CPU and memory fields; QoS is not a complete eviction algorithm.",
+    "frames": [
+      {
+        "title": "Guaranteed is configuration",
+        "narration": "Both resource pairs must be present and equal for every container in this simplified configuration.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Guaranteed Pod",
+            "detail": "Every CPU/memory request equals its limit",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Burstable Pod",
+            "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "BestEffort Pod",
+            "detail": "No CPU/memory requests or limits",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node pressure",
+            "detail": "Priority and usage relative to requests matter",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Own memory limit",
+            "detail": "Can still kill a Guaranteed container",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [],
+        "code": "requests: {cpu: 250m, memory: 128Mi}\nlimits: {cpu: 250m, memory: 128Mi}"
+      },
+      {
+        "title": "Burstable can use spare CPU",
+        "narration": "Different request and limit values make this example Burstable; it can consume spare CPU within its runtime boundary.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Guaranteed Pod",
+            "detail": "Every CPU/memory request equals its limit",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Burstable Pod",
+            "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "BestEffort Pod",
+            "detail": "No CPU/memory requests or limits",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node pressure",
+            "detail": "Priority and usage relative to requests matter",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Own memory limit",
+            "detail": "Can still kill a Guaranteed container",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [],
+        "code": "requests: {cpu: 100m, memory: 64Mi}\nlimits: {cpu: 500m, memory: 128Mi}"
+      },
+      {
+        "title": "BestEffort has no resource floor",
+        "narration": "A Pod without these requests and limits is BestEffort. It has no such scheduler reservation and can be vulnerable under pressure.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Guaranteed Pod",
+            "detail": "Every CPU/memory request equals its limit",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Burstable Pod",
+            "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "BestEffort Pod",
+            "detail": "No CPU/memory requests or limits",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "Node pressure",
+            "detail": "Priority and usage relative to requests matter",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "4",
+            "label": "Own memory limit",
+            "detail": "Can still kill a Guaranteed container",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "competes for memory",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Pressure is more than class",
+        "narration": "Eviction evaluates pressure signals, priority and usage relative to requests. A class is useful context rather than immunity.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Guaranteed Pod",
+            "detail": "Every CPU/memory request equals its limit",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Burstable Pod",
+            "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "BestEffort Pod",
+            "detail": "No CPU/memory requests or limits",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "Node pressure",
+            "detail": "Priority and usage relative to requests matter",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Own memory limit",
+            "detail": "Can still kill a Guaranteed container",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "1",
+            "label": "evaluate usage",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "2",
+            "label": "evaluate usage",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Guaranteed still OOMs",
+        "description": "A Guaranteed container exceeds its own memory limit.",
+        "frames": [
+          {
+            "title": "Reservation admitted",
+            "narration": "Matching request and limit values classify the Pod as Guaranteed.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Guaranteed Pod",
+                "detail": "Every CPU/memory request equals its limit",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Burstable Pod",
+                "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "BestEffort Pod",
+                "detail": "No CPU/memory requests or limits",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node pressure",
+                "detail": "Priority and usage relative to requests matter",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Own memory limit",
+                "detail": "Can still kill a Guaranteed container",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Own limit reached",
+            "narration": "The memory limit still applies to this container; QoS does not enlarge it.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Guaranteed Pod",
+                "detail": "Every CPU/memory request equals its limit",
+                "type": "pod",
+                "state": "failed"
+              },
+              {
+                "id": "1",
+                "label": "Burstable Pod",
+                "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "BestEffort Pod",
+                "detail": "No CPU/memory requests or limits",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node pressure",
+                "detail": "Priority and usage relative to requests matter",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Own memory limit",
+                "detail": "Can still kill a Guaranteed container",
+                "type": "object",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "allocation denied",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect termination",
+            "narration": "An OOMKilled last state and restart count explain runtime failure without changing the QoS classification.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Guaranteed Pod",
+                "detail": "Every CPU/memory request equals its limit",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Burstable Pod",
+                "detail": "CPU/memory request or limit set; Guaranteed rule fails",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "BestEffort Pod",
+                "detail": "No CPU/memory requests or limits",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node pressure",
+                "detail": "Priority and usage relative to requests matter",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Own memory limit",
+                "detail": "Can still kill a Guaranteed container",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "0",
+                "label": "restart policy",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod resource-demo"
+          }
+        ]
+      }
+    ],
+    "id": "m07-l01-qos"
+  }
+]

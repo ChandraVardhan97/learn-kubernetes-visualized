@@ -1,0 +1,764 @@
+[
+  {
+    "title": "Revision, render, diff, sync, health",
+    "kind": "flow",
+    "description": "A completed sync does not prove ready endpoints or successful application requests.",
+    "assumption": "Argo CD is an optional add-on; the mandatory local exercise models the ownership loop with kubectl.",
+    "frames": [
+      {
+        "title": "Render a known revision",
+        "narration": "The delivery controller obtains source and constructs desired Kubernetes resources.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "Reviewed Git revision",
+            "type": "storage",
+            "detail": "Desired source",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "render",
+            "label": "Render manifests",
+            "type": "control",
+            "detail": "Helm / Kustomize / YAML",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "diff",
+            "label": "Compare live state",
+            "type": "control",
+            "detail": "Detect declared drift",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "apply",
+            "label": "Sync operation",
+            "type": "control",
+            "detail": "Write selected resources",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "health",
+            "label": "Workload health",
+            "type": "service",
+            "detail": "Separate readiness evidence",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "render",
+            "label": "fetch revision",
+            "state": "active",
+            "from": "git"
+          },
+          {
+            "to": "diff",
+            "label": "desired resources",
+            "state": "active",
+            "from": "render"
+          }
+        ]
+      },
+      {
+        "title": "Compare and act by policy",
+        "narration": "A difference is evaluated under configured sync, self-heal and prune behavior rather than assumed to trigger every action.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "Reviewed Git revision",
+            "type": "storage",
+            "detail": "Desired source",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "render",
+            "label": "Render manifests",
+            "type": "control",
+            "detail": "Helm / Kustomize / YAML",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "diff",
+            "label": "Compare live state",
+            "type": "control",
+            "detail": "Detect declared drift",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "apply",
+            "label": "Sync operation",
+            "type": "control",
+            "detail": "Write selected resources",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "health",
+            "label": "Workload health",
+            "type": "service",
+            "detail": "Separate readiness evidence",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "apply",
+            "label": "policy permits sync",
+            "state": "active",
+            "from": "diff"
+          }
+        ]
+      },
+      {
+        "title": "Evaluate health separately",
+        "narration": "A completed sync does not prove ready endpoints or successful application requests.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "Reviewed Git revision",
+            "type": "storage",
+            "detail": "Desired source",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "render",
+            "label": "Render manifests",
+            "type": "control",
+            "detail": "Helm / Kustomize / YAML",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "diff",
+            "label": "Compare live state",
+            "type": "control",
+            "detail": "Detect declared drift",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "apply",
+            "label": "Sync operation",
+            "type": "control",
+            "detail": "Write selected resources",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "health",
+            "label": "Workload health",
+            "type": "service",
+            "detail": "Separate readiness evidence",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "health",
+            "label": "observe resulting workload",
+            "state": "active",
+            "from": "apply"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Source cannot render",
+        "description": "A source or rendering failure prevents new desired manifests reaching the API.",
+        "frames": [
+          {
+            "title": "Revision is selected",
+            "narration": "The controller knows which source revision it intends to deploy.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "Reviewed Git revision",
+                "type": "storage",
+                "detail": "Desired source",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "render",
+                "label": "Render manifests",
+                "type": "control",
+                "detail": "Helm / Kustomize / YAML",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "diff",
+                "label": "Compare live state",
+                "type": "control",
+                "detail": "Detect declared drift",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "apply",
+                "label": "Sync operation",
+                "type": "control",
+                "detail": "Write selected resources",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "health",
+                "label": "Workload health",
+                "type": "service",
+                "detail": "Separate readiness evidence",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "render",
+                "label": "fetch revision",
+                "state": "active",
+                "from": "git"
+              }
+            ]
+          },
+          {
+            "title": "Render fails",
+            "narration": "A missing value or invalid source prevents a valid desired manifest set.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "Reviewed Git revision",
+                "type": "storage",
+                "detail": "Desired source",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "render",
+                "label": "Render manifests",
+                "type": "control",
+                "detail": "No valid desired manifests produced",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "diff",
+                "label": "Compare live state",
+                "type": "control",
+                "detail": "Detect declared drift",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "apply",
+                "label": "Sync operation",
+                "type": "control",
+                "detail": "Write selected resources",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "health",
+                "label": "Workload health",
+                "type": "service",
+                "detail": "Separate readiness evidence",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "diff",
+                "label": "render failed",
+                "state": "blocked",
+                "from": "render"
+              }
+            ]
+          },
+          {
+            "title": "Live resources may keep serving",
+            "narration": "Existing workloads can remain healthy while delivery is blocked; diagnose source rendering rather than restarting Pods.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "Reviewed Git revision",
+                "type": "storage",
+                "detail": "Desired source",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "render",
+                "label": "Render manifests",
+                "type": "control",
+                "detail": "Helm / Kustomize / YAML",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "diff",
+                "label": "Compare live state",
+                "type": "control",
+                "detail": "Detect declared drift",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "apply",
+                "label": "Sync operation",
+                "type": "control",
+                "detail": "Write selected resources",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "health",
+                "label": "Workload health",
+                "type": "service",
+                "detail": "Existing workloads may still serve",
+                "x": 290,
+                "y": 230,
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "to": "apply",
+                "label": "policy permits sync",
+                "state": "blocked",
+                "from": "diff"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m19-l01-gitops-loop"
+  },
+  {
+    "title": "Drift repair includes an ownership decision",
+    "kind": "ownership",
+    "description": "The lab intentionally uses force-conflicts for this disposable field, restoring the source value and ownership contract.",
+    "assumption": "The drift exercise uses an ordinary patch; conflicting SSA by a second manager is a separate API operation.",
+    "frames": [
+      {
+        "title": "Declare the source value",
+        "narration": "kv-gitops applies data.release as git-declared.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops manager",
+            "type": "actor",
+            "detail": "Declares release field",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "human",
+            "label": "Manual patch",
+            "type": "actor",
+            "detail": "Changes live release",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap m19",
+            "type": "object",
+            "detail": "Observed data.release",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "fields",
+            "label": "managedFields",
+            "type": "object",
+            "detail": "Changed-field ownership",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "repair",
+            "label": "Explicit takeover",
+            "type": "control",
+            "detail": "Force only this lab field",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cm",
+            "label": "initial apply",
+            "state": "active",
+            "from": "git"
+          }
+        ]
+      },
+      {
+        "title": "Observe manual drift",
+        "narration": "A patch changes the field and may transfer ownership; inspect both live value and managedFields.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops manager",
+            "type": "actor",
+            "detail": "Declares release field",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "human",
+            "label": "Manual patch",
+            "type": "actor",
+            "detail": "Changes live release",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap m19",
+            "type": "object",
+            "detail": "Observed data.release",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "fields",
+            "label": "managedFields",
+            "type": "object",
+            "detail": "Changed-field ownership",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "repair",
+            "label": "Explicit takeover",
+            "type": "control",
+            "detail": "Force only this lab field",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cm",
+            "label": "introduce drift",
+            "state": "active",
+            "from": "human"
+          },
+          {
+            "to": "fields",
+            "label": "inspect ownership",
+            "state": "active",
+            "from": "cm"
+          }
+        ]
+      },
+      {
+        "title": "Restore with explicit authority",
+        "narration": "The lab intentionally uses force-conflicts for this disposable field, restoring the source value and ownership contract.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops manager",
+            "type": "actor",
+            "detail": "Declares release field",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "human",
+            "label": "Manual patch",
+            "type": "actor",
+            "detail": "Changes live release",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap m19",
+            "type": "object",
+            "detail": "Observed data.release",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "fields",
+            "label": "managedFields",
+            "type": "object",
+            "detail": "Changed-field ownership",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "repair",
+            "label": "Explicit takeover",
+            "type": "control",
+            "detail": "Force only this lab field",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cm",
+            "label": "restore declaration",
+            "state": "active",
+            "from": "repair"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Controllers fight over the same field",
+        "description": "Repeated takeovers can produce oscillation instead of convergence.",
+        "frames": [
+          {
+            "title": "Two managers declare replicas",
+            "narration": "A delivery controller and autoscaler both insist on different values.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "Delivery controller",
+                "type": "actor",
+                "detail": "Declares spec.replicas",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "Autoscaler",
+                "type": "actor",
+                "detail": "Writes a different replica target",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cm",
+                "label": "Deployment scale",
+                "type": "object",
+                "detail": "Two writers disagree on replica count",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "fields",
+                "label": "Declared ownership",
+                "type": "object",
+                "detail": "Decide who controls replica count",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "repair",
+                "label": "Delegate scaling",
+                "type": "control",
+                "detail": "Remove replicas from the delivery declaration",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cm",
+                "label": "declares fixed replica count",
+                "state": "active",
+                "from": "git"
+              },
+              {
+                "to": "cm",
+                "label": "writes demand-based replica count",
+                "state": "active",
+                "from": "human"
+              }
+            ]
+          },
+          {
+            "title": "Each recovery undoes the other",
+            "narration": "Broad forcing repeatedly changes live state and ownership.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "Delivery controller",
+                "type": "actor",
+                "detail": "Declares spec.replicas",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "Autoscaler",
+                "type": "actor",
+                "detail": "Writes a different replica target",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cm",
+                "label": "Deployment scale",
+                "type": "object",
+                "detail": "Two writers disagree on replica count",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "fields",
+                "label": "Declared ownership",
+                "type": "object",
+                "detail": "Decide who controls replica count",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "repair",
+                "label": "Delegate scaling",
+                "type": "control",
+                "detail": "Remove replicas from the delivery declaration",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "fields",
+                "label": "inspect competing writes",
+                "state": "active",
+                "from": "cm"
+              }
+            ]
+          },
+          {
+            "title": "Split responsibilities",
+            "narration": "Remove the field from one declaration or define a supported collaboration policy rather than forcing indefinitely.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "Delivery controller",
+                "type": "actor",
+                "detail": "Declares spec.replicas",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "Autoscaler",
+                "type": "actor",
+                "detail": "Writes a different replica target",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cm",
+                "label": "Deployment scale",
+                "type": "object",
+                "detail": "Two writers disagree on replica count",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "fields",
+                "label": "Declared ownership",
+                "type": "object",
+                "detail": "Decide who controls replica count",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "repair",
+                "label": "Delegate scaling",
+                "type": "control",
+                "detail": "Remove replicas from the delivery declaration",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cm",
+                "label": "one owner of replica count",
+                "state": "active",
+                "from": "repair"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m19-l01-gitops-field-takeover"
+  }
+]

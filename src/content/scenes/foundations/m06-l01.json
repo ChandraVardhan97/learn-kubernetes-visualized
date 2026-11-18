@@ -1,0 +1,492 @@
+[
+  {
+    "id": "m06-l01-selection",
+    "title": "Service selection becomes EndpointSlice state",
+    "kind": "ownership",
+    "description": "Follow Pod labels and readiness into controller-maintained backend records.",
+    "assumption": "A normal selector-based Service is shown with publishNotReadyAddresses omitted.",
+    "frames": [
+      {
+        "title": "Select matching Pods in the namespace",
+        "narration": "The Service selector app=service-demo matches A and B. A healthy Pod with another label is outside this backend set.",
+        "nodes": [
+          {
+            "id": "svc",
+            "label": "Service app=service-demo",
+            "type": "service",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "Pod A: matching, ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Pod B: matching, unready",
+            "type": "pod",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "other",
+            "label": "Pod C: other label",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "selector match",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "b",
+            "label": "selector match",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "other",
+            "label": "not selected",
+            "state": "blocked",
+            "from": "svc"
+          }
+        ]
+      },
+      {
+        "title": "Record endpoint addresses and conditions",
+        "narration": "The EndpointSlice controller maintains addresses, target ports, and readiness conditions. An unready address can remain represented with ready false.",
+        "nodes": [
+          {
+            "id": "controller",
+            "label": "EndpointSlice controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "A ready=true; B ready=false",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "svc",
+            "label": "Service identity",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "maintain backend records",
+            "state": "active",
+            "from": "controller"
+          },
+          {
+            "to": "slice",
+            "label": "associated Service",
+            "state": "active",
+            "from": "svc"
+          }
+        ]
+      },
+      {
+        "title": "Update records as Pods are replaced",
+        "narration": "When a replacement Pod gets a new IP and becomes ready, the endpoint records change. The Service frontend remains stable.",
+        "nodes": [
+          {
+            "id": "svc",
+            "label": "Same Service ClusterIP",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "Updated ready backend IPs",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "Replacement Pod D",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "new address/condition",
+            "state": "active",
+            "from": "new"
+          },
+          {
+            "to": "slice",
+            "label": "current backend set",
+            "state": "active",
+            "from": "svc"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m06-l01-selection-failure",
+        "label": "Failure: selector matches nothing",
+        "description": "Failure: selector matches nothing",
+        "frames": [
+          {
+            "title": "The Service selector is wrong",
+            "narration": "The Service says app=typo while all intended Pods use app=service-demo.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "Selector app=typo",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Pod app=service-demo",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "label mismatch",
+                "state": "blocked",
+                "from": "svc"
+              }
+            ]
+          },
+          {
+            "title": "The frontend exists without usable backends",
+            "narration": "ClusterIP allocation succeeds independently of the selector. EndpointSlices provide no matching ready addresses for this request path.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "ClusterIP still exists",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "slice",
+                "label": "No matching ready backend",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "slice",
+                "label": "empty target set",
+                "state": "active",
+                "from": "svc"
+              }
+            ]
+          },
+          {
+            "title": "Inspect actual Pod labels and repair the selector",
+            "narration": "Correct only the intended selection, then wait for endpoint records to reconcile and test from the caller.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Compare selector + labels",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "Corrected selector",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "slice",
+                "label": "Ready backend appears",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "svc",
+                "label": "targeted correction",
+                "state": "active",
+                "from": "operator"
+              },
+              {
+                "to": "slice",
+                "label": "controller reconciliation",
+                "state": "active",
+                "from": "svc"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m06-l01-dataplane",
+    "title": "A virtual frontend programs a data path",
+    "kind": "flow",
+    "description": "Separate API objects from node forwarding and actual backend listeners.",
+    "assumption": "One common node Service implementation is represented abstractly; no particular proxy mode is assumed.",
+    "frames": [
+      {
+        "title": "Configure frontend and target ports",
+        "narration": "Service port 8080 is for clients. targetPort http resolves to Pod port 80, where nginx actually listens.",
+        "nodes": [
+          {
+            "id": "svc",
+            "label": "ClusterIP:8080",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "Backend Pod IP:80",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "nginx listener :80",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "configured mapping",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "pod",
+            "label": "endpoint address + port",
+            "state": "active",
+            "from": "slice"
+          }
+        ]
+      },
+      {
+        "title": "Program node forwarding",
+        "narration": "The Service implementation observes Service and EndpointSlice data, then programs node forwarding. The API object is not a central request-handling process.",
+        "nodes": [
+          {
+            "id": "svc",
+            "label": "Service + EndpointSlices",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "agent",
+            "label": "Service implementation",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "rules",
+            "label": "Node data-plane state",
+            "type": "node",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "agent",
+            "label": "watch API objects",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "rules",
+            "label": "program forwarding",
+            "state": "active",
+            "from": "agent"
+          }
+        ]
+      },
+      {
+        "title": "Forward the client connection",
+        "narration": "The client connects to the virtual frontend. The data plane selects a backend and delivers traffic to its real listener.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Client Pod",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "rules",
+            "label": "Node forwarding",
+            "type": "node",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Backend Pod :80",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "rules",
+            "label": "ClusterIP:8080",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "pod",
+            "label": "selected Pod IP:80",
+            "state": "active",
+            "from": "rules"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m06-l01-dataplane-failure",
+        "label": "Failure: targetPort points to no listener",
+        "description": "Failure: targetPort points to no listener",
+        "frames": [
+          {
+            "title": "Selection is correct",
+            "narration": "The Service matches healthy Pods but maps its port to numeric targetPort 8081. nginx still listens on 80.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "Service port 8080 \u2192 8081",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "slice",
+                "label": "Selected Pod IP:8081",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Only listener :80",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "slice",
+                "label": "wrong target mapping",
+                "state": "active",
+                "from": "svc"
+              }
+            ]
+          },
+          {
+            "title": "Packets reach the wrong endpoint",
+            "narration": "The address can be correct while the destination port has no server. Endpoint presence alone does not validate the listener.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Connection fails",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "target",
+                "label": "Pod IP:8081 unused",
+                "type": "object",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "nginx :80 healthy",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "target",
+                "label": "no listener",
+                "state": "blocked",
+                "from": "client"
+              }
+            ]
+          },
+          {
+            "title": "Align the mapping and retest",
+            "narration": "Set targetPort to the real listener or its valid named port. Retest the Service path from the same client network.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "targetPort: http \u2192 80",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "nginx :80",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "correct mapping",
+                "state": "active",
+                "from": "svc"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

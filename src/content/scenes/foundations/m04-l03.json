@@ -1,0 +1,505 @@
+[
+  {
+    "id": "m04-l03-config",
+    "title": "Environment snapshots and projected files",
+    "kind": "flow",
+    "description": "Contrast startup-time environment injection with eventual projected-file refresh.",
+    "assumption": "A normal whole-volume ConfigMap mount is used; subPath and application API watches are excluded.",
+    "frames": [
+      {
+        "title": "Prepare two consumption paths",
+        "narration": "The kubelet reads the namespaced ConfigMap while preparing the container. MODE becomes an environment value and settings.ini becomes a mounted file.",
+        "nodes": [
+          {
+            "id": "cm",
+            "label": "ConfigMap: blue / training",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "env",
+            "label": "MODE=training",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "file",
+            "label": "Mounted settings.ini",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "Application",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "env",
+            "label": "startup snapshot",
+            "state": "active",
+            "from": "cm"
+          },
+          {
+            "to": "file",
+            "label": "projection",
+            "state": "active",
+            "from": "cm"
+          },
+          {
+            "to": "app",
+            "label": "container environment",
+            "state": "active",
+            "from": "env"
+          }
+        ]
+      },
+      {
+        "title": "Update the ConfigMap",
+        "narration": "The API now stores new values. The existing process environment is unchanged, while normal mounted projections refresh eventually.",
+        "nodes": [
+          {
+            "id": "cm",
+            "label": "ConfigMap: green / staging",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "env",
+            "label": "Still MODE=training",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "file",
+            "label": "Projection updating",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "Same running process",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "file",
+            "label": "eventual refresh",
+            "state": "active",
+            "from": "cm"
+          },
+          {
+            "to": "app",
+            "label": "unchanged snapshot",
+            "state": "active",
+            "from": "env"
+          }
+        ]
+      },
+      {
+        "title": "Adopt the new values deliberately",
+        "narration": "The file can contain green while the app still caches blue. Reload logic or a deliberate rollout is needed for consumer adoption and new environment values.",
+        "nodes": [
+          {
+            "id": "file",
+            "label": "File now color=green",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "App reloads configuration",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "env",
+            "label": "New container: MODE=staging",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "reread/reload",
+            "state": "active",
+            "from": "file"
+          },
+          {
+            "to": "app",
+            "label": "after deliberate restart",
+            "state": "active",
+            "from": "env"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m04-l03-config-failure",
+        "label": "Failure: subPath freezes the mounted projection",
+        "description": "Failure: subPath freezes the mounted projection",
+        "frames": [
+          {
+            "title": "Mount one key with subPath",
+            "narration": "A container uses a subPath mount for one ConfigMap file. This differs from a normal directory projection.",
+            "nodes": [
+              {
+                "id": "cm",
+                "label": "ConfigMap settings.ini",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "mount",
+                "label": "subPath file mount",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "app",
+                "label": "Application",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "mount",
+                "label": "initial content",
+                "state": "active",
+                "from": "cm"
+              },
+              {
+                "to": "app",
+                "label": "read",
+                "state": "active",
+                "from": "mount"
+              }
+            ]
+          },
+          {
+            "title": "The source object changes",
+            "narration": "The ConfigMap update does not automatically refresh this subPath-mounted file. Waiting alone does not establish the intended update path.",
+            "nodes": [
+              {
+                "id": "cm",
+                "label": "Updated ConfigMap",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "mount",
+                "label": "Old mounted content",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "mount",
+                "label": "no automatic refresh",
+                "state": "blocked",
+                "from": "cm"
+              }
+            ]
+          },
+          {
+            "title": "Choose an explicit rollout or mount design",
+            "narration": "Replace the Pod through a deliberate workload rollout, or use a normal projected directory mount with application reload behavior. Waiting for this existing subPath mount alone will not deliver updates.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Choose update contract",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "app",
+                "label": "New configuration adopted",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "app",
+                "label": "deliberate delivery + reload",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m04-l03-secret",
+    "title": "Encoding is not confidentiality",
+    "kind": "policy",
+    "description": "Trace Secret bytes through API access and a scoped mount.",
+    "assumption": "A fake Opaque token is shown; encryption at rest and external stores depend on cluster configuration.",
+    "frames": [
+      {
+        "title": "Write the dummy Secret",
+        "narration": "stringData accepts convenient plain strings. The resulting Secret data is encoded for API representation, not made secret by the encoding.",
+        "nodes": [
+          {
+            "id": "input",
+            "label": "Dummy plaintext token",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "Secret API object",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "data",
+            "label": "Base64 representation",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "write stringData",
+            "state": "active",
+            "from": "input"
+          },
+          {
+            "to": "data",
+            "label": "encode bytes",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Authorize access and protect storage",
+        "narration": "Confidentiality requires least-privilege access and appropriate storage protections. A permitted reader can decode the bytes.",
+        "nodes": [
+          {
+            "id": "reader",
+            "label": "Authorized reader",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "API authorization",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "store",
+            "label": "etcd protection configured",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "read if permitted",
+            "state": "active",
+            "from": "reader"
+          },
+          {
+            "to": "store",
+            "label": "persist/access",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Mount only where needed",
+        "narration": "The kubelet delivers the Secret to the selected container volume. The application must avoid logging or exposing its contents.",
+        "nodes": [
+          {
+            "id": "secret",
+            "label": "Namespaced Secret",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "mount",
+            "label": "Read-only token mount",
+            "type": "storage",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "Selected app container",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "mount",
+            "label": "project bytes",
+            "state": "active",
+            "from": "secret"
+          },
+          {
+            "to": "app",
+            "label": "minimum necessary access",
+            "state": "active",
+            "from": "mount"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m04-l03-secret-failure",
+        "label": "Failure: a Pod creator can expose a Secret indirectly",
+        "description": "Failure: a Pod creator can expose a Secret indirectly",
+        "frames": [
+          {
+            "title": "Direct Secret read is denied",
+            "narration": "A user cannot get Secrets directly but can create arbitrary Pods in the same namespace.",
+            "nodes": [
+              {
+                "id": "user",
+                "label": "Pod-creation permission",
+                "type": "actor",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Direct Secret get denied",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "secret",
+                "label": "Namespace Secret",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "get Secret denied",
+                "state": "blocked",
+                "from": "user"
+              }
+            ]
+          },
+          {
+            "title": "Workload creation provides another path",
+            "narration": "A created Pod can mount that namespace\u2019s Secret and run code that reads it unless other controls prevent this configuration.",
+            "nodes": [
+              {
+                "id": "user",
+                "label": "Creates a Pod",
+                "type": "actor",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Pod mounts Secret",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "secret",
+                "label": "Secret content exposed",
+                "type": "object",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "create workload",
+                "state": "active",
+                "from": "user"
+              },
+              {
+                "to": "pod",
+                "label": "volume access",
+                "state": "active",
+                "from": "secret"
+              }
+            ]
+          },
+          {
+            "title": "Protect the workload boundary too",
+            "narration": "Restrict workload creation and admission along with Secret API access. Base64 does not stop an authorized execution path from reading bytes.",
+            "nodes": [
+              {
+                "id": "policy",
+                "label": "Least privilege + admission",
+                "type": "control",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "secret",
+                "label": "Scoped secret access",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "secret",
+                "label": "enforce access design",
+                "state": "active",
+                "from": "policy"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

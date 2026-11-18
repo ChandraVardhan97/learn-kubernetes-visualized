@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: m10
+  namespace: kv-lab
+  labels:
+    lab: m10
+spec:
+  serviceName: m10
+  replicas: 1
+  selector:
+    matchLabels:
+      app: m10
+  template:
+    metadata:
+      labels:
+        app: m10
+        lab: m10
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37.0
+          command:
+            - sleep
+            - "3600"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: m10
+  namespace: kv-lab
+  labels:
+    lab: m10
+spec:
+  clusterIP: None
+  selector:
+    app: m10
+  ports:
+    - port: 80
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: m10-agent
+  namespace: kv-lab
+  labels:
+    lab: m10
+spec:
+  selector:
+    matchLabels:
+      app: m10-agent
+  template:
+    metadata:
+      labels:
+        app: m10-agent
+        lab: m10
+    spec:
+      containers:
+        - name: agent
+          image: busybox:1.37.0
+          command:
+            - sleep
+            - "3600"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: m10-job
+  namespace: kv-lab
+  labels:
+    lab: m10
+spec:
+  template:
+    metadata:
+      labels:
+        lab: m10
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: task
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - echo completed-once
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: m10-schedule
+  namespace: kv-lab
+  labels:
+    lab: m10
+spec:
+  schedule: "*/5 * * * *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: task
+              image: busybox:1.37.0
+              command:
+                - echo
+                - scheduled-work
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: m10
+  namespace: kv-lab
+  labels:
+    lab: m10
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: m10

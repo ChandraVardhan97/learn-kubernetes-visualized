@@ -1,0 +1,135 @@
+---
+{
+  "lessonId": "m09-l01",
+  "title": "Volumes and persistent claims",
+  "description": "Separate container filesystems, Pod-scoped volumes, persistent claims and storage access semantics.",
+  "level": "intermediate",
+  "module": "m09",
+  "order": 1,
+  "minutes": 18,
+  "prerequisites": [
+    "m08-l03"
+  ],
+  "objectives": [
+    "Predict which data survives a container restart or Pod replacement",
+    "Trace PVC-to-PV binding and mounting",
+    "Explain access modes without treating them as database locks"
+  ],
+  "concepts": [
+    {
+      "id": "m09-l01-volume-lifetime",
+      "title": "Volume lifetimes",
+      "scene": "m09-l01-lifetime"
+    },
+    {
+      "id": "m09-l01-pvc-pv",
+      "title": "PersistentVolumeClaims and PersistentVolumes",
+      "scene": "m09-l01-lifetime"
+    },
+    {
+      "id": "m09-l01-access-modes",
+      "title": "Storage access modes",
+      "scene": "m09-l01-access"
+    },
+    {
+      "id": "m09-l01-reclaim-policy",
+      "title": "PV reclaim policy",
+      "scene": "m09-l01-access"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Volumes",
+      "url": "https://kubernetes.io/docs/concepts/storage/volumes/"
+    },
+    {
+      "title": "Persistent Volumes",
+      "url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/"
+    }
+  ],
+  "lab": "m09",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: name the lifetime of every file
+
+A container's writable filesystem belongs to that container instance. Kubernetes restarts a container from its image, so application changes to that writable layer should be treated as disposable. A **volume** mounts storage at a path inside one or more containers. Its lifetime depends on its type. `emptyDir` is created for a Pod and can survive container restarts in that Pod, but deletion or replacement of the Pod removes that Pod-scoped storage. The replacement's identical Deployment labels do not make it the same Pod.
+
+Persistent storage separates application placement from a longer-lived storage resource. A **PersistentVolumeClaim**, or PVC, is a namespaced request for storage characteristics and capacity. A **PersistentVolume**, or PV, is a cluster-scoped representation of a storage resource. Binding associates a suitable PV with a claim; the workload refers to the claim rather than embedding the provider's disk identity. The underlying data then follows storage and reclaim lifecycle rules rather than the container's writable-layer lifetime.
+
+<Scene id="m09-l01-lifetime" />
+
+## Walkthrough: a claim is a contract, not a directory copied between Pods
+
+This claim requests a filesystem volume from the cluster's default StorageClass. The second fragment belongs under a Pod's `spec` and shows how it mounts that claim. The module lab's complete workload uses the name `m09` for both its Pod and claim; adapt those names together when extending it into this separate `app-data` and `writer` example.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: app-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+# Fragment: a Pod spec mounting the claim in one container.
+containers:
+  - name: writer
+    image: busybox:1.36
+    command: ["sh", "-c", "echo marker >> /data/visits; sleep 3600"]
+    volumeMounts:
+      - name: data
+        mountPath: /data
+volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: app-data
+```
+
+The PVC must be in the Pod's namespace. A claim can remain Pending when no suitable PV or provisioner exists; later lessons follow dynamic provisioning. The Pod can also wait after binding while the driver attaches or mounts the volume. Do not treat Bound as proof that filesystem permissions, attachment and application startup all succeeded. Read both PVC events and Pod events to find the current boundary.
+
+**Access modes** describe supported mounting and access arrangements. `ReadWriteOnce` means read-write access from one node; multiple Pods on that same node may still access it. `ReadOnlyMany` and `ReadWriteMany` depend on provider support and requested behavior. These modes help match claims to volumes; they do not by themselves enforce read-only filesystem permissions after mounting. Set the mount read-only setting and underlying permissions when that protection is required. `ReadWriteOncePod` constrains a supported CSI volume to one Pod across the cluster, including read access. None of these is a general application transaction protocol. A storage system allowing multiple writers does not coordinate database leadership, protect file format consistency or implement distributed locks for your application.
+
+<Scene id="m09-l01-access" />
+
+## Practice: replace the Pod without deleting the claim
+
+```bash
+kubectl get pvc app-data
+kubectl describe pvc app-data
+kubectl get pv
+kubectl exec writer -- cat /data/visits
+# Follow the lab instructions to delete and recreate only the writer Pod.
+kubectl get pod writer -o wide
+kubectl describe pod writer
+```
+
+Create a marker in the mounted directory, replace the Pod, and read the marker from the replacement. Compare that to a file written outside the mounted path and to a separate `emptyDir` example. Keep the PVC intact during this comparison. If a local host-path provisioner backs the claim, surviving a Pod replacement on the same worker does not prove the volume can follow a Pod to another worker or survive loss of the host machine.
+
+A PV's **reclaim policy** governs what happens after its claim is released. `Delete` generally asks the provisioner to remove the underlying storage as part of reclamation. `Retain` leaves the resource for explicit administrator recovery and reuse procedures. Deleting a Deployment does not normally delete an independently managed PVC, but deleting a PVC can start a destructive storage lifecycle depending on policy and protection finalizers. Record claim, PV, storage class and reclaim policy before any cleanup involving persistent data.
+
+## Pitfalls: persistent does not mean backed up
+
+Persistent storage can retain an accidental deletion, corrupted data or an application bug just as reliably as useful data. Storage availability, durability and recovery are different properties. A `hostPath` volume exposes a particular node's filesystem and carries security and locality risks; it is not a portable general-purpose replacement for a storage system. Filesystem ownership can also block startup despite a healthy bound claim. Investigate permissions before broadening a container to privileged mode.
+
+## Check your understanding
+
+<details>
+<summary>Two Pods are on the same node and both mount a ReadWriteOnce claim. Has Kubernetes promised only one writer?</summary>
+
+No. ReadWriteOnce constrains read-write access to one node, not necessarily one Pod. Provider behavior and mounting details matter, and the application still needs correct coordination. For a supported CSI volume, ReadWriteOncePod is the relevant single-Pod access mode, but it still does not replace application-level consistency and recovery design.
+
+</details>
+
+Use the [storage lab](/labs/#m09) to compare Pod-scoped and claim-backed data. Next, follow the StorageClass and driver that turn an unbound request into actual storage.
+
+## Primary documentation
+
+- [Volumes](https://kubernetes.io/docs/concepts/storage/volumes/)
+- [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)

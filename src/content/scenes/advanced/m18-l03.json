@@ -1,0 +1,757 @@
+[
+  {
+    "title": "API state and data-plane bytes need separate backups",
+    "kind": "storage",
+    "description": "Trust, signing and encryption material plus compatible infrastructure and application backups complete the plan.",
+    "assumption": "The exact asset list depends on cluster encryption, providers and application dependencies.",
+    "frames": [
+      {
+        "title": "Capture API data",
+        "narration": "An etcd snapshot contains stored API objects and may contain sensitive Secret data.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "Kubernetes API objects",
+            "type": "object",
+            "detail": "Specs, identities and Secrets",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "snapshot",
+            "label": "etcd snapshot",
+            "type": "storage",
+            "detail": "API database backup",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pv",
+            "label": "PersistentVolume bytes",
+            "type": "storage",
+            "detail": "Application records",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "keys",
+            "label": "PKI + encryption keys",
+            "type": "object",
+            "detail": "Separate protected assets",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "plan",
+            "label": "Recovery plan",
+            "type": "actor",
+            "detail": "Assemble compatible assets",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "snapshot",
+            "label": "captured API state",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Identify missing bytes",
+        "narration": "A PVC object is not its volume contents; application files and external stores need their own backup path.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "Kubernetes API objects",
+            "type": "object",
+            "detail": "Specs, identities and Secrets",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "snapshot",
+            "label": "etcd snapshot",
+            "type": "storage",
+            "detail": "API database backup",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pv",
+            "label": "PersistentVolume bytes",
+            "type": "storage",
+            "detail": "Application records",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "keys",
+            "label": "PKI + encryption keys",
+            "type": "object",
+            "detail": "Separate protected assets",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "plan",
+            "label": "Recovery plan",
+            "type": "actor",
+            "detail": "Assemble compatible assets",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "plan",
+            "label": "application backup",
+            "state": "active",
+            "from": "pv"
+          }
+        ]
+      },
+      {
+        "title": "Assemble recovery assets",
+        "narration": "Trust, signing and encryption material plus compatible infrastructure and application backups complete the plan.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "Kubernetes API objects",
+            "type": "object",
+            "detail": "Specs, identities and Secrets",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "snapshot",
+            "label": "etcd snapshot",
+            "type": "storage",
+            "detail": "API database backup",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pv",
+            "label": "PersistentVolume bytes",
+            "type": "storage",
+            "detail": "Application records",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "keys",
+            "label": "PKI + encryption keys",
+            "type": "object",
+            "detail": "Separate protected assets",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "plan",
+            "label": "Recovery plan",
+            "type": "actor",
+            "detail": "Assemble compatible assets",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "plan",
+            "label": "one required asset",
+            "state": "active",
+            "from": "snapshot"
+          },
+          {
+            "to": "plan",
+            "label": "application backup",
+            "state": "active",
+            "from": "pv"
+          },
+          {
+            "to": "plan",
+            "label": "trust and decryption",
+            "state": "active",
+            "from": "keys"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Snapshot-only recovery",
+        "description": "Recovering API objects can leave the application without its data or keys.",
+        "frames": [
+          {
+            "title": "API restore succeeds",
+            "narration": "The Deployment, PVC and Secret objects can be listed in the target.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "Kubernetes API objects",
+                "type": "object",
+                "detail": "Restored objects appear in the target API",
+                "x": 35,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "snapshot",
+                "label": "etcd snapshot",
+                "type": "storage",
+                "detail": "API database backup",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pv",
+                "label": "PersistentVolume bytes",
+                "type": "storage",
+                "detail": "Application records",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "keys",
+                "label": "PKI + encryption keys",
+                "type": "object",
+                "detail": "Separate protected assets",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "plan",
+                "label": "Recovery plan",
+                "type": "actor",
+                "detail": "Assemble compatible assets",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "plan",
+                "label": "one required asset",
+                "state": "active",
+                "from": "snapshot"
+              }
+            ]
+          },
+          {
+            "title": "Data path is absent",
+            "narration": "The target has no recovered database volume or external-store backup.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "Kubernetes API objects",
+                "type": "object",
+                "detail": "Specs, identities and Secrets",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "snapshot",
+                "label": "etcd snapshot",
+                "type": "storage",
+                "detail": "API database backup",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pv",
+                "label": "PersistentVolume bytes",
+                "type": "storage",
+                "detail": "Application data backup missing",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "keys",
+                "label": "PKI + encryption keys",
+                "type": "object",
+                "detail": "Separate protected assets",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "plan",
+                "label": "Recovery plan",
+                "type": "actor",
+                "detail": "Assemble compatible assets",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "plan",
+                "label": "missing application backup",
+                "state": "blocked",
+                "from": "pv"
+              }
+            ]
+          },
+          {
+            "title": "Service recovery is unproven",
+            "narration": "API availability alone does not establish application data correctness or decryptability.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "Kubernetes API objects",
+                "type": "object",
+                "detail": "Specs, identities and Secrets",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "snapshot",
+                "label": "etcd snapshot",
+                "type": "storage",
+                "detail": "API database backup",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pv",
+                "label": "PersistentVolume bytes",
+                "type": "storage",
+                "detail": "Application data backup missing",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "keys",
+                "label": "PKI + encryption keys",
+                "type": "object",
+                "detail": "Separate protected assets",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "plan",
+                "label": "Recovery plan",
+                "type": "actor",
+                "detail": "Assemble compatible assets",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "plan",
+                "label": "application backup",
+                "state": "blocked",
+                "from": "pv"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m18-l03-backup-boundaries"
+  },
+  {
+    "title": "Restore isolated membership and invalidate stale watch history",
+    "kind": "lifecycle",
+    "description": "The API returns backed-up objects; stale controller watches must rebuild rather than assume old history remains valid.",
+    "assumption": "The local script performs a single-member API-data rehearsal, not production membership recovery or worker migration.",
+    "frames": [
+      {
+        "title": "Isolate and stop target writers",
+        "narration": "The rehearsal uses a separate cluster and stops its API server and etcd before replacing target state.",
+        "nodes": [
+          {
+            "id": "backup",
+            "label": "Verified snapshot",
+            "type": "storage",
+            "detail": "Older committed API state",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "stop",
+            "label": "Stopped target etcd",
+            "type": "control",
+            "detail": "No live writer",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "restore",
+            "label": "New data directory",
+            "type": "storage",
+            "detail": "New member identity + revision plan",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Recovered API",
+            "type": "control",
+            "detail": "Restart against restored etcd",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "watch",
+            "label": "Controller caches",
+            "type": "object",
+            "detail": "Relist after invalidated history",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "restore",
+            "label": "exclude active writes",
+            "state": "active",
+            "from": "stop"
+          }
+        ]
+      },
+      {
+        "title": "Restore with explicit identity",
+        "narration": "Compatible tools restore into a new directory with the planned membership, revision bump and compaction marking.",
+        "nodes": [
+          {
+            "id": "backup",
+            "label": "Verified snapshot",
+            "type": "storage",
+            "detail": "Older committed API state",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "stop",
+            "label": "Stopped target etcd",
+            "type": "control",
+            "detail": "No live writer",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "restore",
+            "label": "New data directory",
+            "type": "storage",
+            "detail": "New member identity + revision plan",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "api",
+            "label": "Recovered API",
+            "type": "control",
+            "detail": "Restart against restored etcd",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "watch",
+            "label": "Controller caches",
+            "type": "object",
+            "detail": "Relist after invalidated history",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "restore",
+            "label": "offline restore",
+            "state": "active",
+            "from": "backup"
+          }
+        ]
+      },
+      {
+        "title": "Verify and rebuild clients",
+        "narration": "The API returns backed-up objects; stale controller watches must rebuild rather than assume old history remains valid.",
+        "nodes": [
+          {
+            "id": "backup",
+            "label": "Verified snapshot",
+            "type": "storage",
+            "detail": "Older committed API state",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "stop",
+            "label": "Stopped target etcd",
+            "type": "control",
+            "detail": "No live writer",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "restore",
+            "label": "New data directory",
+            "type": "storage",
+            "detail": "New member identity + revision plan",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Recovered API",
+            "type": "control",
+            "detail": "Restart against restored etcd",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "watch",
+            "label": "Controller caches",
+            "type": "object",
+            "detail": "Relist after invalidated history",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "start target components",
+            "state": "active",
+            "from": "restore"
+          },
+          {
+            "to": "watch",
+            "label": "rebuild observations",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Live writer or wrong target",
+        "description": "Restoring into an active source directory risks corruption and disruption.",
+        "frames": [
+          {
+            "title": "Source and target confused",
+            "narration": "A command points at the original control-plane data directory instead of the isolated target.",
+            "nodes": [
+              {
+                "id": "backup",
+                "label": "Verified snapshot",
+                "type": "storage",
+                "detail": "Older committed API state",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "stop",
+                "label": "Stopped target etcd",
+                "type": "control",
+                "detail": "No live writer",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "restore",
+                "label": "New data directory",
+                "type": "storage",
+                "detail": "Command points at the original directory",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "api",
+                "label": "Recovered API",
+                "type": "control",
+                "detail": "Restart against restored etcd",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "watch",
+                "label": "Controller caches",
+                "type": "object",
+                "detail": "Relist after invalidated history",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "restore",
+                "label": "offline restore",
+                "state": "blocked",
+                "from": "backup"
+              }
+            ]
+          },
+          {
+            "title": "Concurrent writes persist",
+            "narration": "A running etcd process invalidates the offline replacement assumptions.",
+            "nodes": [
+              {
+                "id": "backup",
+                "label": "Verified snapshot",
+                "type": "storage",
+                "detail": "Older committed API state",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "stop",
+                "label": "Target etcd still running",
+                "type": "control",
+                "detail": "Offline prerequisite fails",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "restore",
+                "label": "New data directory",
+                "type": "storage",
+                "detail": "New member identity + revision plan",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "api",
+                "label": "Recovered API",
+                "type": "control",
+                "detail": "Restart against restored etcd",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "watch",
+                "label": "Controller caches",
+                "type": "object",
+                "detail": "Relist after invalidated history",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "restore",
+                "label": "exclude active writes",
+                "state": "blocked",
+                "from": "stop"
+              }
+            ]
+          },
+          {
+            "title": "Stop before mutation",
+            "narration": "Use the guarded rehearsal and explicit identities; do not improvise a live directory replacement.",
+            "nodes": [
+              {
+                "id": "backup",
+                "label": "Verified snapshot",
+                "type": "storage",
+                "detail": "Older committed API state",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "stop",
+                "label": "Stopped target etcd",
+                "type": "control",
+                "detail": "No live writer",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "restore",
+                "label": "New data directory",
+                "type": "storage",
+                "detail": "Stop and confirm the target before restore",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "api",
+                "label": "Recovered API",
+                "type": "control",
+                "detail": "Restart against restored etcd",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "watch",
+                "label": "Controller caches",
+                "type": "object",
+                "detail": "Relist after invalidated history",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m18-l03-offline-restore"
+  }
+]

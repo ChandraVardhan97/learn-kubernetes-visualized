@@ -1,0 +1,132 @@
+---
+{
+  "lessonId": "m08-l02",
+  "title": "NetworkPolicy and isolation",
+  "description": "Design additive ingress and egress allow rules and verify actual data-plane enforcement.",
+  "level": "intermediate",
+  "module": "m08",
+  "order": 2,
+  "minutes": 18,
+  "prerequisites": [
+    "m08-l01"
+  ],
+  "objectives": [
+    "Calculate allowed traffic from selected ingress and egress policies",
+    "Distinguish selector AND logic from alternative peers",
+    "Verify enforcement before trusting isolation"
+  ],
+  "concepts": [
+    {
+      "id": "m08-l02-policy-isolation",
+      "title": "NetworkPolicy direction and isolation",
+      "scene": "m08-l02-directions"
+    },
+    {
+      "id": "m08-l02-policy-additive",
+      "title": "Additive allow rules",
+      "scene": "m08-l02-directions"
+    },
+    {
+      "id": "m08-l02-policy-selectors",
+      "title": "Peer selector logic",
+      "scene": "m08-l02-selectors"
+    },
+    {
+      "id": "m08-l02-policy-verification",
+      "title": "Policy enforcement verification",
+      "scene": "m08-l02-selectors"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Network Policies",
+      "url": "https://kubernetes.io/docs/concepts/services-networking/network-policies/"
+    },
+    {
+      "title": "Declare NetworkPolicy",
+      "url": "https://kubernetes.io/docs/tasks/administer-cluster/declare-network-policy/"
+    }
+  ],
+  "lab": "m08",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: policies add allowed edges to an isolated direction
+
+A **NetworkPolicy** selects Pods in its own namespace. For each selected direction, it changes those Pods from non-isolated to isolated, then allows the union of traffic described by all policies applying in that direction. There is no ordered list where a later deny rule overrides an earlier allow rule. An empty ingress list with `policyTypes: [Ingress]` isolates selected Pods for ingress without adding inbound permissions through that policy. Another policy can still allow a subset, or even all, of that traffic. This isolation has defined exceptions: a Pod cannot block access to itself, and traffic to or from its own node remains allowed.
+
+Ingress and egress are evaluated independently. For a connection from a client to a server, the client's egress policy and the server's ingress policy must both permit the connection if those respective directions are isolated. Return traffic for an allowed connection is normally allowed implicitly. NetworkPolicy is principally a layer 3 and layer 4 contract over addresses, peers, protocols and ports. HTTP paths, user identities and arbitrary domain names require other mechanisms or provider-specific extensions.
+
+<Scene id="m08-l02-directions" />
+
+## Walkthrough: select a server, then select its clients
+
+The following policy isolates ingress to `app: api` Pods and allows TCP 8080 only from Pods labeled `role: frontend` in namespaces labeled `team: shop`. The namespace and Pod selectors occur inside the **same peer**, which means both must match. Two separate peers would mean either may match, a much broader permission.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-from-shop-frontend
+spec:
+  podSelector:
+    matchLabels: {app: api}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {team: shop}
+          podSelector:
+            matchLabels: {role: frontend}
+      ports:
+        - protocol: TCP
+          port: 8080
+```
+
+An empty `podSelector` at the top selects all Pods in the policy's namespace. A peer `podSelector` without a `namespaceSelector` selects Pods in that same namespace, not across the entire cluster. The built-in namespace label `kubernetes.io/metadata.name` can identify a particular namespace, while custom labels can define a managed group. If users may freely change namespace labels that policies trust, they may expand access; label ownership is part of the boundary.
+
+Egress isolation often surprises operators because it also affects DNS. Allowing a Service port does not automatically permit DNS lookups needed to discover it. Identify the cluster's DNS Pods and namespace labels and allow the required UDP and TCP DNS traffic as appropriate for that implementation. Avoid a universally copied DNS rule with labels that do not exist in your cluster. Address translation and `ipBlock` behavior around node and Service addresses can vary with implementation, so validate the exact traffic path.
+
+<Scene id="m08-l02-selectors" />
+
+## Practice: baseline, deny, then allow
+
+```bash
+kubectl get networkpolicies
+kubectl get namespaces --show-labels
+kubectl get pods --show-labels -o wide
+# Establish a working baseline from the example client first.
+# This assumes a Service exposing port 80 and forwarding to backend 8080.
+kubectl exec client -- wget -T 3 -qO- http://api:80
+kubectl apply -f api-policy.yaml
+kubectl describe networkpolicy api-from-shop-frontend
+# Repeat from one permitted and one deliberately unpermitted client.
+```
+
+The downloadable baseline uses `m08`, `m08-client` and port 80 for both the Service and backend; the `api` and `frontend` names here describe a separate selector exercise. Use the Service port actually configured for your client URL and the backend port for the ingress rule. Probe direct Pod traffic as well when separating Service translation from policy behavior. A connection timeout may be consistent with a drop, but a timeout alone does not prove policy caused it. First show the same request succeeds before isolation, then fails for an unallowed source, then succeeds again after adding the intended allow rule.
+
+The API server can accept a NetworkPolicy even when the network implementation does not enforce it. Current local distributions and versions differ, including changes in bundled network providers. Inspect and test the chosen cluster instead of assuming every kind cluster has the same capability. Record provider, version and deny/allow observations in your lab notes. Do not install a second CNI onto an existing cluster casually; use the documented installation path for a clean disposable cluster.
+
+## Pitfalls: one broad allow can defeat a careful default
+
+A namespace-wide allow-all policy remains effective alongside a default-deny policy because permissions are additive. Review every policy selecting the Pods when the effective result seems broader than expected. Host networking, traffic involving nodes and protocol support have additional implementation details. Treat NetworkPolicy as one layer alongside application authentication and authorization, and test both positive and negative cases whenever the allowed peer set changes.
+
+## Check your understanding
+
+<details>
+<summary>A default-deny ingress policy and an allow-from-frontend policy both select the API. Which policy wins?</summary>
+
+Neither replaces the other. The selected ingress direction is isolated and its permissions are the union of all matching policies. Frontend traffic allowed by the specific policy can connect, while other new ingress remains disallowed unless another matching policy permits it. Review the complete selected policy set to calculate effective access.
+
+</details>
+
+Use the [policy lab](/labs/#m08) to test selector AND versus OR behavior. Next, expose a permitted application through an HTTP routing controller and distinguish that route from the internal network policy.
+
+## Primary documentation
+
+- [Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+- [Declare NetworkPolicy](https://kubernetes.io/docs/tasks/administer-cluster/declare-network-policy/)

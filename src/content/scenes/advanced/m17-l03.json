@@ -1,0 +1,764 @@
+[
+  {
+    "title": "Allocatable capacity must satisfy every constraint",
+    "kind": "scheduling",
+    "description": "The scheduler also checks topology, volumes and other hard constraints; aggregate free CPU is insufficient evidence.",
+    "assumption": "CPU and memory are highlighted; actual capacity also depends on Pod counts, devices, storage and network limits.",
+    "frames": [
+      {
+        "title": "Start with allocatable",
+        "narration": "Node reservations reduce physical capacity to the budget available for Pods.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Node allocatable",
+            "type": "node",
+            "detail": "Budget after reservations",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "daemon",
+            "label": "Required DaemonSets",
+            "type": "pod",
+            "detail": "Consume each node budget",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "request",
+            "label": "Application requests",
+            "type": "object",
+            "detail": "CPU + memory per Pod",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "scheduler",
+            "label": "Scheduler",
+            "type": "control",
+            "detail": "Fit plus topology constraints",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "quota",
+            "label": "Namespace quota",
+            "type": "object",
+            "detail": "Admission budget, not placement",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "scheduler",
+            "label": "remaining budget",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      },
+      {
+        "title": "Subtract required workloads",
+        "narration": "DaemonSets and existing Pod requests consume that budget before new replicas can fit.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Node allocatable",
+            "type": "node",
+            "detail": "Budget after reservations",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "daemon",
+            "label": "Required DaemonSets",
+            "type": "pod",
+            "detail": "Consume each node budget",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "request",
+            "label": "Application requests",
+            "type": "object",
+            "detail": "CPU + memory per Pod",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "scheduler",
+            "label": "Scheduler",
+            "type": "control",
+            "detail": "Fit plus topology constraints",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "quota",
+            "label": "Namespace quota",
+            "type": "object",
+            "detail": "Admission budget, not placement",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "node",
+            "label": "consume capacity",
+            "state": "active",
+            "from": "daemon"
+          },
+          {
+            "to": "scheduler",
+            "label": "remaining budget",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      },
+      {
+        "title": "Check feasibility",
+        "narration": "The scheduler also checks topology, volumes and other hard constraints; aggregate free CPU is insufficient evidence.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Node allocatable",
+            "type": "node",
+            "detail": "Budget after reservations",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "daemon",
+            "label": "Required DaemonSets",
+            "type": "pod",
+            "detail": "Consume each node budget",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "request",
+            "label": "Application requests",
+            "type": "object",
+            "detail": "CPU + memory per Pod",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "scheduler",
+            "label": "Scheduler",
+            "type": "control",
+            "detail": "Fit plus topology constraints",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "quota",
+            "label": "Namespace quota",
+            "type": "object",
+            "detail": "Admission budget, not placement",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "scheduler",
+            "label": "required resources",
+            "state": "active",
+            "from": "request"
+          },
+          {
+            "to": "scheduler",
+            "label": "remaining budget",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Fragmented free resources",
+        "description": "A namespace may be permitted to create a Pod that fits no individual node.",
+        "frames": [
+          {
+            "title": "Quota allows the request",
+            "narration": "The namespace has unused request budget, so admission can accept another Pod.",
+            "nodes": [
+              {
+                "id": "node",
+                "label": "Node allocatable",
+                "type": "node",
+                "detail": "Budget after reservations",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "daemon",
+                "label": "Required DaemonSets",
+                "type": "pod",
+                "detail": "Consume each node budget",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "request",
+                "label": "Application requests",
+                "type": "object",
+                "detail": "CPU + memory per Pod",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "scheduler",
+                "label": "Scheduler",
+                "type": "control",
+                "detail": "Fit plus topology constraints",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "quota",
+                "label": "Namespace quota",
+                "type": "object",
+                "detail": "Namespace budget permits creation",
+                "x": 290,
+                "y": 230,
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "to": "request",
+                "label": "allowed namespace demand",
+                "state": "active",
+                "from": "quota"
+              }
+            ]
+          },
+          {
+            "title": "No single node fits",
+            "narration": "Free memory is fragmented across nodes below this Pod requirement.",
+            "nodes": [
+              {
+                "id": "node",
+                "label": "Node allocatable",
+                "type": "node",
+                "detail": "Budget after reservations",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "daemon",
+                "label": "Required DaemonSets",
+                "type": "pod",
+                "detail": "Consume each node budget",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "request",
+                "label": "Application requests",
+                "type": "object",
+                "detail": "CPU + memory per Pod",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "scheduler",
+                "label": "Scheduler",
+                "type": "control",
+                "detail": "No single node fits the request",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "quota",
+                "label": "Namespace quota",
+                "type": "object",
+                "detail": "Admission budget, not placement",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "scheduler",
+                "label": "request cannot fit on a node",
+                "state": "blocked",
+                "from": "request"
+              }
+            ]
+          },
+          {
+            "title": "Pod remains Pending",
+            "narration": "The request needs a feasible individual placement; quota does not merge node memory.",
+            "nodes": [
+              {
+                "id": "node",
+                "label": "Node allocatable",
+                "type": "node",
+                "detail": "Budget after reservations",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "daemon",
+                "label": "Required DaemonSets",
+                "type": "pod",
+                "detail": "Consume each node budget",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "request",
+                "label": "Application requests",
+                "type": "object",
+                "detail": "CPU + memory per Pod",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "scheduler",
+                "label": "Scheduler",
+                "type": "control",
+                "detail": "No single node fits the request",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "quota",
+                "label": "Namespace quota",
+                "type": "object",
+                "detail": "Admission budget, not placement",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "scheduler",
+                "label": "request cannot fit on a node",
+                "state": "blocked",
+                "from": "request"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m17-l03-capacity-budget"
+  },
+  {
+    "title": "Headroom covers rollout and failure transitions",
+    "kind": "scheduling",
+    "description": "New Pods supply useful capacity only after startup, readiness and endpoint propagation.",
+    "assumption": "This is a planning model, not a measured guarantee; provider provisioning and application startup must be validated separately.",
+    "frames": [
+      {
+        "title": "Budget steady state",
+        "narration": "Requests fit during ordinary operation, leaving explicitly planned spare capacity.",
+        "nodes": [
+          {
+            "id": "steady",
+            "label": "Steady replicas",
+            "type": "pod",
+            "detail": "Normal serving demand",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "surge",
+            "label": "Rollout surge",
+            "type": "pod",
+            "detail": "Temporary extra demand",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "failure",
+            "label": "Node unavailable",
+            "type": "node",
+            "detail": "Demand moves elsewhere",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pool",
+            "label": "Remaining node pool",
+            "type": "node",
+            "detail": "Shared headroom budget",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "ready",
+            "label": "Ready capacity",
+            "type": "service",
+            "detail": "After scheduling and startup",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pool",
+            "label": "baseline requests",
+            "state": "active",
+            "from": "steady"
+          }
+        ]
+      },
+      {
+        "title": "Spend headroom on transition",
+        "narration": "A rollout or unavailable node creates temporary placement demand beyond the ordinary count.",
+        "nodes": [
+          {
+            "id": "steady",
+            "label": "Steady replicas",
+            "type": "pod",
+            "detail": "Normal serving demand",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "surge",
+            "label": "Rollout surge",
+            "type": "pod",
+            "detail": "Temporary extra demand",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "failure",
+            "label": "Node unavailable",
+            "type": "node",
+            "detail": "Demand moves elsewhere",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pool",
+            "label": "Remaining node pool",
+            "type": "node",
+            "detail": "Shared headroom budget",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "ready",
+            "label": "Ready capacity",
+            "type": "service",
+            "detail": "After scheduling and startup",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pool",
+            "label": "surge requests",
+            "state": "active",
+            "from": "surge"
+          },
+          {
+            "to": "pool",
+            "label": "replacement demand",
+            "state": "active",
+            "from": "failure"
+          }
+        ]
+      },
+      {
+        "title": "Measure recovery completion",
+        "narration": "New Pods supply useful capacity only after startup, readiness and endpoint propagation.",
+        "nodes": [
+          {
+            "id": "steady",
+            "label": "Steady replicas",
+            "type": "pod",
+            "detail": "Normal serving demand",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "surge",
+            "label": "Rollout surge",
+            "type": "pod",
+            "detail": "Temporary extra demand",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "failure",
+            "label": "Node unavailable",
+            "type": "node",
+            "detail": "Demand moves elsewhere",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pool",
+            "label": "Remaining node pool",
+            "type": "node",
+            "detail": "Shared headroom budget",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "ready",
+            "label": "Ready capacity",
+            "type": "service",
+            "detail": "After scheduling and startup",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "ready",
+            "label": "startup + readiness",
+            "state": "active",
+            "from": "pool"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Two transitions overlap",
+        "description": "A simultaneous rollout and node failure can exhaust individually adequate headroom.",
+        "frames": [
+          {
+            "title": "Surge uses free slots",
+            "narration": "New revision Pods consume spare requests while old Pods still serve.",
+            "nodes": [
+              {
+                "id": "steady",
+                "label": "Steady replicas",
+                "type": "pod",
+                "detail": "Normal serving demand",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "surge",
+                "label": "Rollout surge",
+                "type": "pod",
+                "detail": "Temporary extra demand",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "failure",
+                "label": "Node unavailable",
+                "type": "node",
+                "detail": "Demand moves elsewhere",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pool",
+                "label": "Remaining node pool",
+                "type": "node",
+                "detail": "Shared headroom budget",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "ready",
+                "label": "Ready capacity",
+                "type": "service",
+                "detail": "After scheduling and startup",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "pool",
+                "label": "surge requests",
+                "state": "active",
+                "from": "surge"
+              }
+            ]
+          },
+          {
+            "title": "A node fails",
+            "narration": "Replacement demand arrives before surge capacity has been released.",
+            "nodes": [
+              {
+                "id": "steady",
+                "label": "Steady replicas",
+                "type": "pod",
+                "detail": "Normal serving demand",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "surge",
+                "label": "Rollout surge",
+                "type": "pod",
+                "detail": "Temporary extra demand",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "failure",
+                "label": "Node unavailable",
+                "type": "node",
+                "detail": "Worker lost during the rollout",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "pool",
+                "label": "Remaining node pool",
+                "type": "node",
+                "detail": "Shared headroom budget",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "ready",
+                "label": "Ready capacity",
+                "type": "service",
+                "detail": "After scheduling and startup",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "pool",
+                "label": "replacement demand",
+                "state": "active",
+                "from": "failure"
+              }
+            ]
+          },
+          {
+            "title": "Useful capacity lags",
+            "narration": "Pending Pods do not help traffic; examine rollout policy, failure budget and node provisioning constraints.",
+            "nodes": [
+              {
+                "id": "steady",
+                "label": "Steady replicas",
+                "type": "pod",
+                "detail": "Normal serving demand",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "surge",
+                "label": "Rollout surge",
+                "type": "pod",
+                "detail": "Temporary extra demand",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "failure",
+                "label": "Node unavailable",
+                "type": "node",
+                "detail": "Demand moves elsewhere",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pool",
+                "label": "Remaining node pool",
+                "type": "node",
+                "detail": "Shared headroom budget",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "ready",
+                "label": "Ready capacity",
+                "type": "service",
+                "detail": "Replacement capacity has yet to become Ready",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "ready",
+                "label": "startup + readiness",
+                "state": "blocked",
+                "from": "pool"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m17-l03-headroom-transition"
+  }
+]

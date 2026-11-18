@@ -1,0 +1,81 @@
+---
+lessonId: "m15-l03"
+title: "Leases and leader election"
+description: "Coordinate active controllers without mistaking a Lease for fencing."
+level: "advanced"
+module: "m15"
+order: 3
+minutes: 16
+prerequisites: ["m15-l02"]
+objectives: ["Inspect Lease holder identity and renewal information.", "Explain takeover after a leader stops renewing.", "Identify operations requiring fencing beyond leader election."]
+concepts: [{"id": "m15-l03-lease-election", "title": "Renewal and takeover through the API", "scene": "m15-l03-lease-election"}, {"id": "m15-l03-lease-fencing", "title": "A Lease does not reject stale external writes", "scene": "m15-l03-lease-fencing"}]
+sources: [{"title": "Kubernetes Leases", "url": "https://kubernetes.io/docs/concepts/architecture/leases/"}, {"title": "client-go leader election limitations", "url": "https://pkg.go.dev/k8s.io/client-go/tools/leaderelection"}]
+lab: "m15"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: leadership is an agreement among participants
+
+A Lease object is a small coordination record. A leader-election implementation uses fields such as holderIdentity, leaseDurationSeconds and renewTime to coordinate who should act. A participant renews while healthy; other participants can attempt acquisition when its leadership is considered expired according to the implementation's timing rules. API optimistic concurrency prevents two successful updates based on the exact same stale object version. The Lease is stored through the same API and etcd path whose health the controllers depend on.
+
+A Lease is not a physical switch that turns off the previous process. A paused process, delayed network request or isolated external system can outlive the point at which another participant believes it has acquired leadership. client-go leader election explicitly does not guarantee fencing. A controller must stop acting on leadership loss, but correctness for dangerous external writes may require additional enforcement at the target system.
+
+<Scene id="m15-l03-lease-election" />
+
+## Walkthrough: renewal is different from a Node heartbeat
+
+Leases support several Kubernetes mechanisms. Scheduler and controller-manager replicas can coordinate active leadership; kubelets use separate Node Lease objects as lightweight heartbeats. Seeing a Lease does not tell you which mechanism it serves. Inspect its namespace, name, holder identity and the owning component's configuration. A Lease in `kube-node-lease` is not proof that an application operator has elected a leader, and changing it does not configure an application's failover policy.
+
+Suppose leader A stops renewing because the API is unreachable. A well-behaved election loop eventually cancels its leading work after failing renewal within its configured limits. Participant B may acquire leadership when its election logic permits. This protects ordinary controller availability, but target-side fencing is a stronger property: an external database could reject an operation carrying an obsolete epoch or token. Tokens must be enforced by the actual target; putting an arbitrary counter in a log does not fence a delayed writer.
+
+<Scene id="m15-l03-lease-fencing" />
+
+This standalone Lease is descriptive training data. Applying it does not start a leader-election process. Use it to learn the object shape, then inspect live component Leases read-only.
+
+```yaml
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: m15-example
+  namespace: kv-lab
+  labels:
+    lab: m15
+spec:
+  holderIdentity: training-controller-a
+  leaseDurationSeconds: 30
+# A real election library maintains acquisition and renewal fields.
+```
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab apply -f lease.yaml
+kubectl --context kind-kv-lab -n kv-lab get lease m15-example -o yaml
+kubectl --context kind-kv-lab -n kube-system get leases
+kubectl --context kind-kv-lab -n kube-node-lease get leases
+# This is inspection, not an instruction to edit system leadership records.
+kubectl --context kind-kv-lab -n kube-system get lease kube-scheduler -o yaml
+```
+
+## Practice: explain what each observation proves
+
+Run the [m15 local exercise](/labs/#m15). Compare its example Lease with the control-plane Leases that actually renew. Read a live Lease twice and identify which fields changed. A changing renewTime is evidence that a holder is updating the record; it does not independently establish application correctness, absence of duplicate external effects, or successful reconciliation of every object.
+
+Write a failure timeline with four moments: last successful renewal, leader's local decision to stop work, new leader acquisition, and an outstanding request arriving at the external dependency. Ask whether the last request can still mutate that dependency. For a Kubernetes child object, stable names, resource versions and idempotent reconciliation reduce duplicate effects. For a payment, cloud resource or storage promotion, define the dependency's own transaction, idempotency or fencing boundary. This exercise is analysis; do not disrupt system Leases to simulate it on a shared cluster.
+
+## Pitfalls: shortening timeouts changes failure behavior
+
+Aggressive durations can improve the speed of suspected-failure detection while increasing false failovers under API latency, CPU starvation or process pauses. Election timing must leave room for renewal under realistic load. More replicas do not compensate for an unavailable quorum-backed API. A leader that blocks in uncancellable work may continue after leadership loss unless its operations obey cancellation or external rejection. Monitor acquisition churn and renewal failures alongside API latency instead of treating every leadership transition as an independent component crash.
+
+## Check your understanding
+
+<details>
+
+<summary>Leader B acquired the Lease. Can a delayed external write from leader A still arrive?</summary>
+
+Yes. The Lease coordinates participants but does not physically revoke A's network requests. Use target-enforced fencing, transactions or idempotency where duplicate or stale external actions would be unsafe, and ensure leadership loss cancels controller work promptly.
+
+</details>
+
+Next, apply these control-loop principles to a custom API. A teaching operator can remain single-process while clearly documenting the leadership features needed before production use.

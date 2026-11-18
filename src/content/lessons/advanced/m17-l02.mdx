@@ -1,0 +1,96 @@
+---
+lessonId: "m17-l02"
+title: "Autoscaling mechanics and feedback"
+description: "Calculate a replica recommendation and follow the delays that shape it."
+level: "advanced"
+module: "m17"
+order: 2
+minutes: 16
+prerequisites: ["m17-l01"]
+objectives: ["Calculate CPU utilization from usage and resource requests.", "Explain HPA tolerance, missing metrics and stabilization.", "Separate replica scaling from node capacity and application throughput."]
+concepts: [{"id": "m17-l02-hpa-formula", "title": "Utilization divides usage by requests", "scene": "m17-l02-hpa-formula"}, {"id": "m17-l02-hpa-feedback", "title": "Demand becomes useful capacity after delays", "scene": "m17-l02-hpa-feedback"}]
+sources: [{"title": "Horizontal Pod Autoscaler algorithm", "url": "https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/"}, {"title": "HPA walkthrough", "url": "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"}, {"title": "Resource metrics pipeline", "url": "https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/"}]
+lab: "m17"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: the signal has a denominator
+
+For a CPU resource-utilization target, the HPA compares measured usage with requested CPU. If each relevant container requests 100 millicores and consumes 80 millicores on average, its utilization is approximately eighty percent of request. A limit of 500 millicores does not change that utilization denominator. Raising the request while holding usage constant lowers utilization and changes the HPA signal, even if actual traffic and latency have not improved.
+
+The basic recommendation is the ceiling of current replicas multiplied by current metric divided by desired metric. With three replicas, eighty-percent utilization and a fifty-percent target, the simple calculation recommends five replicas. This is a teaching calculation before tolerance, missing data, readiness handling, scaling policies and stabilization are applied. HPA is a periodic feedback controller, so the exact count at a particular instant can differ from the raw arithmetic.
+
+<Scene id="m17-l02-hpa-formula" />
+
+## Walkthrough: recommendations pass through guardrails
+
+The resource metrics API needs a working metrics provider, commonly Metrics Server, and containers need the relevant resource requests for utilization calculations. Missing metrics and not-yet-ready Pods affect the algorithm conservatively. A missing request can make utilization for that Pod undefined; an unknown metric is not zero demand. Inspect HPA conditions and events instead of assuming a replica count that stays constant means no scaling pressure exists.
+
+Stabilization uses recent recommendations to reduce oscillation. Downscale stabilization can retain a larger recent recommendation while demand briefly falls; policies can separately bound how quickly replica counts change. minReplicas and maxReplicas bound the permitted range. These controls reduce churn but also delay reaction. Adding a replica then requires scheduling, image startup, readiness and endpoint propagation before useful capacity arrives. If all nodes are full, HPA can request more Pods while throughput stays unchanged.
+
+<Scene id="m17-l02-hpa-feedback" />
+
+This HPA is an optional extension to a Deployment named `m17-web`, which you must create with CPU requests first. It does not install a metrics provider or generate realistic load. The local OOM exercise remains independent so it works without that add-on.
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: m17-web
+  namespace: kv-lab
+  labels:
+    lab: m17
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: m17-web
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50 # Percent of requested CPU, not CPU limit.
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+```
+
+```bash
+kubectl --context kind-kv-lab get apiservice v1beta1.metrics.k8s.io
+kubectl --context kind-kv-lab -n kv-lab get hpa
+kubectl --context kind-kv-lab -n kv-lab describe hpa m17-web
+kubectl --context kind-kv-lab -n kv-lab get pods -o wide
+# top requires a functioning resource metrics pipeline.
+kubectl --context kind-kv-lab -n kv-lab top pods
+```
+
+## Practice: predict a recommendation before changing configuration
+
+Use the [m17 local exercise](/labs/#m17) for resource-limit evidence, then calculate a hypothetical HPA recommendation on paper. Start with four replicas, a request of 200 millicores, average usage of 100 millicores and a target of fifty percent. The signal is on target. Now halve the request without changing traffic or usage. The utilization becomes one hundred percent and the simple recommendation doubles. This reveals why right-sizing and autoscaler settings must be reviewed together.
+
+If you install a metrics provider and run the optional experiment, record timestamps for demand change, metric observation, replica recommendation, Pod creation and readiness. These are observations for your setup, not portable latency guarantees. Check CPU usage distribution as well as the average; one hot shard can suffer while average utilization looks acceptable. For queues, consider an appropriate external or custom metric with a defined scaling relationship instead of assuming CPU captures all workload demand.
+
+## Pitfalls: more replicas can amplify dependencies
+
+Horizontal scaling can multiply database connections, cache misses or outbound API requests. A saturated database may worsen when more workers arrive. CPU limits can cap the measured usage even as request latency grows, masking unsatisfied demand. Missing metrics, maxReplicas and unavailable node capacity each create different ceilings. Do not have GitOps continuously reset spec.replicas while HPA manages it; establish field ownership so two reconciliation loops do not fight over the scale target.
+
+With multiple configured metrics, the HPA evaluates recommendations according to its documented algorithm; errors can constrain downscaling rather than silently becoming zero load. Inspect each metric status when one healthy metric appears to disagree with the final replica recommendation.
+
+## Check your understanding
+
+<details>
+
+<summary>CPU usage is unchanged, but requests double. What happens to utilization-based HPA input?</summary>
+
+The utilization percentage is roughly halved because request is its denominator. The raw scale recommendation can fall even though demand did not. Actual scaling still depends on tolerance, available metrics, stabilization and configured policies.
+
+</details>
+
+Next, combine the feedback loop with cluster capacity. A replica recommendation is an intention, while schedulable resources and application bottlenecks determine useful capacity.

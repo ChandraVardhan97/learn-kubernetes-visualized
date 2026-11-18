@@ -1,0 +1,15 @@
+---
+import Base from '../layouts/Base.astro';
+import LiveCluster from '../components/LiveCluster';
+import ClusterSketch from '../components/ClusterSketch.astro';
+import {getLessons,lessonHref} from '../lib/content';
+import {modules} from '../data/modules';
+const lessons=await getLessons();
+const first=lessons[0];
+---
+<Base><div class="page-pad home-page">
+ <section class="home-hero" aria-labelledby="home-title"><div class="hero-copy"><h1 id="home-title">Kubernetes,<br/>made visible.</h1><p>Build a working mental model of the whole system. Follow the control loops, trace a request, and see what happens when things break.</p><div class="hero-actions"><a class="button primary" href={first?lessonHref(first):'/curriculum/'}>Start learning <span aria-hidden="true">→</span></a><a class="text-link" href="/curriculum/">Explore the book</a></div><p class="hero-note"><span>From your first container to the control plane.</span><span>Interactive explanations. Real local practice.</span></p></div><div class="hero-visual"><LiveCluster client:visible /></div></section>
+ <div class="course-facts"><span><strong>{modules.length}</strong>modules</span><span><strong>{lessons.length}</strong>visual lessons</span><span><strong>3</strong>learning levels</span></div>
+ <section class="page-section" aria-labelledby="path-title"><div class="section-heading"><h2 id="path-title">A path through the system.</h2><a class="text-link" href="/curriculum/">View every lesson →</a></div><div class="learning-path"><a class="path-row" href="/curriculum/#foundations"><h3>Foundations</h3><p>Understand the objects, components, and control loops. Deploy an application and follow its traffic.</p><span><ClusterSketch variant="foundations"/><span class="path-count">6 modules · 18 lessons ↗</span></span></a><a class="path-row" href="/curriculum/#intermediate"><h3>Intermediate</h3><p>Make workloads reliable. Reason about placement, networking, storage, security, and delivery.</p><span><ClusterSketch variant="intermediate"/><span class="path-count">7 modules · 21 lessons ↗</span></span></a><a class="path-row" href="/curriculum/#advanced"><h3>Advanced</h3><p>Open the control plane. Build operators, investigate pressure, and design recovery and platform boundaries.</p><span><ClusterSketch variant="advanced"/><span class="path-count">7 modules · 21 lessons ↗</span></span></a></div></section>
+ <section class="home-closing"><div><h2>Watch it work.<br/>Understand it by doing.</h2></div><div><p>Every lesson connects a mechanism to a visual model, a failure case, and a local exercise. Start with the explanation, change an input, predict the outcome, then test your understanding in a real cluster.</p><a class="text-link" href="/labs/">Open the laboratories →</a></div></section>
+ </div></Base>

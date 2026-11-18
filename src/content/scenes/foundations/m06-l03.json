@@ -1,0 +1,492 @@
+[
+  {
+    "id": "m06-l03-startup",
+    "title": "Choose evidence for the startup stage",
+    "kind": "flow",
+    "description": "Separate unscheduled objects, image preparation failures, and executed-process failures.",
+    "assumption": "One current Pod is inspected; events and prior logs exist only while retained by the environment.",
+    "frames": [
+      {
+        "title": "Check assignment and conditions",
+        "narration": "A Pending Pod without a node needs scheduling evidence. A bound Pending Pod can instead be preparing images or mounts.",
+        "nodes": [
+          {
+            "id": "operator",
+            "label": "get -o wide + describe",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Pod assignment + conditions",
+            "type": "pod",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "events",
+            "label": "Component event reasons",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "read fields",
+            "state": "active",
+            "from": "operator"
+          },
+          {
+            "to": "events",
+            "label": "read concrete reasons",
+            "state": "active",
+            "from": "operator"
+          }
+        ]
+      },
+      {
+        "title": "Distinguish before-execution failure",
+        "narration": "ImagePullBackOff means image preparation is retrying. No application process from that failed start exists to write useful application logs.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "ImagePullBackOff",
+            "type": "pod",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "Image pull failure",
+            "type": "control",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "logs",
+            "label": "No app start output",
+            "type": "object",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "waiting reason",
+            "state": "active",
+            "from": "runtime"
+          }
+        ]
+      },
+      {
+        "title": "Inspect a process that did execute",
+        "narration": "For repeated exits, read termination reason, exit code, current logs, and previous-container logs if retained. These explain a different boundary than scheduling.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Restarting application",
+            "type": "pod",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "termination",
+            "label": "Reason + exit code",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "logs",
+            "label": "Current / previous logs",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "termination",
+            "label": "reported state",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "logs",
+            "label": "process output",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m06-l03-startup-failure",
+        "label": "Failure: delete before collecting evidence",
+        "description": "Failure: delete before collecting evidence",
+        "frames": [
+          {
+            "title": "A failing Pod contains useful state",
+            "narration": "The current Pod has termination details and prior container output. The replacement may not preserve these observations.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Failing Pod UID A",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "evidence",
+                "label": "Exit + prior logs",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "evidence",
+                "label": "available evidence",
+                "state": "active",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Deletion discards a useful target",
+            "narration": "A controller creates Pod B, but commands aimed at A can no longer retrieve its ordinary live-object state or logs.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Pod A removed",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "new",
+                "label": "Replacement Pod B",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "evidence",
+                "label": "Evidence may be lost",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "evidence",
+                "label": "target disappeared",
+                "state": "blocked",
+                "from": "old"
+              }
+            ]
+          },
+          {
+            "title": "Collect first, then change deliberately",
+            "narration": "Capture necessary status and redacted logs, identify the likely cause, and make a targeted repair. Use centralized observability for durable incident history.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Collect relevant evidence",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "fix",
+                "label": "Targeted configuration fix",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "fix",
+                "label": "cause-driven change",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m06-l03-request",
+    "title": "Narrow a broken Service request",
+    "kind": "flow",
+    "description": "Compare DNS, frontend routing, endpoint selection, and backend listener evidence.",
+    "assumption": "A normal ClusterIP Service and one same-namespace debug client are used; no external gateway is involved.",
+    "frames": [
+      {
+        "title": "Reproduce from the actual caller network",
+        "narration": "The client asks for debug-mismatch:8080. Record whether failure is DNS, connection, or an HTTP response before changing anything.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Debug client Pod",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "dns",
+            "label": "Cluster DNS answer",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "svc",
+            "label": "debug-mismatch:8080",
+            "type": "service",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "dns",
+            "label": "resolve name",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "svc",
+            "label": "attempt request",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      },
+      {
+        "title": "Inspect endpoint and listener boundaries",
+        "narration": "The Service has no matching ready endpoint because its selector is wrong. A direct backend or port-forward can still show the application itself responds.",
+        "nodes": [
+          {
+            "id": "svc",
+            "label": "Wrong selector",
+            "type": "service",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "No matching backend",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "nginx listener healthy",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "empty set",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "pod",
+            "label": "not selected",
+            "state": "blocked",
+            "from": "svc"
+          }
+        ]
+      },
+      {
+        "title": "Repair and verify the original path",
+        "narration": "Correct only the selector, observe ready endpoint records, then repeat the same client request. API acceptance alone is not the repair proof.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Same client request",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "svc",
+            "label": "Correct selector",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "slice",
+            "label": "Ready endpoint present",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "HTTP response",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "reconciled record",
+            "state": "active",
+            "from": "svc"
+          },
+          {
+            "to": "svc",
+            "label": "retest original path",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "pod",
+            "label": "forward after repair",
+            "state": "active",
+            "from": "svc"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m06-l03-request-failure",
+        "label": "Failure: a tunnel result is overgeneralized",
+        "description": "Failure: a tunnel result is overgeneralized",
+        "frames": [
+          {
+            "title": "A Pod port-forward succeeds",
+            "narration": "The operator forwards directly to one Pod and receives a response. This proves that selected backend works through the tunnel.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Laptop port-forward",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Selected Pod responds",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "debug tunnel",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          },
+          {
+            "title": "The original Service path still fails",
+            "narration": "The client Pod uses DNS and Service forwarding, which the tunnel bypassed. Its selector mismatch remains unfixed.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Client Pod still fails",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "Broken Service selector",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Backend remains healthy",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "svc",
+                "label": "original path fails",
+                "state": "blocked",
+                "from": "client"
+              },
+              {
+                "to": "pod",
+                "label": "no match",
+                "state": "blocked",
+                "from": "svc"
+              }
+            ]
+          },
+          {
+            "title": "Validate each distinct path",
+            "narration": "Keep the tunnel success as backend evidence. Repair the Service boundary and repeat the original client request before declaring recovery.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Targeted Service fix",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "client",
+                "label": "Original request succeeds",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "Backend selection restored",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "svc",
+                "label": "repair",
+                "state": "active",
+                "from": "operator"
+              },
+              {
+                "to": "svc",
+                "label": "verify actual path",
+                "state": "active",
+                "from": "client"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

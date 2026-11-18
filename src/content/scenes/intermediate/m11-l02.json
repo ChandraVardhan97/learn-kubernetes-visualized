@@ -1,0 +1,724 @@
+[
+  {
+    "title": "Constrain the process without hiding its required writes",
+    "kind": "policy",
+    "description": "Connect UID, capability, seccomp and filesystem choices to a non-root writable-path example.",
+    "assumption": "Linux node with RuntimeDefault seccomp and an emptyDir volume; not a complete hostile-code sandbox.",
+    "frames": [
+      {
+        "title": "Choose process identity",
+        "narration": "The process runs as UID 1000. runAsNonRoot checks that it is not configured to execute as root.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container process",
+            "detail": "UID/GID 1000; non-root",
+            "type": "actor",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Kernel privileges",
+            "detail": "drop ALL; no privilege escalation",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Seccomp profile",
+            "detail": "RuntimeDefault syscall filter",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Root filesystem",
+            "detail": "Mounted read-only",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Work volume",
+            "detail": "/work; group-accessible emptyDir",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [],
+        "code": "runAsNonRoot: true\nrunAsUser: 1000"
+      },
+      {
+        "title": "Reduce kernel powers",
+        "narration": "Dropping capabilities and disabling privilege escalation reduce privilege paths independently of the UID choice.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container process",
+            "detail": "UID/GID 1000; non-root",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Kernel privileges",
+            "detail": "drop ALL; no privilege escalation",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Seccomp profile",
+            "detail": "RuntimeDefault syscall filter",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "Root filesystem",
+            "detail": "Mounted read-only",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Work volume",
+            "detail": "/work; group-accessible emptyDir",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "restricted powers",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "2",
+            "label": "filtered syscalls",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Protect the image filesystem",
+        "narration": "The root filesystem is read-only, so an application writing there should receive an error rather than mutate its executable environment.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container process",
+            "detail": "UID/GID 1000; non-root",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Kernel privileges",
+            "detail": "drop ALL; no privilege escalation",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Seccomp profile",
+            "detail": "RuntimeDefault syscall filter",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Root filesystem",
+            "detail": "Mounted read-only",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Work volume",
+            "detail": "/work; group-accessible emptyDir",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "write rejected",
+            "state": "blocked"
+          }
+        ],
+        "code": "readOnlyRootFilesystem: true"
+      },
+      {
+        "title": "Allow a deliberate writable path",
+        "narration": "A separately mounted emptyDir provides /work with suitable group permissions; read-only root does not override this mount.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container process",
+            "detail": "UID/GID 1000; non-root",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Kernel privileges",
+            "detail": "drop ALL; no privilege escalation",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Seccomp profile",
+            "detail": "RuntimeDefault syscall filter",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Root filesystem",
+            "detail": "Mounted read-only",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Work volume",
+            "detail": "/work; group-accessible emptyDir",
+            "type": "storage",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "4",
+            "label": "write /work/status",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Application writes to the wrong path",
+        "description": "The process tries to write to its read-only root filesystem.",
+        "frames": [
+          {
+            "title": "Pod is admitted",
+            "narration": "The security settings are valid and the application process can start.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Container process",
+                "detail": "UID/GID 1000; non-root",
+                "type": "actor",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Kernel privileges",
+                "detail": "drop ALL; no privilege escalation",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Seccomp profile",
+                "detail": "RuntimeDefault syscall filter",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Root filesystem",
+                "detail": "Mounted read-only",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Work volume",
+                "detail": "/work; group-accessible emptyDir",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Write fails at runtime",
+            "narration": "Writing outside /work fails because that path belongs to the read-only root filesystem.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Container process",
+                "detail": "UID/GID 1000; non-root",
+                "type": "actor",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Kernel privileges",
+                "detail": "drop ALL; no privilege escalation",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Seccomp profile",
+                "detail": "RuntimeDefault syscall filter",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Root filesystem",
+                "detail": "Mounted read-only",
+                "type": "storage",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "Work volume",
+                "detail": "/work; group-accessible emptyDir",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "3",
+                "label": "read-only filesystem",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Fix application paths",
+            "narration": "Configure temporary and state paths or add a narrowly scoped writable mount; do not enable privileged mode to bypass a filesystem design mistake.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Container process",
+                "detail": "UID/GID 1000; non-root",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Kernel privileges",
+                "detail": "drop ALL; no privilege escalation",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Seccomp profile",
+                "detail": "RuntimeDefault syscall filter",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Root filesystem",
+                "detail": "Mounted read-only",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Work volume",
+                "detail": "/work; group-accessible emptyDir",
+                "type": "storage",
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "use intended mount",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m11-l02-process-boundary"
+  },
+  {
+    "title": "Reject an unsafe Pod before node execution",
+    "kind": "policy",
+    "description": "Trace namespace policy labels through PSA evaluation and distinguish warning from enforcement.",
+    "assumption": "Pod Security Admission is enabled with no exemption for the training namespace or identity.",
+    "frames": [
+      {
+        "title": "Select a policy version",
+        "narration": "Namespace labels choose the Restricted standard and version for enforcement; the labels themselves require controlled ownership.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Namespace",
+            "detail": "enforce=restricted; version=v1.37",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Pod proposal",
+            "detail": "privileged: true",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PSA",
+            "detail": "Evaluate configured standard",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "API storage",
+            "detail": "Only admitted Pod is persisted",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Node runtime",
+            "detail": "Executes admitted configuration",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "policy selection",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Evaluate the proposal",
+        "narration": "The privileged container violates Restricted requirements. Authentication and RBAC can succeed before this separate admission rejection.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Namespace",
+            "detail": "enforce=restricted; version=v1.37",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Pod proposal",
+            "detail": "privileged: true",
+            "type": "object",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "PSA",
+            "detail": "Evaluate configured standard",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "API storage",
+            "detail": "Only admitted Pod is persisted",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Node runtime",
+            "detail": "Executes admitted configuration",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "validate settings",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Reject before persistence",
+        "narration": "Enforcement rejects the violating Pod, so this Pod never becomes a node execution request.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Namespace",
+            "detail": "enforce=restricted; version=v1.37",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Pod proposal",
+            "detail": "privileged: true",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PSA",
+            "detail": "Evaluate configured standard",
+            "type": "control",
+            "state": "failed"
+          },
+          {
+            "id": "3",
+            "label": "API storage",
+            "detail": "Only admitted Pod is persisted",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Node runtime",
+            "detail": "Executes admitted configuration",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "admission denied",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Admit a compliant configuration",
+        "narration": "After using compliant fields, a new proposal can persist and reach the node. Runtime permissions still need actual testing.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Namespace",
+            "detail": "enforce=restricted; version=v1.37",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Pod proposal",
+            "detail": "Compliant non-root configuration; privileged unset/false",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PSA",
+            "detail": "Evaluate configured standard",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API storage",
+            "detail": "Only admitted Pod is persisted",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Node runtime",
+            "detail": "Executes admitted configuration",
+            "type": "node",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "compliant Pod",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "schedule + start",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Only warn mode is configured",
+        "description": "The policy emits warnings but does not reject the unsafe proposal through that mode.",
+        "frames": [
+          {
+            "title": "Warning policy selected",
+            "narration": "Warn is feedback about violations rather than the enforcement action.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Namespace",
+                "detail": "warn=restricted; no enforcing rejection in this scenario",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Pod proposal",
+                "detail": "privileged: true",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "PSA",
+                "detail": "Evaluate configured standard",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API storage",
+                "detail": "Only admitted Pod is persisted",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Node runtime",
+                "detail": "Executes admitted configuration",
+                "type": "node",
+                "state": "idle"
+              }
+            ],
+            "edges": [],
+            "code": "pod-security.kubernetes.io/warn: restricted"
+          },
+          {
+            "title": "Violation is reported",
+            "narration": "The API response warns about privileged settings, but warn alone does not reject the object.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Namespace",
+                "detail": "warn=restricted; no enforcing rejection in this scenario",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Pod proposal",
+                "detail": "privileged: true",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "PSA",
+                "detail": "Evaluate configured standard",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "API storage",
+                "detail": "Only admitted Pod is persisted",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Node runtime",
+                "detail": "Executes admitted configuration",
+                "type": "node",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "warning",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Unsafe Pod may persist",
+            "narration": "Without an enforcing rule or another rejecting admission control, the Pod can reach the node despite the warning.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Namespace",
+                "detail": "warn=restricted; no enforcing rejection in this scenario",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Pod proposal",
+                "detail": "privileged: true",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "PSA",
+                "detail": "Evaluate configured standard",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API storage",
+                "detail": "Only admitted Pod is persisted",
+                "type": "storage",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Node runtime",
+                "detail": "Executes admitted configuration",
+                "type": "node",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "allowed with warning",
+                "state": "active"
+              },
+              {
+                "from": "3",
+                "to": "4",
+                "label": "execution requested",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m11-l02-admission"
+  }
+]

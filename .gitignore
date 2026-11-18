@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.superpowers/
+.taste-skill/
+.runtime/
+playwright-report/
+test-results/
+output/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+.playwright-cli/

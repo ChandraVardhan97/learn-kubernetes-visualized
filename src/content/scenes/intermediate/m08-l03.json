@@ -1,0 +1,726 @@
+[
+  {
+    "title": "Attach an application route to an owned listener",
+    "kind": "ownership",
+    "description": "Follow GatewayClass, Gateway, HTTPRoute and backend reference reconciliation.",
+    "assumption": "Gateway API CRDs and a compatible controller are already installed; all references are same-namespace.",
+    "frames": [
+      {
+        "title": "Choose the implementation",
+        "narration": "GatewayClass names the controller responsible for realizing the Gateway. API objects alone do not install that controller.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "GatewayClass",
+            "detail": "Selects controller implementation",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Gateway public",
+            "detail": "Listener and allowedRoutes",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "HTTPRoute api",
+            "detail": "Host api.example.test; path /api",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Controller",
+            "detail": "Evaluates attachment and references",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Service api",
+            "detail": "Backend Service port 80",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "controller name",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Expose an owned listener",
+        "narration": "The Gateway declares listeners and which routes may attach, giving infrastructure a separate ownership boundary.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "GatewayClass",
+            "detail": "Selects controller implementation",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Gateway public",
+            "detail": "Listener and allowedRoutes",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "HTTPRoute api",
+            "detail": "Host api.example.test; path /api",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Controller",
+            "detail": "Evaluates attachment and references",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Service api",
+            "detail": "Backend Service port 80",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "listener + policy",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Attach an application route",
+        "narration": "HTTPRoute parentRefs asks to attach to the Gateway. The controller checks listener rules and resolves backend references.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "GatewayClass",
+            "detail": "Selects controller implementation",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Gateway public",
+            "detail": "Listener and allowedRoutes",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "HTTPRoute api",
+            "detail": "Host api.example.test; path /api",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Controller",
+            "detail": "Evaluates attachment and references",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Service api",
+            "detail": "Backend Service port 80",
+            "type": "service",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "1",
+            "label": "parentRefs",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "4",
+            "label": "backendRefs",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Report accepted configuration",
+        "narration": "Status conditions describe attachment and references. Ready endpoints and external reachability are still needed for successful requests.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "GatewayClass",
+            "detail": "Selects controller implementation",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Gateway public",
+            "detail": "Listener and allowedRoutes",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "HTTPRoute api",
+            "detail": "Host api.example.test; path /api",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "Controller",
+            "detail": "Evaluates attachment and references",
+            "type": "control",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Service api",
+            "detail": "Backend Service port 80",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "2",
+            "label": "Accepted / ResolvedRefs",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl describe httproute api"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Gateway rejects attachment",
+        "description": "The listener does not allow this route namespace or kind.",
+        "frames": [
+          {
+            "title": "Route exists",
+            "narration": "The API stores the route, but persistence does not mean a parent accepted it.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "GatewayClass",
+                "detail": "Selects controller implementation",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Gateway public",
+                "detail": "Listener and allowedRoutes",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "HTTPRoute api",
+                "detail": "Host api.example.test; path /api",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "3",
+                "label": "Controller",
+                "detail": "Evaluates attachment and references",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Service api",
+                "detail": "Backend Service port 80",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Attachment check fails",
+            "narration": "The Gateway listener allowedRoutes rule rejects the route, so its routing rule is not programmed there.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "GatewayClass",
+                "detail": "Selects controller implementation",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Gateway public",
+                "detail": "Listener and allowedRoutes",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "HTTPRoute api",
+                "detail": "Host api.example.test; path /api",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Controller",
+                "detail": "Evaluates attachment and references",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Service api",
+                "detail": "Backend Service port 80",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "1",
+                "label": "not allowed",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect parent conditions",
+            "narration": "Repair the attachment policy with the listener owner rather than changing a healthy backend Pod.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "GatewayClass",
+                "detail": "Selects controller implementation",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Gateway public",
+                "detail": "Listener and allowedRoutes",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "HTTPRoute api",
+                "detail": "Host api.example.test; path /api",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Controller",
+                "detail": "Evaluates attachment and references",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "4",
+                "label": "Service api",
+                "detail": "Backend Service port 80",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "2",
+                "label": "status reason",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl get httproute api -o yaml"
+          }
+        ]
+      }
+    ],
+    "id": "m08-l03-attachment"
+  },
+  {
+    "title": "TLS ends where it is terminated",
+    "kind": "flow",
+    "description": "Follow hostname verification, listener TLS termination and a separately configured backend hop.",
+    "assumption": "HTTP routing after listener termination; passthrough TLS is intentionally outside this example.",
+    "frames": [
+      {
+        "title": "Load listener credentials",
+        "narration": "The implementation obtains a permitted certificate reference and key for the HTTPS listener.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Requests api.example.test",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "TLS listener",
+            "detail": "Certificate and private key",
+            "type": "service",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "TLS Secret",
+            "detail": "kubernetes.io/tls",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "HTTP router",
+            "detail": "Matches host and path",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Backend Service",
+            "detail": "HTTP unless configured otherwise",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "1",
+            "label": "certificate reference",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Verify the hostname and trust",
+        "narration": "The client checks that certificate names cover api.example.test and that its issuer is trusted.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Requests api.example.test",
+            "type": "actor",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "TLS listener",
+            "detail": "Certificate and private key",
+            "type": "service",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "TLS Secret",
+            "detail": "kubernetes.io/tls",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "HTTP router",
+            "detail": "Matches host and path",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Backend Service",
+            "detail": "HTTP unless configured otherwise",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "TLS handshake",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Route decrypted HTTP",
+        "narration": "After terminating TLS, the implementation can inspect the HTTP host and path and select a route.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Requests api.example.test",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "TLS listener",
+            "detail": "Certificate and private key",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "TLS Secret",
+            "detail": "kubernetes.io/tls",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "HTTP router",
+            "detail": "Matches host and path",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Backend Service",
+            "detail": "HTTP unless configured otherwise",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "HTTP request",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Open a separate backend connection",
+        "narration": "The router connects to the backend using its configured protocol. Listener TLS does not automatically encrypt this connection.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Requests api.example.test",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "TLS listener",
+            "detail": "Certificate and private key",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "TLS Secret",
+            "detail": "kubernetes.io/tls",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "HTTP router",
+            "detail": "Matches host and path",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Backend Service",
+            "detail": "HTTP unless configured otherwise",
+            "type": "service",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "HTTP backend hop",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Wrong certificate name",
+        "description": "The listener is reachable but presents a certificate for a different hostname.",
+        "frames": [
+          {
+            "title": "TCP reaches the listener",
+            "narration": "Network reachability succeeds before certificate identity is evaluated.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client",
+                "detail": "Requests api.example.test",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "TLS listener",
+                "detail": "Certificate and private key",
+                "type": "service",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "TLS Secret",
+                "detail": "kubernetes.io/tls",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "HTTP router",
+                "detail": "Matches host and path",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Backend Service",
+                "detail": "HTTP unless configured otherwise",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "TCP connected",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Identity check fails",
+            "narration": "The client rejects the certificate because the requested hostname is absent from its valid names.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client",
+                "detail": "Requests api.example.test",
+                "type": "actor",
+                "state": "failed"
+              },
+              {
+                "id": "1",
+                "label": "TLS listener",
+                "detail": "Certificate and private key",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "TLS Secret",
+                "detail": "kubernetes.io/tls",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "HTTP router",
+                "detail": "Matches host and path",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Backend Service",
+                "detail": "HTTP unless configured otherwise",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "0",
+                "label": "hostname mismatch",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Repair identity and trust",
+            "narration": "Use the intended hostname, covering certificate and trusted CA, then verify again without disabling checks.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client",
+                "detail": "Requests api.example.test",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "TLS listener",
+                "detail": "Certificate and private key",
+                "type": "service",
+                "state": "active"
+              },
+              {
+                "id": "2",
+                "label": "TLS Secret",
+                "detail": "kubernetes.io/tls",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "3",
+                "label": "HTTP router",
+                "detail": "Matches host and path",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Backend Service",
+                "detail": "HTTP unless configured otherwise",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "1",
+                "label": "correct certificate",
+                "state": "active"
+              }
+            ],
+            "code": "curl --cacert lab-ca.crt --resolve api.example.test:443:127.0.0.1 https://api.example.test/api"
+          }
+        ]
+      }
+    ],
+    "id": "m08-l03-tls"
+  }
+]

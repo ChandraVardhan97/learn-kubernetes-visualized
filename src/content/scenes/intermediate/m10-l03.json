@@ -1,0 +1,847 @@
+[
+  {
+    "title": "Traffic removal and process shutdown share a deadline",
+    "kind": "lifecycle",
+    "description": "Trace deletion, endpoint readiness, preStop, stop signal and final process exit.",
+    "assumption": "One ordinary container and a normal deletion; precise propagation time depends on components.",
+    "frames": [
+      {
+        "title": "Deletion begins",
+        "narration": "The API records deletion and a grace period. Endpoint state and node shutdown react asynchronously to that transition.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pod",
+            "detail": "Handles active requests",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "1",
+            "label": "EndpointSlice",
+            "detail": "Terminating / not ready",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "kubelet",
+            "detail": "Grace-period deadline",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "preStop hook",
+            "detail": "Runs within grace budget",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application process",
+            "detail": "Handle stop signal and exit",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Clients / proxy",
+            "detail": "Observe endpoint updates",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "termination state",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "2",
+            "label": "deletion observed",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Stop new traffic and run hook",
+        "narration": "Endpoint updates discourage new ordinary traffic, while preStop uses part of the same grace-period budget.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pod",
+            "detail": "Handles active requests",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "EndpointSlice",
+            "detail": "Terminating / not ready",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "kubelet",
+            "detail": "Grace-period deadline",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "preStop hook",
+            "detail": "Runs within grace budget",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Application process",
+            "detail": "Handle stop signal and exit",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Clients / proxy",
+            "detail": "Observe endpoint updates",
+            "type": "service",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "5",
+            "label": "remove ready choice",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "invoke hook",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Signal the process",
+        "narration": "After the hook, the runtime sends the normal stop signal. The application should finish or hand off in-flight work and stop accepting new work.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pod",
+            "detail": "Handles active requests",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "EndpointSlice",
+            "detail": "Terminating / not ready",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "kubelet",
+            "detail": "Grace-period deadline",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "preStop hook",
+            "detail": "Runs within grace budget",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application process",
+            "detail": "Handle stop signal and exit",
+            "type": "actor",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "Clients / proxy",
+            "detail": "Observe endpoint updates",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "4",
+            "label": "stop signal",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Exit before the deadline",
+        "narration": "A graceful process exit completes shutdown. Existing connections and upstream propagation must be considered in the application design.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pod",
+            "detail": "Handles active requests",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "EndpointSlice",
+            "detail": "Terminating / not ready",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "kubelet",
+            "detail": "Grace-period deadline",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "preStop hook",
+            "detail": "Runs within grace budget",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Application process",
+            "detail": "Handle stop signal and exit",
+            "type": "actor",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Clients / proxy",
+            "detail": "Observe endpoint updates",
+            "type": "service",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "2",
+            "label": "exited",
+            "state": "active"
+          }
+        ],
+        "code": "terminationGracePeriodSeconds: 30"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Hook consumes the grace budget",
+        "description": "A long hook leaves insufficient time for application shutdown.",
+        "frames": [
+          {
+            "title": "Slow preStop starts",
+            "narration": "The grace countdown is already running while the hook waits.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "API Pod",
+                "detail": "Handles active requests",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "EndpointSlice",
+                "detail": "Terminating / not ready",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "kubelet",
+                "detail": "Grace-period deadline",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "preStop hook",
+                "detail": "Runs within grace budget",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Application process",
+                "detail": "Handle stop signal and exit",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Clients / proxy",
+                "detail": "Observe endpoint updates",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "countdown running",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Application receives little time",
+            "narration": "The hook consumes most of the budget before the process can finish active work.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "API Pod",
+                "detail": "Handles active requests",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "EndpointSlice",
+                "detail": "Terminating / not ready",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "kubelet",
+                "detail": "Grace-period deadline",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "preStop hook",
+                "detail": "Runs within grace budget",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Application process",
+                "detail": "Handle stop signal and exit",
+                "type": "actor",
+                "state": "warning"
+              },
+              {
+                "id": "5",
+                "label": "Clients / proxy",
+                "detail": "Observe endpoint updates",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "4",
+                "label": "late stop signal",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Deadline forces termination",
+            "narration": "If shutdown does not complete within the available grace handling, the runtime can kill remaining processes. Increase budgets only with a measured shutdown protocol.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "API Pod",
+                "detail": "Handles active requests",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "EndpointSlice",
+                "detail": "Terminating / not ready",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "kubelet",
+                "detail": "Grace-period deadline",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "preStop hook",
+                "detail": "Runs within grace budget",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Application process",
+                "detail": "Handle stop signal and exit",
+                "type": "actor",
+                "state": "failed"
+              },
+              {
+                "id": "5",
+                "label": "Clients / proxy",
+                "detail": "Observe endpoint updates",
+                "type": "service",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "4",
+                "label": "force stop",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m10-l03-termination"
+  },
+  {
+    "title": "Eviction asks permission from the current health budget",
+    "kind": "policy",
+    "description": "Follow cordon, PDB health evaluation, eviction and replacement during maintenance.",
+    "assumption": "Three selected replicas with minAvailable=2; ordinary Eviction API path and a controller-managed workload.",
+    "frames": [
+      {
+        "title": "Cordon the worker",
+        "narration": "The node becomes unschedulable for ordinary new Pods. Existing workloads do not move merely because it is cordoned.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Worker A",
+            "detail": "Node to maintain",
+            "type": "node",
+            "state": "warning"
+          },
+          {
+            "id": "1",
+            "label": "Drain",
+            "detail": "Cordon then eviction requests",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PDB",
+            "detail": "minAvailable=2; healthy=3",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API Pod A",
+            "detail": "On Worker A",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Replica controller",
+            "detail": "Maintains desired count",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Worker B",
+            "detail": "Has replacement capacity",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "0",
+            "label": "unschedulable",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Ask for an eviction",
+        "narration": "Drain requests voluntary eviction. With three healthy replicas and minimum two, the PDB can permit one disruption.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Worker A",
+            "detail": "Node to maintain",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Drain",
+            "detail": "Cordon then eviction requests",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PDB",
+            "detail": "minAvailable=2; healthy=3",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "API Pod A",
+            "detail": "On Worker A",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "4",
+            "label": "Replica controller",
+            "detail": "Maintains desired count",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Worker B",
+            "detail": "Has replacement capacity",
+            "type": "node",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "Eviction API",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "one allowed",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Replace the removed replica",
+        "narration": "The controller sees fewer current replicas than desired and creates a replacement, which still needs suitable scheduling and storage.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Worker A",
+            "detail": "Node to maintain",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Drain",
+            "detail": "Cordon then eviction requests",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PDB",
+            "detail": "minAvailable=2; healthy=3",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API Pod A",
+            "detail": "On Worker A",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Replica controller",
+            "detail": "Maintains desired count",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "Worker B",
+            "detail": "Has replacement capacity",
+            "type": "node",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "replica missing",
+            "state": "active"
+          },
+          {
+            "from": "4",
+            "to": "5",
+            "label": "new Pod",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Wait for health before more removal",
+        "narration": "The replacement must become healthy before the next covered disruption can use a renewed budget.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Worker A",
+            "detail": "Node to maintain",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Drain",
+            "detail": "Cordon then eviction requests",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "PDB",
+            "detail": "minAvailable=2; healthy=3",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "API Pod A",
+            "detail": "On Worker A",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Replica controller",
+            "detail": "Maintains desired count",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Worker B",
+            "detail": "Has replacement capacity",
+            "type": "node",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "5",
+            "to": "2",
+            "label": "healthy count restored",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "A replica was already unready",
+        "description": "Only two selected replicas are healthy before drain begins.",
+        "frames": [
+          {
+            "title": "Health budget exhausted",
+            "narration": "minAvailable=2 and healthy=2 leave no room for another covered healthy eviction.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Worker A",
+                "detail": "Node to maintain",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Drain",
+                "detail": "Cordon then eviction requests",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "PDB",
+                "detail": "minAvailable=2; healthy=2",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "API Pod A",
+                "detail": "On Worker A",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Replica controller",
+                "detail": "Maintains desired count",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Worker B",
+                "detail": "Has replacement capacity",
+                "type": "node",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Eviction waits",
+            "narration": "The PDB rejects the voluntary removal that would reduce healthy availability below the budget.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Worker A",
+                "detail": "Node to maintain",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Drain",
+                "detail": "Cordon then eviction requests",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "PDB",
+                "detail": "minAvailable=2; healthy=2",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API Pod A",
+                "detail": "On Worker A",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "Replica controller",
+                "detail": "Maintains desired count",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Worker B",
+                "detail": "Has replacement capacity",
+                "type": "node",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "no disruption allowed",
+                "state": "blocked"
+              },
+              {
+                "from": "2",
+                "to": "3",
+                "label": "keep healthy Pod",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Repair health or plan capacity",
+            "narration": "Recover the unhealthy replica or add a viable replacement. A PDB cannot prevent node crashes or create capacity by itself.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Worker A",
+                "detail": "Node to maintain",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Drain",
+                "detail": "Cordon then eviction requests",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "PDB",
+                "detail": "minAvailable=2; healthy=2",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API Pod A",
+                "detail": "On Worker A",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Replica controller",
+                "detail": "Maintains desired count",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "5",
+                "label": "Worker B",
+                "detail": "Has replacement capacity",
+                "type": "node",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "5",
+                "label": "restore healthy capacity",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pdb api-availability"
+          }
+        ]
+      }
+    ],
+    "id": "m10-l03-drain"
+  }
+]

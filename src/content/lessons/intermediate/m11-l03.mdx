@@ -1,0 +1,132 @@
+---
+{
+  "lessonId": "m11-l03",
+  "title": "Protecting Secrets and tenant boundaries",
+  "description": "Combine credential handling, encryption, RBAC, admission and network controls around realistic trust boundaries.",
+  "level": "intermediate",
+  "module": "m11",
+  "order": 3,
+  "minutes": 18,
+  "prerequisites": [
+    "m11-l02"
+  ],
+  "objectives": [
+    "Explain why base64 Secret data is not encryption",
+    "Trace credential access through API, mounts and application logging",
+    "Assess what namespace controls provide for mutually untrusted tenants"
+  ],
+  "concepts": [
+    {
+      "id": "m11-l03-secret-encoding",
+      "title": "Secret encoding and encryption",
+      "scene": "m11-l03-secret-path"
+    },
+    {
+      "id": "m11-l03-secret-exposure",
+      "title": "Credential delivery and rotation",
+      "scene": "m11-l03-secret-path"
+    },
+    {
+      "id": "m11-l03-tenant-boundaries",
+      "title": "Tenant boundary controls",
+      "scene": "m11-l03-tenant-controls"
+    },
+    {
+      "id": "m11-l03-least-privilege",
+      "title": "Layered least privilege",
+      "scene": "m11-l03-tenant-controls"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Secrets good practices",
+      "url": "https://kubernetes.io/docs/concepts/security/secrets-good-practices/"
+    },
+    {
+      "title": "Encrypting confidential data at rest",
+      "url": "https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/"
+    },
+    {
+      "title": "Multi-tenancy",
+      "url": "https://kubernetes.io/docs/concepts/security/multi-tenancy/"
+    }
+  ],
+  "lab": "m11",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: a Secret is sensitive API data, not an automatic vault
+
+A Kubernetes **Secret** stores small sensitive values for applications and integrations. Its `data` field is base64-encoded because the API must represent bytes in text. Anyone who can read those encoded values can decode them. Encoding is not encryption, and moving a password from a ConfigMap to a Secret does not by itself make every storage, access and logging path safe.
+
+**Encryption at rest** protects stored API data according to the control plane's configured encryption provider. It is not universally enabled merely because an object is kind Secret. Managed providers may configure it as part of the service; self-managed clusters need deliberate API server configuration, key handling and verification. Existing stored objects can require a rewrite after encryption configuration changes. Key management, control-plane access and backups remain part of the boundary. At-rest encryption also does not stop an authorized API reader from receiving plaintext Secret data.
+
+<Scene id="m11-l03-secret-path" />
+
+## Walkthrough: minimize every place credentials can appear
+
+The following Pod fragment shows file-based Secret consumption without embedding the credential value in the workload manifest. This optional exercise requires a separately provisioned throwaway Secret or an approved external credential workflow; the module lab's baseline does not create this Secret. Keep real credentials out of examples, shell history and version control.
+
+```yaml
+# Fragment: spec of a workload that does not need Kubernetes API access.
+automountServiceAccountToken: false
+containers:
+  - name: application
+    image: busybox:1.36
+    command: ["sh", "-c", "test -r /credentials/password; sleep 3600"]
+    volumeMounts:
+      - name: credential
+        mountPath: /credentials
+        readOnly: true
+volumes:
+  - name: credential
+    secret:
+      secretName: application-login
+      defaultMode: 0400   # Ensure the configured process UID can read it.
+```
+
+A Secret volume can be updated eventually when the Secret changes, but the application must reread the file or reload its configuration. A mount through `subPath` does not receive normal projected updates. A Secret injected as an environment variable does not update in an already running process when the Secret object changes. Plan rotation around both the external credential's validity and the application's consumption method; updating one API object is not a complete rotation procedure.
+
+File permissions must match the process identity. The `0400` example is appropriate only when the intended process owns or can validly read the file under the actual volume and security context arrangement. A non-root process may need an intentionally designed group-readable mode and group settings. Do not solve a permission error by logging the Secret content to prove that it exists. Check file metadata and access results without revealing values.
+
+<Scene id="m11-l03-tenant-controls" />
+
+## Practice: verify access, presence and reload without revealing data
+
+```bash
+kubectl get secret application-login
+kubectl describe secret application-login
+# Describe lists keys and sizes, not decoded credential contents.
+kubectl auth can-i get secrets -n learning
+kubectl exec application -- sh -c 'test -r /credentials/password && echo readable'
+kubectl get pod application -o yaml
+```
+
+The last command can show whether unexpected credential mounts or ServiceAccount settings were admitted. Treat Pod environment output and application debug endpoints as sensitive because they may expose secret-derived values. When extending the [security lab](/labs/#m11) with this Secret example, use only throwaway credentials, then rotate one value and observe whether the mounted file and application behavior change. Record reload behavior rather than printing the value itself.
+
+A **tenant boundary** combines several controls. RBAC limits API operations; admission limits which Pod configurations those operations can create; NetworkPolicy constrains permitted traffic when enforced; quotas limit declared resource consumption; and node or cluster isolation limits shared host risk. Namespaces organize these controls but do not automatically supply all of them. Users allowed to create Pods in a namespace can often consume that namespace's Secrets indirectly, even without direct `get secrets`, unless additional controls restrict workload creation and credential use.
+
+## Pitfalls: shared cluster trust is a design decision
+
+A privileged tenant workload or hostPath mount can bypass assumptions about namespace isolation. Some API resources are cluster-scoped, and CRDs or admission webhooks may affect many tenants. Two cooperative application teams and two mutually hostile customers require different boundaries. For stronger isolation, consider dedicated nodes with enforced placement rules, virtualized control planes or separate clusters, while evaluating which data-plane and host resources remain shared. Never describe quotas or a namespace label as a complete security sandbox.
+
+## Check your understanding
+
+<details>
+<summary>A user cannot get Secrets directly but can create arbitrary Pods in the same namespace. Is the Secret necessarily protected from that user?</summary>
+
+No. The user may create a Pod that mounts the Secret or uses a more powerful ServiceAccount, depending on admission rules and available identities. Analyze indirect access paths as well as direct API verbs. Protecting credentials requires constraints on workload creation, identity selection and mounts, in addition to limiting Secret read permission.
+
+</details>
+
+Next, use these boundaries while diagnosing failures. Operational visibility should reveal the responsible layer without collecting credentials or unnecessary tenant data.
+
+## Primary documentation
+
+- [Secrets good practices](https://kubernetes.io/docs/concepts/security/secrets-good-practices/)
+- [Encrypting confidential data at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
+- [Multi-tenancy](https://kubernetes.io/docs/concepts/security/multi-tenancy/)

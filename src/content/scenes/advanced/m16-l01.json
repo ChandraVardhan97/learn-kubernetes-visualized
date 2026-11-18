@@ -1,0 +1,759 @@
+[
+  {
+    "title": "API registration precedes reconciliation",
+    "kind": "flow",
+    "description": "The Python operator reads the instance and applies ordinary Kubernetes children.",
+    "assumption": "The concrete lab uses a single namespaced v1alpha1 API and a host-run polling controller.",
+    "frames": [
+      {
+        "title": "Register the type",
+        "narration": "The CRD becomes Established and the API can discover webapps.labs.kv.example.",
+        "nodes": [
+          {
+            "id": "crd",
+            "label": "WebApp CRD",
+            "type": "object",
+            "detail": "Schema + resource registration",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Validate and store instance",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp instance",
+            "type": "object",
+            "detail": "spec.replicas + message",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "operator",
+            "label": "Python operator",
+            "type": "control",
+            "detail": "Separate reconcile process",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Generated Deployment",
+            "type": "object",
+            "detail": "Normal workload API",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "register type",
+            "state": "active",
+            "from": "crd"
+          }
+        ]
+      },
+      {
+        "title": "Store an instance",
+        "narration": "A valid WebApp spec is accepted even when no operator process is running.",
+        "nodes": [
+          {
+            "id": "crd",
+            "label": "WebApp CRD",
+            "type": "object",
+            "detail": "Schema + resource registration",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Validate and store instance",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp instance",
+            "type": "object",
+            "detail": "spec.replicas + message",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "operator",
+            "label": "Python operator",
+            "type": "control",
+            "detail": "Separate reconcile process",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Generated Deployment",
+            "type": "object",
+            "detail": "Normal workload API",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cr",
+            "label": "validated instance",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Apply structural schema rules",
+        "narration": "The structural schema validates replicas and message types and bounds. Unknown fields are normally pruned unless preservation is explicitly enabled for that subtree, so read the stored object back rather than assume a misspelled field was retained.",
+        "nodes": [
+          {
+            "id": "crd",
+            "label": "WebApp CRD",
+            "type": "object",
+            "detail": "Schema + resource registration",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Validate and store instance",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp instance",
+            "type": "object",
+            "detail": "spec.replicas + message",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "operator",
+            "label": "Python operator",
+            "type": "control",
+            "detail": "Separate reconcile process",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Generated Deployment",
+            "type": "object",
+            "detail": "Normal workload API",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cr",
+            "label": "validated instance",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Supply behavior separately",
+        "narration": "The Python operator reads the instance and applies ordinary Kubernetes children.",
+        "nodes": [
+          {
+            "id": "crd",
+            "label": "WebApp CRD",
+            "type": "object",
+            "detail": "Schema + resource registration",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Validate and store instance",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp instance",
+            "type": "object",
+            "detail": "spec.replicas + message",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "operator",
+            "label": "Python operator",
+            "type": "control",
+            "detail": "Separate reconcile process",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "dep",
+            "label": "Generated Deployment",
+            "type": "object",
+            "detail": "Normal workload API",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "operator",
+            "label": "desired intention",
+            "state": "active",
+            "from": "cr"
+          },
+          {
+            "to": "dep",
+            "label": "create / apply",
+            "state": "active",
+            "from": "operator"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Invalid desired input",
+        "description": "The schema rejects an out-of-range replica count before reconciliation.",
+        "frames": [
+          {
+            "title": "Client sends replicas zero",
+            "narration": "The teaching schema requires a positive count within its configured range.",
+            "nodes": [
+              {
+                "id": "crd",
+                "label": "WebApp CRD",
+                "type": "object",
+                "detail": "Schema + resource registration",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Validate and store instance",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cr",
+                "label": "Invalid WebApp proposal",
+                "type": "object",
+                "detail": "replicas: 0",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "operator",
+                "label": "Python operator",
+                "type": "control",
+                "detail": "Separate reconcile process",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Generated Deployment",
+                "type": "object",
+                "detail": "Normal workload API",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cr",
+                "label": "schema rejects zero replicas",
+                "state": "blocked",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "Validation rejects write",
+            "narration": "The invalid instance is not stored as the new desired state.",
+            "nodes": [
+              {
+                "id": "crd",
+                "label": "WebApp CRD",
+                "type": "object",
+                "detail": "Schema + resource registration",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Schema rejects replicas: 0",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "cr",
+                "label": "Rejected WebApp proposal",
+                "type": "object",
+                "detail": "Invalid spec was not persisted",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "operator",
+                "label": "Python operator",
+                "type": "control",
+                "detail": "Separate reconcile process",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Generated Deployment",
+                "type": "object",
+                "detail": "Normal workload API",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cr",
+                "label": "schema rejects zero replicas",
+                "state": "blocked",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "Operator cannot fix absent intent",
+            "narration": "No new valid intention reaches the controller; correct the request rather than restart its children.",
+            "nodes": [
+              {
+                "id": "crd",
+                "label": "WebApp CRD",
+                "type": "object",
+                "detail": "Schema + resource registration",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Validate and store instance",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cr",
+                "label": "WebApp instance",
+                "type": "object",
+                "detail": "spec.replicas + message",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "operator",
+                "label": "Python operator",
+                "type": "control",
+                "detail": "Separate reconcile process",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "dep",
+                "label": "Generated Deployment",
+                "type": "object",
+                "detail": "Normal workload API",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "operator",
+                "label": "no new accepted intent",
+                "state": "blocked",
+                "from": "cr"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m16-l01-crd-registration"
+  },
+  {
+    "title": "Representation, storage, and observed generation",
+    "kind": "flow",
+    "description": "The controller writes status through its subresource. observedGeneration can advance before readyReplicas reaches the target.",
+    "assumption": "The lab has one version and no conversion webhook; the failure branch models a future multi-version API.",
+    "frames": [
+      {
+        "title": "Serve a version",
+        "narration": "The client uses a served representation whose schema defines fields and validation.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Versioned client",
+            "type": "actor",
+            "detail": "Requests a served API",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "convert",
+            "label": "Schema / conversion",
+            "type": "control",
+            "detail": "Representation boundary",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "Storage version",
+            "type": "storage",
+            "detail": "Exactly one designated version",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Status subresource",
+            "type": "object",
+            "detail": "Observed generation + ready count",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "convert",
+            "label": "versioned object",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      },
+      {
+        "title": "Persist with a storage contract",
+        "narration": "The API uses the designated storage version; adding a version alone does not rewrite old objects.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Versioned client",
+            "type": "actor",
+            "detail": "Requests a served API",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "convert",
+            "label": "Schema / conversion",
+            "type": "control",
+            "detail": "Representation boundary",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "Storage version",
+            "type": "storage",
+            "detail": "Exactly one designated version",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "status",
+            "label": "Status subresource",
+            "type": "object",
+            "detail": "Observed generation + ready count",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "store",
+            "label": "storage representation",
+            "state": "active",
+            "from": "convert"
+          }
+        ]
+      },
+      {
+        "title": "Report observations separately",
+        "narration": "The controller writes status through its subresource. observedGeneration can advance before readyReplicas reaches the target.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "Versioned client",
+            "type": "actor",
+            "detail": "Requests a served API",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "convert",
+            "label": "Schema / conversion",
+            "type": "control",
+            "detail": "Representation boundary",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "store",
+            "label": "Storage version",
+            "type": "storage",
+            "detail": "Exactly one designated version",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Status subresource",
+            "type": "object",
+            "detail": "Controller reports observed state separately",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "controller",
+            "label": "Controller",
+            "type": "control",
+            "state": "active",
+            "detail": "Writes observed state",
+            "x": 290,
+            "y": 230
+          }
+        ],
+        "edges": [
+          {
+            "to": "status",
+            "label": "status subresource update",
+            "state": "active",
+            "from": "controller"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Conversion unavailable",
+        "description": "An API that depends on a conversion webhook has an availability dependency.",
+        "frames": [
+          {
+            "title": "New client requests conversion",
+            "narration": "A multi-version extension requires representation conversion for this request.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Versioned client",
+                "type": "actor",
+                "detail": "Requests a served API",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "convert",
+                "label": "Schema / conversion",
+                "type": "control",
+                "detail": "Representation boundary",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "store",
+                "label": "Storage version",
+                "type": "storage",
+                "detail": "Exactly one designated version",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "Status subresource",
+                "type": "object",
+                "detail": "Observed generation + ready count",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "convert",
+                "label": "versioned object",
+                "state": "active",
+                "from": "client"
+              }
+            ]
+          },
+          {
+            "title": "Webhook cannot respond",
+            "narration": "The required conversion path is unavailable; the request may fail even though data still exists.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Versioned client",
+                "type": "actor",
+                "detail": "Requests a served API",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "convert",
+                "label": "Schema / conversion",
+                "type": "control",
+                "detail": "Required conversion unavailable",
+                "x": 290,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "store",
+                "label": "Storage version",
+                "type": "storage",
+                "detail": "Exactly one designated version",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "status",
+                "label": "Status subresource",
+                "type": "object",
+                "detail": "Observed generation + ready count",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "store",
+                "label": "conversion unavailable",
+                "state": "blocked",
+                "from": "convert"
+              }
+            ]
+          },
+          {
+            "title": "Do not remove old storage blindly",
+            "narration": "Recover the conversion path and verify migration before disabling older stored representations.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "Versioned client",
+                "type": "actor",
+                "detail": "Requests a served API",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "convert",
+                "label": "Schema / conversion",
+                "type": "control",
+                "detail": "Representation boundary",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "store",
+                "label": "Storage version",
+                "type": "storage",
+                "detail": "Exactly one designated version",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "Status subresource",
+                "type": "object",
+                "detail": "Observed generation + ready count",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m16-l01-crd-version-status"
+  }
+]

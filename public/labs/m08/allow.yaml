@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: m08-allow
+  namespace: kv-lab
+  labels:
+    lab: m08
+spec:
+  podSelector:
+    matchLabels:
+      app: m08
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              lab: m08
+      ports:
+        - protocol: TCP
+          port: 80

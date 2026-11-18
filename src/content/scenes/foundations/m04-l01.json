@@ -1,0 +1,459 @@
+[
+  {
+    "id": "m04-l01-boundary",
+    "title": "What containers in a Pod share",
+    "kind": "cluster",
+    "description": "Contrast shared networking and explicitly mounted storage with separate root filesystems.",
+    "assumption": "One Linux Pod has two ordinary containers and one disk-backed emptyDir.",
+    "frames": [
+      {
+        "title": "One Pod, one placement",
+        "narration": "Both containers belong to one Pod scheduled on one worker. They are not independently scheduled replicas.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Worker node-a",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Pod UID P",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "App container",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Helper container",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "node",
+            "label": "one binding",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "a",
+            "label": "groups",
+            "state": "active",
+            "from": "pod"
+          },
+          {
+            "to": "b",
+            "label": "groups",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      },
+      {
+        "title": "Share the network namespace",
+        "narration": "App and helper use the same Pod IP and port space. localhost reaches peers inside this Pod, not another Pod.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "App :8080",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "net",
+            "label": "Shared Pod network",
+            "type": "service",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Helper :9090",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "net",
+            "label": "same interfaces",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "net",
+            "label": "same interfaces",
+            "state": "active",
+            "from": "b"
+          },
+          {
+            "to": "b",
+            "label": "localhost:9090",
+            "state": "active",
+            "from": "a"
+          }
+        ]
+      },
+      {
+        "title": "Mount storage explicitly",
+        "narration": "Each container has its own root filesystem. Both mount one emptyDir to exchange files during this Pod\u2019s lifetime.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "App root filesystem",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "vol",
+            "label": "Shared emptyDir",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Helper root filesystem",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "vol",
+            "label": "mounted /data",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "vol",
+            "label": "mounted /shared",
+            "state": "active",
+            "from": "b"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m04-l01-boundary-failure",
+        "label": "Failure: two listeners compete",
+        "description": "Failure: two listeners compete",
+        "frames": [
+          {
+            "title": "Both containers choose port 8080",
+            "narration": "The app already binds all local interfaces on port 8080. The helper attempts the same address and TCP port.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "App owns :8080",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "Helper wants :8080",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "net",
+                "label": "Shared port space",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "net",
+                "label": "bound listener",
+                "state": "active",
+                "from": "a"
+              },
+              {
+                "to": "net",
+                "label": "competing bind",
+                "state": "blocked",
+                "from": "b"
+              }
+            ]
+          },
+          {
+            "title": "The helper bind fails",
+            "narration": "Separate images do not create separate network namespaces inside this Pod. The helper may exit with address-in-use evidence.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "App still listening",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "Helper bind error",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Choose distinct ports",
+            "narration": "Configure the helper on 9090 or use another explicit local IPC design. Documenting different containerPort fields is insufficient unless the processes bind accordingly.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "App :8080",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "Helper :9090",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "b",
+                "label": "localhost:9090",
+                "state": "active",
+                "from": "a"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m04-l01-restart",
+    "title": "Restart a container, replace a Pod",
+    "kind": "lifecycle",
+    "description": "Compare kubelet restart policy with controller-created replacement identity.",
+    "assumption": "The local restart frames use a standalone OnFailure Pod with no per-container restart rules. The replacement frame switches to a separate ReplicaSet-managed Pod, whose Pod-level policy must be Always.",
+    "frames": [
+      {
+        "title": "The executable terminates",
+        "narration": "The app exits with code 7. Its container state becomes Terminated while the Pod identity and node binding still exist.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Pod UID P on node-a",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "Terminated: exit 7",
+            "type": "pod",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet node-a",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "observes exit",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      },
+      {
+        "title": "OnFailure retries locally",
+        "narration": "With restartPolicy OnFailure, the kubelet restarts the app container. Repeated immediate exits introduce restart backoff.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Same Pod UID P",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "app",
+            "label": "New container attempt",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kubelet",
+            "label": "Local restart",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "app",
+            "label": "restart failed container",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "app",
+            "label": "same Pod lifetime",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      },
+      {
+        "title": "A deleted Pod requires replacement",
+        "narration": "For a separate ReplicaSet-managed Pod using Pod-level restartPolicy Always, deletion ends its UID. The ReplicaSet creates Pod Q; scheduling and startup then run for Q. An OnFailure template is not valid for a ReplicaSet.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Managed Pod P deleted",
+            "type": "pod",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "Pod Q: new UID",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "new",
+            "label": "create replacement",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m04-l01-restart-failure",
+        "label": "Failure: Never means no container retry",
+        "description": "Failure: Never means no container retry",
+        "frames": [
+          {
+            "title": "A finite command exits unsuccessfully",
+            "narration": "The worker command prints its message and exits 7 under restartPolicy Never.",
+            "nodes": [
+              {
+                "id": "app",
+                "label": "Worker exit 7",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "policy",
+                "label": "restartPolicy: Never",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "app",
+                "label": "no retry",
+                "state": "active",
+                "from": "policy"
+              }
+            ]
+          },
+          {
+            "title": "The Pod becomes terminally failed",
+            "narration": "For this one-container example, the Pod reaches Failed. The kubelet does not restart that app container.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pod Failed",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "kubelet",
+                "label": "No restart requested",
+                "type": "control",
+                "state": "idle",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Use evidence before rerunning",
+            "narration": "Inspect the logs and termination state, then correct the command or use a workload appropriate to repeatable tasks.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Inspect exit + logs",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Terminal evidence",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "read failure",
+                "state": "active",
+                "from": "operator"
+              }
+            ],
+            "code": "kubectl logs lifecycle-demo -c worker"
+          }
+        ]
+      }
+    ]
+  }
+]

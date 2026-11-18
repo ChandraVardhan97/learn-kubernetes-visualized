@@ -1,0 +1,775 @@
+[
+  {
+    "title": "CPU utilization divides usage by request",
+    "kind": "chart",
+    "description": "Follow resource metrics through an HPA ratio recommendation into actual ready replicas.",
+    "assumption": "Simple homogeneous-Pod CPU example; real HPA includes tolerance, missing-metric and readiness handling.",
+    "frames": [
+      {
+        "title": "Measure a defined utilization",
+        "narration": "CPU use is compared with the request, not the limit. Missing relevant requests can prevent this utilization metric from being defined.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pods",
+            "detail": "4 replicas; average CPU 80% of request",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Metrics pipeline",
+            "detail": "Resource metrics available",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "HPA",
+            "detail": "CPU target 50%; bounded replicas",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Deployment scale",
+            "detail": "Raw recommendation 7 replicas",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "New Pods",
+            "detail": "Must schedule, start and become ready",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "usage / requests",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Compute the simple ratio",
+        "narration": "Four multiplied by 80/50 is 6.4, rounded up to seven before considering bounds and stabilization details.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pods",
+            "detail": "4 replicas; average CPU 80% of request",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Metrics pipeline",
+            "detail": "Resource metrics available",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "HPA",
+            "detail": "CPU target 50%; bounded replicas",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Deployment scale",
+            "detail": "Raw recommendation 7 replicas",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "New Pods",
+            "detail": "Must schedule, start and become ready",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "80% observed",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl get hpa api -o yaml"
+      },
+      {
+        "title": "Write desired scale",
+        "narration": "HPA updates the workload scale. That changes desired replicas but does not directly create worker capacity.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pods",
+            "detail": "4 replicas; average CPU 80% of request",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Metrics pipeline",
+            "detail": "Resource metrics available",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "HPA",
+            "detail": "CPU target 50%; bounded replicas",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Deployment scale",
+            "detail": "Raw recommendation 7 replicas",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "New Pods",
+            "detail": "Must schedule, start and become ready",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "replicas = 7",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Verify useful capacity",
+        "narration": "The workload controller creates Pods, which must pass scheduling, startup and readiness before they serve requests.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "API Pods",
+            "detail": "4 replicas; average CPU 80% of request",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Metrics pipeline",
+            "detail": "Resource metrics available",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "HPA",
+            "detail": "CPU target 50%; bounded replicas",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Deployment scale",
+            "detail": "Raw recommendation 7 replicas",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "New Pods",
+            "detail": "Must schedule, start and become ready",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "create replicas",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl get hpa\nkubectl get pods -l app=api"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Resource metrics are unavailable",
+        "description": "The controller cannot obtain the expected CPU metric.",
+        "frames": [
+          {
+            "title": "Workload still exists",
+            "narration": "The application can run while its autoscaling metrics path is absent or failing.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "API Pods",
+                "detail": "4 replicas; current CPU utilization unavailable",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Metrics pipeline",
+                "detail": "Resource metrics unavailable",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "HPA",
+                "detail": "CPU target 50%; bounded replicas",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Deployment scale",
+                "detail": "No new ratio recommendation from the missing metric",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "New Pods",
+                "detail": "Must schedule, start and become ready",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "HPA cannot evaluate demand",
+            "narration": "Metric retrieval fails and conditions expose the problem; blindly increasing a limit does not install Metrics Server.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "API Pods",
+                "detail": "4 replicas; current CPU utilization unavailable",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Metrics pipeline",
+                "detail": "Resource metrics unavailable",
+                "type": "control",
+                "state": "failed"
+              },
+              {
+                "id": "2",
+                "label": "HPA",
+                "detail": "CPU target 50%; bounded replicas",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Deployment scale",
+                "detail": "No new ratio recommendation from the missing metric",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "New Pods",
+                "detail": "Must schedule, start and become ready",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "metric unavailable",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect the pipeline and requests",
+            "narration": "Check metrics availability, HPA conditions and CPU requests, then verify a fresh observed value before testing scaling.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "API Pods",
+                "detail": "4 replicas; current CPU utilization unavailable",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Metrics pipeline",
+                "detail": "Resource metrics unavailable",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "HPA",
+                "detail": "CPU target 50%; bounded replicas",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Deployment scale",
+                "detail": "No new ratio recommendation from the missing metric",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "New Pods",
+                "detail": "Must schedule, start and become ready",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "no valid new signal",
+                "state": "blocked"
+              }
+            ],
+            "code": "kubectl describe hpa api\nkubectl top pods"
+          }
+        ]
+      }
+    ],
+    "id": "m13-l02-hpa-loop"
+  },
+  {
+    "title": "Replicas, Pod size and nodes are different control decisions",
+    "kind": "scheduling",
+    "description": "Connect HPA demand, VPA sizing and an installed provider node autoscaler, including their interaction risks.",
+    "assumption": "Optional VPA and node autoscaler are installed in this scenario; a plain local cluster need not have either.",
+    "frames": [
+      {
+        "title": "Increase replica demand",
+        "narration": "HPA can create more desired Pods, but placement may fail if the existing workers lack room.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "HPA",
+            "detail": "Changes replica demand",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "VPA",
+            "detail": "Recommends/updates requests",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Pending Pods",
+            "detail": "Need fitting node capacity",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "Node autoscaler",
+            "detail": "Provider choices and limits",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "New worker",
+            "detail": "Labels, resources, integrations",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Ready application",
+            "detail": "Actual useful serving capacity",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "more replicas",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Size each Pod separately",
+        "narration": "VPA changes or recommends requests. Those requests affect fit and can change CPU-utilization denominators used by HPA.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "HPA",
+            "detail": "Changes replica demand",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "VPA",
+            "detail": "Recommends/updates requests",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Pending Pods",
+            "detail": "Need fitting node capacity",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node autoscaler",
+            "detail": "Provider choices and limits",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "New worker",
+            "detail": "Labels, resources, integrations",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Ready application",
+            "detail": "Actual useful serving capacity",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "per-Pod size",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "0",
+            "label": "denominator interaction",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Supply suitable infrastructure",
+        "narration": "An installed node autoscaler evaluates whether provider capacity can satisfy the unschedulable Pods within configured limits.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "HPA",
+            "detail": "Changes replica demand",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "VPA",
+            "detail": "Recommends/updates requests",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Pending Pods",
+            "detail": "Need fitting node capacity",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node autoscaler",
+            "detail": "Provider choices and limits",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "New worker",
+            "detail": "Labels, resources, integrations",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "Ready application",
+            "detail": "Actual useful serving capacity",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "unschedulable demand",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "create suitable node",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Wait for readiness",
+        "narration": "The new node and its network/storage agents must work, then Pods must start and pass readiness before demand is actually served.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "HPA",
+            "detail": "Changes replica demand",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "VPA",
+            "detail": "Recommends/updates requests",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Pending Pods",
+            "detail": "Need fitting node capacity",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node autoscaler",
+            "detail": "Provider choices and limits",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "New worker",
+            "detail": "Labels, resources, integrations",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Ready application",
+            "detail": "Actual useful serving capacity",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "5",
+            "label": "place and start",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Hard affinity has no matching provider option",
+        "description": "Adding generic nodes cannot satisfy the workload constraint.",
+        "frames": [
+          {
+            "title": "Pods request an unavailable label",
+            "narration": "The workload requires a node attribute that no configured infrastructure option supplies.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "HPA",
+                "detail": "Changes replica demand",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "VPA",
+                "detail": "Recommends/updates requests",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Pending Pods",
+                "detail": "Need fitting node capacity",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Node autoscaler",
+                "detail": "Provider choices and limits",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "New worker",
+                "detail": "Labels, resources, integrations",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Ready application",
+                "detail": "Actual useful serving capacity",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Autoscaler cannot make a fitting node",
+            "narration": "Creating another generic worker would still fail the hard affinity rule, so this demand does not justify a viable node.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "HPA",
+                "detail": "Changes replica demand",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "VPA",
+                "detail": "Recommends/updates requests",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Pending Pods",
+                "detail": "Need fitting node capacity",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node autoscaler",
+                "detail": "Provider choices and limits",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "New worker",
+                "detail": "Labels, resources, integrations",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Ready application",
+                "detail": "Actual useful serving capacity",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "no suitable option",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Repair constraint or node offering",
+            "narration": "Correct the workload requirement or configure a real matching node offering; increasing maxReplicas does not change satisfiability.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "HPA",
+                "detail": "Changes replica demand",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "VPA",
+                "detail": "Recommends/updates requests",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Pending Pods",
+                "detail": "Need fitting node capacity",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node autoscaler",
+                "detail": "Provider choices and limits",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "4",
+                "label": "New worker",
+                "detail": "Labels, resources, integrations",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Ready application",
+                "detail": "Actual useful serving capacity",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "review fit evidence",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod PENDING_POD"
+          }
+        ]
+      }
+    ],
+    "id": "m13-l02-capacity-loops"
+  }
+]

@@ -1,0 +1,86 @@
+---
+lessonId: "m19-l02"
+title: "Tenancy and software supply chains"
+description: "Layer authorization, workload isolation, and artifact trust deliberately."
+level: "advanced"
+module: "m19"
+order: 2
+minutes: 16
+prerequisites: ["m12-l03", "m19-l01"]
+objectives: ["Explain why a namespace alone is not a strong tenant boundary.", "Separate image digest identity from signature trust policy.", "Trace admission verification and its failure behavior."]
+concepts: [{"id": "m19-l02-tenant-layers", "title": "Namespace scope needs additional isolation controls", "scene": "m19-l02-tenant-layers"}, {"id": "m19-l02-artifact-trust", "title": "Digest identity is input to a verification policy", "scene": "m19-l02-artifact-trust"}]
+sources: [{"title": "Kubernetes multi-tenancy", "url": "https://kubernetes.io/docs/concepts/security/multi-tenancy/"}, {"title": "Container image names and digests", "url": "https://kubernetes.io/docs/concepts/containers/images/"}, {"title": "Sigstore signature verification", "url": "https://docs.sigstore.dev/cosign/verifying/verify/"}, {"title": "NetworkPolicy", "url": "https://kubernetes.io/docs/concepts/services-networking/network-policies/"}]
+lab: "m19"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: isolation is a set of enforced boundaries
+
+Namespaces scope many API resources and provide a useful unit for RBAC, quotas and policy. They do not automatically isolate host kernels, cluster-scoped resources, network traffic or privileged workloads. Stronger tenant separation requires a threat model: cooperative teams on one platform have different requirements from mutually untrusted customers running arbitrary code. Separate clusters, sandboxed runtimes or virtual control planes can address different boundaries, but each comes with operational cost and remaining shared infrastructure assumptions.
+
+Start with least-privilege API access, restricted workload permissions, controlled service-account credentials, resource budgets, network policy and auditable platform ownership. Protect cluster-scoped resources and admission configuration from ordinary tenant roles. A tenant that can create privileged workloads or mount sensitive host paths may cross a boundary that namespace RBAC appears to protect. Quota reduces some resource exhaustion paths but cannot make the shared control plane infinitely available under abusive object creation.
+
+<Scene id="m19-l02-tenant-layers" />
+
+## Walkthrough: an artifact digest identifies bytes, not intent
+
+An image tag is a registry name that can be moved. An image digest identifies content, enabling reproducible selection of the intended image manifest. Pinning a digest does not prove that the code is safe, that it came from the approved build, or that its dependencies are acceptable. It establishes artifact identity, which is necessary for meaningful verification and provenance but is not a complete trust policy.
+
+Image signing associates an artifact with a signature or attestation that can be verified under a chosen trust root and signer identity. A production policy must specify the approved identity, issuer or keys, artifact digest and required provenance claims. A valid signature from an unapproved signer is not sufficient. Kubernetes does not automatically trust or reject images merely because someone signed them; an explicitly installed verification mechanism and admission policy must enforce the rule. Registry access, verification availability and fail-open versus fail-closed behavior become operational dependencies.
+
+<Scene id="m19-l02-artifact-trust" />
+
+This default-deny policy is one network layer for the disposable namespace. It intentionally blocks traffic for selected Pods until suitable allow policies exist. Do not apply it while expecting unrelated lab traffic to continue. Enforcement depends on the cluster's networking implementation and configuration; test rather than assuming kind always enforces or never enforces NetworkPolicy.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: m19-isolate
+  namespace: kv-lab
+  labels:
+    lab: m19
+spec:
+  podSelector:
+    matchLabels:
+      tenant-experiment: isolated
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress: []
+```
+
+```bash
+kubectl --context kind-kv-lab auth can-i create clusterrolebindings
+kubectl --context kind-kv-lab -n kv-lab get roles,rolebindings,resourcequotas,networkpolicies
+# Read the actual registry manifest information; do not invent a digest.
+docker buildx imagetools inspect nginx:1.28.0-alpine
+# Remove the optional policy after its isolated experiment.
+kubectl --context kind-kv-lab -n kv-lab delete networkpolicy m19-isolate --ignore-not-found
+```
+
+## Practice: trace one denied action to its enforcement point
+
+Use the [m19 local exercise](/labs/#m19) for the delivery ownership foundation. For tenancy analysis, choose a tenant service account and list what it can create, including workloads, Secrets and role bindings. A read-only `can-i` check under your own administrator identity says nothing about the tenant's exact permissions. Authorized impersonation or a deliberately scoped test credential can assess that principal; do not infer isolation from a namespace name alone.
+
+For artifact analysis, resolve the exact intended image to a registry digest and record its platform manifest behavior. Then identify which signer and build claims the platform would accept. Do not fabricate a signature-verification success for the public teaching images; the lesson does not supply a signed provenance chain. Discuss how an admission verifier would reject an unapproved digest or signer and how the platform would recover if its verification service became unavailable.
+
+## Pitfalls: security controls can be bypassed by a broader permission
+
+A restrictive application role is ineffective if the same tenant can edit an admission binding, impersonate a privileged identity or create unrestricted host-access workloads. An allow policy in a second NetworkPolicy can add traffic permission; policies are additive rather than an ordered firewall list. Image pull credentials authorize registry access, not code quality. Scan results, signatures and provenance answer different questions and should be tied to the same immutable artifact identity.
+
+Keep the control-plane owner, application owner and security-policy owner explicit. Policy changes can stop deployments, so stage them with observed violation data and a recovery route. Avoid making tenant isolation claims from a single successful denied request; test the threat model's important paths.
+
+## Check your understanding
+
+<details>
+
+<summary>A tenant deploys a digest-pinned image with a valid signature. Is it automatically trusted by Kubernetes?</summary>
+
+No. The digest identifies content, and the signature is evidence evaluated against a chosen identity and trust policy. Kubernetes needs an installed, configured enforcement mechanism to require that policy; neither pinning nor signing alone establishes approval.
+
+</details>
+
+Next, inspect service identity and traffic policy inside a mesh. The same principle applies: each control protects a particular boundary and has its own trust and failure assumptions.

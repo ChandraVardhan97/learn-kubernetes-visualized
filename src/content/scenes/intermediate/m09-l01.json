@@ -1,0 +1,761 @@
+[
+  {
+    "title": "Three files, three lifetimes",
+    "kind": "storage",
+    "description": "Compare a container writable layer, emptyDir and PVC data during restart and Pod replacement.",
+    "assumption": "Storage implementation remains available; the scene does not claim backup or node-loss recovery.",
+    "frames": [
+      {
+        "title": "Write at explicit paths",
+        "narration": "The same process can write to its own filesystem, a Pod-scoped emptyDir and a claim-backed mounted path.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container",
+            "detail": "Instance can restart",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Writable layer",
+            "detail": "Fresh for a restarted container",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "emptyDir",
+            "detail": "Belongs to this Pod",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "PVC app-data",
+            "detail": "Names a bound persistent volume",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "PV data",
+            "detail": "Underlying storage lifecycle",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "/tmp/local",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "2",
+            "label": "/scratch",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "3",
+            "label": "/data",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "bound",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Restart the container",
+        "narration": "A new container filesystem starts from the image. The Pod is the same, so its emptyDir and PVC mounts remain available.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container",
+            "detail": "Instance can restart",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Writable layer",
+            "detail": "Fresh for a restarted container",
+            "type": "storage",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "emptyDir",
+            "detail": "Belongs to this Pod",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "PVC app-data",
+            "detail": "Names a bound persistent volume",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "PV data",
+            "detail": "Underlying storage lifecycle",
+            "type": "storage",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "same Pod volume",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "3",
+            "label": "remount claim",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Replace the Pod",
+        "narration": "A replacement has a new Pod identity and new emptyDir. It can refer to the same PVC to recover persistent data.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container",
+            "detail": "Instance can restart",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Writable layer",
+            "detail": "Fresh for a restarted container",
+            "type": "storage",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "emptyDir",
+            "detail": "Belongs to this Pod",
+            "type": "storage",
+            "state": "warning"
+          },
+          {
+            "id": "3",
+            "label": "PVC app-data",
+            "detail": "Names a bound persistent volume",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "PV data",
+            "detail": "Underlying storage lifecycle",
+            "type": "storage",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "same claim name",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Inspect the backing resource",
+        "narration": "Claim-backed persistence depends on the real storage provider and policy; a local node directory does not imply cross-node durability.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Container",
+            "detail": "Instance can restart",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Writable layer",
+            "detail": "Fresh for a restarted container",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "emptyDir",
+            "detail": "Belongs to this Pod",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "PVC app-data",
+            "detail": "Names a bound persistent volume",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "PV data",
+            "detail": "Underlying storage lifecycle",
+            "type": "storage",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "inspect PV + driver",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl describe pvc app-data\nkubectl get pv"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Claim is deleted with Delete policy",
+        "description": "Deleting the storage request can lead to deletion of its underlying data.",
+        "frames": [
+          {
+            "title": "Workload removed",
+            "narration": "Removing the workload alone can leave the independently created PVC and its data intact.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Container",
+                "detail": "Instance can restart",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Writable layer",
+                "detail": "Fresh for a restarted container",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "emptyDir",
+                "detail": "Belongs to this Pod",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "PVC app-data",
+                "detail": "Names a bound persistent volume",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "PV data",
+                "detail": "Underlying storage lifecycle",
+                "type": "storage",
+                "state": "ready"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Claim released",
+            "narration": "Deleting the claim enters the PV reclamation lifecycle after applicable protection conditions clear.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Container",
+                "detail": "Instance can restart",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Writable layer",
+                "detail": "Fresh for a restarted container",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "emptyDir",
+                "detail": "Belongs to this Pod",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "PVC app-data",
+                "detail": "Names a bound persistent volume",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "PV data",
+                "detail": "Underlying storage lifecycle",
+                "type": "storage",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "release",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Delete policy reclaims storage",
+            "narration": "The provisioner can delete the backing storage. Recreating a claim with the old name does not recover the old bytes.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Container",
+                "detail": "Instance can restart",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Writable layer",
+                "detail": "Fresh for a restarted container",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "emptyDir",
+                "detail": "Belongs to this Pod",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "PVC app-data",
+                "detail": "Names a bound persistent volume",
+                "type": "object",
+                "state": "failed"
+              },
+              {
+                "id": "4",
+                "label": "PV data",
+                "detail": "Underlying storage lifecycle",
+                "type": "storage",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "delete backing storage",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m09-l01-lifetime"
+  },
+  {
+    "title": "One node is not one application writer",
+    "kind": "storage",
+    "description": "Explain ReadWriteOnce, ReadWriteOncePod and reclaim policy without promising application locking.",
+    "assumption": "Driver supports the illustrated access mode; application consistency is outside mount admission.",
+    "frames": [
+      {
+        "title": "Request an access arrangement",
+        "narration": "ReadWriteOnce asks for read-write mounting on one node and must be supported by the volume.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "Writer on Node 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Pod B",
+            "detail": "Another writer on Node 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Node 1",
+            "detail": "One mounting node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "PVC",
+            "detail": "ReadWriteOnce",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "PV",
+            "detail": "Reclaim policy Retain or Delete",
+            "type": "storage",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "RWO request",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Mount on the first node",
+        "narration": "The driver attaches or mounts according to its implementation and the Pod uses the claim.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "Writer on Node 1",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Pod B",
+            "detail": "Another writer on Node 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Node 1",
+            "detail": "One mounting node",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "PVC",
+            "detail": "ReadWriteOnce",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "PV",
+            "detail": "Reclaim policy Retain or Delete",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "2",
+            "label": "one node",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "0",
+            "label": "mount",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Same-node second Pod may mount",
+        "narration": "ReadWriteOnce does not itself mean one Pod. Both same-node writers can need application-level coordination.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "Writer on Node 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Pod B",
+            "detail": "Another writer on Node 1",
+            "type": "pod",
+            "state": "warning"
+          },
+          {
+            "id": "2",
+            "label": "Node 1",
+            "detail": "One mounting node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "PVC",
+            "detail": "ReadWriteOnce",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "PV",
+            "detail": "Reclaim policy Retain or Delete",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "1",
+            "label": "same-node access",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Separate access from reclamation",
+        "narration": "Access modes concern use; reclaim policy concerns what happens after claim release. Neither is a database transaction lock.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "Writer on Node 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Pod B",
+            "detail": "Another writer on Node 1",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Node 1",
+            "detail": "One mounting node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "PVC",
+            "detail": "ReadWriteOnce",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "PV",
+            "detail": "Reclaim policy Retain or Delete",
+            "type": "storage",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "release policy",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Application assumes RWO is a lock",
+        "description": "Two same-node processes concurrently modify an unsafe data format.",
+        "frames": [
+          {
+            "title": "Both mounts succeed",
+            "narration": "The access arrangement is compatible with the one-node mode.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod A",
+                "detail": "Writer on Node 1",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Pod B",
+                "detail": "Another writer on Node 1",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "Node 1",
+                "detail": "One mounting node",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "PVC",
+                "detail": "ReadWriteOnce",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "PV",
+                "detail": "Reclaim policy Retain or Delete",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "0",
+                "label": "mount",
+                "state": "active"
+              },
+              {
+                "from": "2",
+                "to": "1",
+                "label": "mount",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Concurrent writes conflict",
+            "narration": "The storage mode has not supplied application leader election or transactional coordination.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod A",
+                "detail": "Writer on Node 1",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Pod B",
+                "detail": "Another writer on Node 1",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Node 1",
+                "detail": "One mounting node",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "PVC",
+                "detail": "ReadWriteOnce",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "PV",
+                "detail": "Reclaim policy Retain or Delete",
+                "type": "storage",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "write A",
+                "state": "active"
+              },
+              {
+                "from": "1",
+                "to": "4",
+                "label": "write B",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Choose the right boundary",
+            "narration": "Use a supported single-Pod mode when appropriate and implement application consistency; retain backups independently.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod A",
+                "detail": "Writer on Node 1",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Pod B",
+                "detail": "Another writer on Node 1",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Node 1",
+                "detail": "One mounting node",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "PVC",
+                "detail": "ReadWriteOnce",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "4",
+                "label": "PV",
+                "detail": "Reclaim policy Retain or Delete",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "ReadWriteOncePod if supported",
+                "state": "active"
+              }
+            ],
+            "code": "accessModes: [ReadWriteOncePod]"
+          }
+        ]
+      }
+    ],
+    "id": "m09-l01-access"
+  }
+]

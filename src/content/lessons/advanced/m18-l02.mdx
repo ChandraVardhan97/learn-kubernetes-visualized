@@ -1,0 +1,84 @@
+---
+lessonId: "m18-l02"
+title: "PKI, kubeadm, and safe upgrades"
+description: "Inventory identities and follow the supported version path."
+level: "advanced"
+module: "m18"
+order: 2
+minutes: 16
+prerequisites: ["m18-l01", "m14-l03"]
+objectives: ["Separate serving certificates, client credentials and signing keys.", "Explain certificate renewal and process reload boundaries.", "Plan sequential supported upgrades using the version-skew policy."]
+concepts: [{"id": "m18-l02-pki-paths", "title": "Serving identity and client identity are separate", "scene": "m18-l02-pki-paths"}, {"id": "m18-l02-safe-upgrade", "title": "Every intermediate version combination must be supported", "scene": "m18-l02-safe-upgrade"}]
+sources: [{"title": "kubeadm certificate management", "url": "https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/"}, {"title": "Upgrading kubeadm clusters", "url": "https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/"}, {"title": "Version skew policy", "url": "https://kubernetes.io/releases/version-skew-policy/"}]
+lab: "m18"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: trust has several directions
+
+Kubernetes PKI includes server identities, client identities and signing authorities with different purposes. A kubelet or administrator verifies the API server's serving certificate; the API server authenticates a client credential; API-to-kubelet and etcd communication have their own trust relationships. Service-account token signing keys and encryption-at-rest keys are additional assets with separate rotation and recovery requirements. Calling all of these files the cluster certificate hides which communication path actually failed.
+
+An expired certificate, an untrusted issuer and a hostname or IP missing from a serving certificate's subject alternative names produce different evidence. Inventory issuer, subject, SANs, expiry, file location and which process reads the file. External-CA deployments have different responsibilities from kubeadm-managed defaults. A healthy clock matters because certificate validity uses time. Do not solve an identity error by disabling verification; repair the intended trust relationship and endpoint identity.
+
+<Scene id="m18-l02-pki-paths" />
+
+## Walkthrough: renewal is not guaranteed process reload
+
+kubeadm provides certificate inspection and renewal workflows, but generating a renewed file is only one step. Components must actually begin using the new credential. Static control-plane Pods may require controlled restart according to the documented procedure, and copied administrative kubeconfigs may still hold old embedded client data. In an HA topology, work through control-plane nodes deliberately and preserve quorum and a reachable API endpoint throughout the maintenance.
+
+An upgrade plan starts with exact current and target versions, API removals, add-on compatibility, verified backups and a recovery strategy. Follow the release-specific kubeadm guide rather than skipping arbitrary minor versions. The Kubernetes skew policy constrains component combinations: kubelets must not be newer than the API servers they use, kubectl has its own supported skew window, and HA API server versions affect the permissible range of other components. Consult the current table for every intermediate state rather than memorizing one broad statement that all components may differ by several releases.
+
+<Scene id="m18-l02-safe-upgrade" />
+
+This namespace-scoped maintenance record is an example of recording intent, not executable kubeadm configuration. It keeps observations reviewable without including private keys or kubeconfig credentials.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m18-maintenance
+  namespace: kv-lab
+  labels:
+    lab: m18
+data:
+  approach: sequential-supported-minor-upgrades
+  verify: api-readiness-workload-health-addon-compatibility
+  credentialRule: never-store-private-keys-here
+```
+
+```bash
+kubectl --context kind-kv-lab version
+kubectl --context kind-kv-lab get nodes -o custom-columns=NAME:.metadata.name,KUBELET:.status.nodeInfo.kubeletVersion
+kubectl --context kind-kv-lab get --raw='/readyz?verbose'
+# Host-side commands below are read-only checks on a kubeadm-managed node.
+# They are not instructions to upgrade the kind node image in place.
+# sudo kubeadm certs check-expiration
+# sudo kubeadm upgrade plan
+```
+
+## Practice: plan an intermediate state explicitly
+
+Use the [m18 local exercise](/labs/#m18) for recovery assets and read-only control-plane inspection. The site's version baseline is Kubernetes 1.37, reviewed on 2026-10-27. This lesson deliberately does not provide a blanket command to upgrade a live cluster to that version. kind node images, managed services and self-managed kubeadm clusters have different lifecycle procedures. Use the relevant provider or release-specific documentation for the actual environment.
+
+Write an upgrade table with rows for each API server, scheduler/controller-manager, kubelet, kube-proxy, kubectl and critical add-on. For each maintenance step, record the before and after version and check the supported overlap. Include drain behavior, disruption budgets, spare worker capacity and verification before proceeding. A blocked drain is evidence to investigate, not an automatic reason to bypass every disruption budget. Test admission webhooks and CRD conversion paths against the new API behavior before making the intermediate state production reality.
+
+## Pitfalls: the rollback boundary may be a restore
+
+Downgrading binaries is not a universal rollback strategy after storage formats, APIs or add-ons change. Define whether recovery means rolling back an application manifest, replacing a node, restoring a control-plane snapshot or following a provider-supported procedure. Keep compatible binaries, PKI, signing keys, encryption configuration and external data backups available under appropriate access controls. A backup taken after a bad migration may preserve the bad state very reliably.
+
+Certificate renewal can cause outages when a component continues using the old file or a client receives a new CA without trust propagation. CA rotation is more complex than renewing a leaf certificate under the same CA. Avoid copying private keys into a lesson ConfigMap, support ticket or shell history. Record fingerprints and expiry metadata instead.
+
+## Check your understanding
+
+<details>
+
+<summary>The certificate file was renewed, but a component still presents the old certificate. What boundary was missed?</summary>
+
+The running process may not have reloaded the new credential, or a copied kubeconfig may still embed the previous data. Follow the component's documented reload or restart procedure and verify the certificate actually used on the connection.
+
+</details>
+
+Next, rehearse recovery from a snapshot while preserving the original cluster. A verified recovery includes trust material and application data boundaries as well as an etcd file.

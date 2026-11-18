@@ -1,0 +1,799 @@
+[
+  {
+    "title": "Ready Pods can sit outside a Service selector",
+    "kind": "flow",
+    "description": "The client can address the Service but cannot reach selected application backends through this relationship.",
+    "assumption": "Exact client error and dataplane forwarding differ by networking implementation; the label mismatch is implementation-independent.",
+    "frames": [
+      {
+        "title": "Application is healthy",
+        "narration": "Two nginx Pods become Ready with app=m20-web labels.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "m20-client",
+            "type": "pod",
+            "detail": "Requests http://m20-web",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "service",
+            "label": "Service m20-web",
+            "type": "service",
+            "detail": "selector broken-selector",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "slice",
+            "label": "EndpointSlice set",
+            "type": "object",
+            "detail": "No usable matching backends",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "nginx Pods",
+            "type": "pod",
+            "detail": "Ready, app=m20-web",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "dns",
+            "label": "Cluster DNS",
+            "type": "control",
+            "detail": "Resolves Service identity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": []
+      },
+      {
+        "title": "Service selects another label",
+        "narration": "The Service selector is app=broken-selector, so those Ready Pods do not become its usable backends.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "m20-client",
+            "type": "pod",
+            "detail": "Requests http://m20-web",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "service",
+            "label": "Service m20-web",
+            "type": "service",
+            "detail": "selector broken-selector",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "slice",
+            "label": "EndpointSlice set",
+            "type": "object",
+            "detail": "No usable matching backends",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "nginx Pods",
+            "type": "pod",
+            "detail": "Ready, app=m20-web",
+            "x": 35,
+            "y": 230,
+            "state": "warning"
+          },
+          {
+            "id": "dns",
+            "label": "Cluster DNS",
+            "type": "control",
+            "detail": "Resolves Service identity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "slice",
+            "label": "selector relationship",
+            "state": "active",
+            "from": "service"
+          },
+          {
+            "to": "pods",
+            "label": "selected backends",
+            "state": "blocked",
+            "from": "slice"
+          }
+        ]
+      },
+      {
+        "title": "Client path fails",
+        "narration": "The client can address the Service but cannot reach selected application backends through this relationship.",
+        "nodes": [
+          {
+            "id": "client",
+            "label": "m20-client",
+            "type": "pod",
+            "detail": "Requests http://m20-web",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "service",
+            "label": "Service m20-web",
+            "type": "service",
+            "detail": "selector broken-selector",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "slice",
+            "label": "EndpointSlice set",
+            "type": "object",
+            "detail": "No usable matching backends",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "nginx Pods",
+            "type": "pod",
+            "detail": "Ready, app=m20-web",
+            "x": 35,
+            "y": 230,
+            "state": "warning"
+          },
+          {
+            "id": "dns",
+            "label": "Cluster DNS",
+            "type": "control",
+            "detail": "Resolves Service identity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "dns",
+            "label": "resolve name",
+            "state": "active",
+            "from": "client"
+          },
+          {
+            "to": "service",
+            "label": "Service address",
+            "state": "active",
+            "from": "dns"
+          },
+          {
+            "to": "pods",
+            "label": "selected backends",
+            "state": "blocked",
+            "from": "slice"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Restart the healthy Pods",
+        "description": "An unrelated restart does not correct the selection contract.",
+        "frames": [
+          {
+            "title": "New Pods appear",
+            "narration": "A restart replaces Pods but their Deployment template still uses app=m20-web.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "m20-client",
+                "type": "pod",
+                "detail": "Requests http://m20-web",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "service",
+                "label": "Service m20-web",
+                "type": "service",
+                "detail": "Selector app=broken-selector",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "slice",
+                "label": "EndpointSlice set",
+                "type": "object",
+                "detail": "No usable matching backends",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pods",
+                "label": "nginx Pods",
+                "type": "pod",
+                "detail": "Healthy replacement Pods use app=m20-web",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "dns",
+                "label": "Cluster DNS",
+                "type": "control",
+                "detail": "Resolves Service identity",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "pods",
+                "label": "no matching backends",
+                "state": "blocked",
+                "from": "slice"
+              }
+            ]
+          },
+          {
+            "title": "Wrong selector remains",
+            "narration": "The Service still requires app=broken-selector.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "m20-client",
+                "type": "pod",
+                "detail": "Requests http://m20-web",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "service",
+                "label": "Service m20-web",
+                "type": "service",
+                "detail": "Selector app=broken-selector",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "slice",
+                "label": "EndpointSlice set",
+                "type": "object",
+                "detail": "No usable matching backends",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pods",
+                "label": "nginx Pods",
+                "type": "pod",
+                "detail": "Healthy replacement Pods use app=m20-web",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "dns",
+                "label": "Cluster DNS",
+                "type": "control",
+                "detail": "Resolves Service identity",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "slice",
+                "label": "selector relationship",
+                "state": "active",
+                "from": "service"
+              },
+              {
+                "to": "pods",
+                "label": "no matching backends",
+                "state": "blocked",
+                "from": "slice"
+              }
+            ]
+          },
+          {
+            "title": "Failure repeats",
+            "narration": "No usable matching backends appear; repair the proven selector mismatch instead.",
+            "nodes": [
+              {
+                "id": "client",
+                "label": "m20-client",
+                "type": "pod",
+                "detail": "Requests http://m20-web",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "service",
+                "label": "Service m20-web",
+                "type": "service",
+                "detail": "Selector app=broken-selector",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "slice",
+                "label": "EndpointSlice set",
+                "type": "object",
+                "detail": "No usable matching endpoints",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "pods",
+                "label": "nginx Pods",
+                "type": "pod",
+                "detail": "Healthy replacement Pods use app=m20-web",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "dns",
+                "label": "Cluster DNS",
+                "type": "control",
+                "detail": "Resolves Service identity",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "dns",
+                "label": "resolve name",
+                "state": "active",
+                "from": "client"
+              },
+              {
+                "to": "service",
+                "label": "Service address",
+                "state": "active",
+                "from": "dns"
+              },
+              {
+                "to": "pods",
+                "label": "no matching backends",
+                "state": "blocked",
+                "from": "slice"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m20-l01-stateless-failure"
+  },
+  {
+    "title": "Repair one relationship, then verify a real request",
+    "kind": "lifecycle",
+    "description": "A successful HTTP response proves this client-to-Service-to-application path now works.",
+    "assumption": "The actual capstone uses matching port 80; the alternate branch is a separate diagnostic hypothesis.",
+    "frames": [
+      {
+        "title": "Correct the selector",
+        "narration": "The repair changes only the Service selector to match the Deployment Pod labels.",
+        "nodes": [
+          {
+            "id": "patch",
+            "label": "Selector patch",
+            "type": "actor",
+            "detail": "Set app=m20-web",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "service",
+            "label": "Service m20-web",
+            "type": "service",
+            "detail": "Correct selector",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "slices",
+            "label": "EndpointSlice controller",
+            "type": "control",
+            "detail": "Publishes selected ready backends",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "Ready nginx Pods",
+            "type": "pod",
+            "detail": "TCP 80 application",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "client",
+            "label": "Client verification",
+            "type": "actor",
+            "detail": "Bounded HTTP request",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "service",
+            "label": "minimal proven fix",
+            "state": "active",
+            "from": "patch"
+          }
+        ]
+      },
+      {
+        "title": "Wait for propagation",
+        "narration": "The EndpointSlice and networking paths observe matching Ready Pods; the script retries within a local bound.",
+        "nodes": [
+          {
+            "id": "patch",
+            "label": "Selector patch",
+            "type": "actor",
+            "detail": "Set app=m20-web",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "service",
+            "label": "Service m20-web",
+            "type": "service",
+            "detail": "Correct selector",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "slices",
+            "label": "EndpointSlice controller",
+            "type": "control",
+            "detail": "Publishes selected ready backends",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pods",
+            "label": "Ready nginx Pods",
+            "type": "pod",
+            "detail": "TCP 80 application",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "client",
+            "label": "Client verification",
+            "type": "actor",
+            "detail": "Bounded HTTP request",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "slices",
+            "label": "selected Pods",
+            "state": "active",
+            "from": "service"
+          },
+          {
+            "to": "pods",
+            "label": "ready endpoints",
+            "state": "active",
+            "from": "slices"
+          }
+        ]
+      },
+      {
+        "title": "Verify from the client",
+        "narration": "A successful HTTP response proves this client-to-Service-to-application path now works.",
+        "nodes": [
+          {
+            "id": "patch",
+            "label": "Selector patch",
+            "type": "actor",
+            "detail": "Set app=m20-web",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "service",
+            "label": "Service m20-web",
+            "type": "service",
+            "detail": "Correct selector",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "slices",
+            "label": "EndpointSlice controller",
+            "type": "control",
+            "detail": "Publishes selected ready backends",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "Ready nginx Pods",
+            "type": "pod",
+            "detail": "TCP 80 application",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "client",
+            "label": "Client verification",
+            "type": "actor",
+            "detail": "Bounded HTTP request",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "service",
+            "label": "HTTP request",
+            "state": "active",
+            "from": "client"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Endpoints exist, wrong port",
+        "description": "A different failure needs new evidence after selection is correct.",
+        "frames": [
+          {
+            "title": "Selection is correct",
+            "narration": "The Service now discovers the intended Ready Pods.",
+            "nodes": [
+              {
+                "id": "patch",
+                "label": "Selector patch",
+                "type": "actor",
+                "detail": "Set app=m20-web",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "service",
+                "label": "Service m20-web",
+                "type": "service",
+                "detail": "Correct selector",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "slices",
+                "label": "EndpointSlice controller",
+                "type": "control",
+                "detail": "Publishes selected ready backends",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pods",
+                "label": "Ready nginx Pods",
+                "type": "pod",
+                "detail": "TCP 80 application",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "client",
+                "label": "Client verification",
+                "type": "actor",
+                "detail": "Bounded HTTP request",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "slices",
+                "label": "selected Pods",
+                "state": "active",
+                "from": "service"
+              },
+              {
+                "to": "pods",
+                "label": "ready endpoints",
+                "state": "active",
+                "from": "slices"
+              }
+            ]
+          },
+          {
+            "title": "Port contract is wrong",
+            "narration": "A hypothetical incorrect targetPort sends traffic to a port where the application is not listening.",
+            "nodes": [
+              {
+                "id": "patch",
+                "label": "Selector patch",
+                "type": "actor",
+                "detail": "Set app=m20-web",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "service",
+                "label": "Service m20-web",
+                "type": "service",
+                "detail": "Correct selector; incorrect targetPort",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "slices",
+                "label": "EndpointSlice controller",
+                "type": "control",
+                "detail": "Publishes selected ready backends",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pods",
+                "label": "Ready nginx Pods",
+                "type": "pod",
+                "detail": "Ready, but listening on a different port",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "client",
+                "label": "Client verification",
+                "type": "actor",
+                "detail": "Bounded HTTP request",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "service",
+                "label": "HTTP request",
+                "state": "active",
+                "from": "client"
+              },
+              {
+                "to": "pods",
+                "label": "connection reaches wrong destination port",
+                "state": "blocked",
+                "from": "service"
+              }
+            ]
+          },
+          {
+            "title": "Inspect the next boundary",
+            "narration": "Endpoint presence alone is insufficient; compare targetPort and the actual listener before another repair.",
+            "nodes": [
+              {
+                "id": "patch",
+                "label": "Selector patch",
+                "type": "actor",
+                "detail": "Set app=m20-web",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "service",
+                "label": "Service m20-web",
+                "type": "service",
+                "detail": "Correct selector; incorrect targetPort",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "slices",
+                "label": "EndpointSlice controller",
+                "type": "control",
+                "detail": "Publishes selected ready backends",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pods",
+                "label": "Ready nginx Pods",
+                "type": "pod",
+                "detail": "Ready, but listening on a different port",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "client",
+                "label": "Client verification",
+                "type": "actor",
+                "detail": "Bounded HTTP request",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "service",
+                "label": "HTTP request",
+                "state": "active",
+                "from": "client"
+              },
+              {
+                "to": "pods",
+                "label": "connection reaches wrong destination port",
+                "state": "blocked",
+                "from": "service"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m20-l01-stateless-recovery"
+  }
+]

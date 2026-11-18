@@ -1,0 +1,473 @@
+[
+  {
+    "id": "m05-l02-rollout",
+    "title": "Rolling update with a one-Pod surge",
+    "kind": "lifecycle",
+    "description": "Show the Deployment coordinating old and new ReplicaSets under explicit bounds.",
+    "assumption": "Desired replicas are three, maxSurge is one, maxUnavailable is zero. Old replicas stay healthy; unrelated failures and terminating overlap are omitted from counts. The update policy cannot prevent independent application or node failures.",
+    "frames": [
+      {
+        "title": "A template update creates a new revision",
+        "narration": "Old ReplicaSet A has three available Pods. The changed image yields ReplicaSet B, initially at zero.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment target: 3",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "old",
+            "label": "RS A: 3 available",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "RS B: 0",
+            "type": "object",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "old",
+            "label": "old template",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "new",
+            "label": "new template",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      },
+      {
+        "title": "Use the surge allowance",
+        "narration": "The Deployment sets B\u2019s target to one. B\u2019s controller creates that Pod while A retains three available replicas.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "RS A: 3 available",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "RS B target: 1",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "New Pod: starting",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "ReplicaSet creates",
+            "state": "active",
+            "from": "new"
+          }
+        ]
+      },
+      {
+        "title": "Trade capacity after availability",
+        "narration": "When B\u2019s Pod becomes available, A can scale down to two. Repeat this controlled exchange until B owns all three desired replicas.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "RS A target: 2",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "RS B: 1 available",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "deploy",
+            "label": "At least 3 available",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "old",
+            "label": "scale down after availability",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "new",
+            "label": "continue rollout",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m05-l02-rollout-failure",
+        "label": "Failure: surge cannot fit",
+        "description": "Failure: surge cannot fit",
+        "frames": [
+          {
+            "title": "Old replicas fill usable capacity",
+            "narration": "Three old Pods are available. A new Pod is created under surge allowance but still needs a feasible node.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "3 old available Pods",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "New Pod Pending",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "node",
+                "label": "No remaining capacity",
+                "type": "node",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "node",
+                "label": "cannot fit",
+                "state": "blocked",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Availability policy prevents a shortcut",
+            "narration": "With maxUnavailable zero, the controller cannot simply discard an available old replica before a replacement becomes available.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "Unavailable budget: 0",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "old",
+                "label": "Old capacity retained",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "New replica not available",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "old",
+                "label": "retain availability",
+                "state": "active",
+                "from": "deploy"
+              },
+              {
+                "to": "deploy",
+                "label": "progress blocked",
+                "state": "blocked",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Resolve capacity or choose policy deliberately",
+            "narration": "Add suitable capacity, reduce resource demand safely, or review the rollout budget. Do not mistake this protective stall for a container bug.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Capacity / budget decision",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Schedulable replacement",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "remove actual blocker",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m05-l02-rollback",
+    "title": "Rollback restores a retained Pod template",
+    "kind": "flow",
+    "description": "Separate rollout failure reporting from an explicit template rollback.",
+    "assumption": "Revision numbers are illustrative; learners must inspect their own retained history.",
+    "frames": [
+      {
+        "title": "A new template fails to become available",
+        "narration": "Revision two references a bad image. New Pods fail while old available replicas remain under the configured budget.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Revision 1 available",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "Revision 2 pull failure",
+            "type": "pod",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "deploy",
+            "label": "Rollout lacks progress",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "new",
+            "label": "new revision",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "old",
+            "label": "retained capacity",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      },
+      {
+        "title": "Read history and choose recovery",
+        "narration": "The progress deadline reports failure; it does not perform automatic rollback. An operator chooses an actual known-good retained revision.",
+        "nodes": [
+          {
+            "id": "operator",
+            "label": "Inspect rollout history",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "history",
+            "label": "Retained revision 1",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "deploy",
+            "label": "Explicit undo requested",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "history",
+            "label": "verify template",
+            "state": "active",
+            "from": "operator"
+          },
+          {
+            "to": "deploy",
+            "label": "rollout undo",
+            "state": "active",
+            "from": "operator"
+          }
+        ]
+      },
+      {
+        "title": "Reconcile the previous template",
+        "narration": "The Deployment restores the selected template and coordinates ReplicaSets again. External data and changed-in-place ConfigMaps remain independent.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Known-good template restored",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pods",
+            "label": "Replacement Pods become ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "db",
+            "label": "Database state unchanged",
+            "type": "storage",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pods",
+            "label": "managed rollout",
+            "state": "active",
+            "from": "deploy"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m05-l02-rollback-failure",
+        "label": "Failure: rollback cannot rewind data",
+        "description": "Failure: rollback cannot rewind data",
+        "frames": [
+          {
+            "title": "A release changes a schema",
+            "narration": "Application version two performs a database migration. That data change is outside the Deployment Pod template.",
+            "nodes": [
+              {
+                "id": "v2",
+                "label": "App version 2",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Database schema changed",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "migration",
+                "state": "active",
+                "from": "v2"
+              }
+            ]
+          },
+          {
+            "title": "Undo restores version one code",
+            "narration": "The Pod template returns to old code, but the external database remains migrated. Version one may be incompatible.",
+            "nodes": [
+              {
+                "id": "v1",
+                "label": "App version 1",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Still new schema",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "compatibility failure",
+                "state": "blocked",
+                "from": "v1"
+              }
+            ]
+          },
+          {
+            "title": "Design compatible data transitions",
+            "narration": "Use an explicit data migration and recovery plan, including coexistence and compatibility checks. Template history is not a database backup.",
+            "nodes": [
+              {
+                "id": "plan",
+                "label": "Compatible transition plan",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "db",
+                "label": "Deliberate data recovery",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "app",
+                "label": "Validated application version",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "db",
+                "label": "data strategy",
+                "state": "active",
+                "from": "plan"
+              },
+              {
+                "to": "app",
+                "label": "compatibility validation",
+                "state": "active",
+                "from": "plan"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

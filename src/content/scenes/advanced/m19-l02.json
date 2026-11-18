@@ -1,0 +1,788 @@
+[
+  {
+    "title": "Namespace scope needs additional isolation controls",
+    "kind": "policy",
+    "description": "Privileged workloads and shared kernels affect tenant separation beyond namespace names.",
+    "assumption": "The appropriate isolation strength depends on whether tenants are cooperative teams or mutually untrusted actors.",
+    "frames": [
+      {
+        "title": "Scope the API",
+        "narration": "A namespace groups resources but does not itself grant or deny every operation.",
+        "nodes": [
+          {
+            "id": "tenant",
+            "label": "Tenant identity",
+            "type": "actor",
+            "detail": "Scoped API permissions",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "namespace",
+            "label": "Namespace",
+            "type": "object",
+            "detail": "Resource scope",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "rbac",
+            "label": "RBAC + admission",
+            "type": "control",
+            "detail": "Allowed operations and workloads",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "network",
+            "label": "Network enforcement",
+            "type": "control",
+            "detail": "Selected Pod connectivity",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "host",
+            "label": "Shared node / kernel",
+            "type": "node",
+            "detail": "Remaining isolation boundary",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "rbac",
+            "label": "request access",
+            "state": "active",
+            "from": "tenant"
+          },
+          {
+            "to": "namespace",
+            "label": "allowed resources",
+            "state": "active",
+            "from": "rbac"
+          }
+        ]
+      },
+      {
+        "title": "Enforce independent controls",
+        "narration": "RBAC, admission, quotas and network implementation supply distinct restrictions.",
+        "nodes": [
+          {
+            "id": "tenant",
+            "label": "Tenant identity",
+            "type": "actor",
+            "detail": "Scoped API permissions",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "namespace",
+            "label": "Namespace",
+            "type": "object",
+            "detail": "Resource scope",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "rbac",
+            "label": "RBAC + admission",
+            "type": "control",
+            "detail": "Allowed operations and workloads",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "network",
+            "label": "Network enforcement",
+            "type": "control",
+            "detail": "Selected Pod connectivity",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "host",
+            "label": "Shared node / kernel",
+            "type": "node",
+            "detail": "Remaining isolation boundary",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "network",
+            "label": "apply traffic policy",
+            "state": "active",
+            "from": "namespace"
+          }
+        ]
+      },
+      {
+        "title": "Review the host boundary",
+        "narration": "Privileged workloads and shared kernels affect tenant separation beyond namespace names.",
+        "nodes": [
+          {
+            "id": "tenant",
+            "label": "Tenant identity",
+            "type": "actor",
+            "detail": "Scoped API permissions",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "namespace",
+            "label": "Namespace",
+            "type": "object",
+            "detail": "Resource scope",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "rbac",
+            "label": "RBAC + admission",
+            "type": "control",
+            "detail": "Allowed operations and workloads",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "network",
+            "label": "Network enforcement",
+            "type": "control",
+            "detail": "Selected Pod connectivity",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "host",
+            "label": "Shared node / kernel",
+            "type": "node",
+            "detail": "Remaining isolation boundary",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "host",
+            "label": "workloads share infrastructure",
+            "state": "active",
+            "from": "namespace"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Privileged workload bypass",
+        "description": "A broad workload permission can undermine otherwise narrow namespace rules.",
+        "frames": [
+          {
+            "title": "Namespace RBAC looks narrow",
+            "narration": "The tenant can create workloads only in one namespace.",
+            "nodes": [
+              {
+                "id": "tenant",
+                "label": "Tenant identity",
+                "type": "actor",
+                "detail": "Scoped API permissions",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "namespace",
+                "label": "Namespace",
+                "type": "object",
+                "detail": "Resource scope",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "rbac",
+                "label": "RBAC + admission",
+                "type": "control",
+                "detail": "Allowed operations and workloads",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "network",
+                "label": "Network enforcement",
+                "type": "control",
+                "detail": "Selected Pod connectivity",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "host",
+                "label": "Shared node / kernel",
+                "type": "node",
+                "detail": "Remaining isolation boundary",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "rbac",
+                "label": "request access",
+                "state": "active",
+                "from": "tenant"
+              },
+              {
+                "to": "namespace",
+                "label": "allowed resources",
+                "state": "active",
+                "from": "rbac"
+              }
+            ]
+          },
+          {
+            "title": "Unsafe Pod settings allowed",
+            "narration": "Admission permits privileged or sensitive host access, creating a route beyond the intended tenant boundary.",
+            "nodes": [
+              {
+                "id": "tenant",
+                "label": "Tenant identity",
+                "type": "actor",
+                "detail": "Scoped API permissions",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "namespace",
+                "label": "Namespace",
+                "type": "object",
+                "detail": "Resource scope",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "rbac",
+                "label": "RBAC + admission",
+                "type": "control",
+                "detail": "Admission permits unsafe Pod settings",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "network",
+                "label": "Network enforcement",
+                "type": "control",
+                "detail": "Selected Pod connectivity",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "host",
+                "label": "Shared node / kernel",
+                "type": "node",
+                "detail": "Remaining isolation boundary",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "namespace",
+                "label": "allowed resources",
+                "state": "active",
+                "from": "rbac"
+              },
+              {
+                "to": "host",
+                "label": "workloads share infrastructure",
+                "state": "active",
+                "from": "namespace"
+              }
+            ]
+          },
+          {
+            "title": "Threat model fails at the host",
+            "narration": "Review workload restrictions and stronger isolation options rather than claiming namespace scope is strong isolation.",
+            "nodes": [
+              {
+                "id": "tenant",
+                "label": "Tenant identity",
+                "type": "actor",
+                "detail": "Scoped API permissions",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "namespace",
+                "label": "Namespace",
+                "type": "object",
+                "detail": "Resource scope",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "rbac",
+                "label": "RBAC + admission",
+                "type": "control",
+                "detail": "Allowed operations and workloads",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "network",
+                "label": "Network enforcement",
+                "type": "control",
+                "detail": "Selected Pod connectivity",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "host",
+                "label": "Shared node / kernel",
+                "type": "node",
+                "detail": "Privileged workload crosses tenant boundary",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "host",
+                "label": "workloads share infrastructure",
+                "state": "active",
+                "from": "namespace"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m19-l02-tenant-layers"
+  },
+  {
+    "title": "Digest identity is input to a verification policy",
+    "kind": "policy",
+    "description": "Only an installed configured mechanism makes verification part of Pod admission; signatures do not enforce themselves.",
+    "assumption": "The lab does not provide a signed production image or install a verifier; this models the explicit enforcement contract.",
+    "frames": [
+      {
+        "title": "Identify the artifact",
+        "narration": "A digest selects content rather than a mutable tag, but does not state that the content is approved.",
+        "nodes": [
+          {
+            "id": "build",
+            "label": "Build pipeline",
+            "type": "control",
+            "detail": "Produces image and evidence",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "registry",
+            "label": "Registry digest",
+            "type": "storage",
+            "detail": "Immutable content identity",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "signature",
+            "label": "Signature / provenance",
+            "type": "object",
+            "detail": "Signer and build claims",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Admission verifier",
+            "type": "control",
+            "detail": "Configured trust policy",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "pod",
+            "label": "Admitted Pod",
+            "type": "pod",
+            "detail": "Only after selected checks",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "registry",
+            "label": "publish content",
+            "state": "active",
+            "from": "build"
+          },
+          {
+            "to": "signature",
+            "label": "publish evidence",
+            "state": "active",
+            "from": "build"
+          }
+        ]
+      },
+      {
+        "title": "Evaluate evidence",
+        "narration": "A verifier checks signatures and required claims against explicit approved identity and trust roots.",
+        "nodes": [
+          {
+            "id": "build",
+            "label": "Build pipeline",
+            "type": "control",
+            "detail": "Produces image and evidence",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "registry",
+            "label": "Registry digest",
+            "type": "storage",
+            "detail": "Immutable content identity",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "signature",
+            "label": "Signature / provenance",
+            "type": "object",
+            "detail": "Signer and build claims",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Admission verifier",
+            "type": "control",
+            "detail": "Configured trust policy",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "pod",
+            "label": "Admitted Pod",
+            "type": "pod",
+            "detail": "Only after selected checks",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "verify",
+            "label": "digest to verify",
+            "state": "active",
+            "from": "registry"
+          },
+          {
+            "to": "verify",
+            "label": "identity and claims",
+            "state": "active",
+            "from": "signature"
+          }
+        ]
+      },
+      {
+        "title": "Enforce at admission",
+        "narration": "Only an installed configured mechanism makes verification part of Pod admission; signatures do not enforce themselves.",
+        "nodes": [
+          {
+            "id": "build",
+            "label": "Build pipeline",
+            "type": "control",
+            "detail": "Produces image and evidence",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "registry",
+            "label": "Registry digest",
+            "type": "storage",
+            "detail": "Immutable content identity",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "signature",
+            "label": "Signature / provenance",
+            "type": "object",
+            "detail": "Signer and build claims",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Admission verifier",
+            "type": "control",
+            "detail": "Configured trust policy",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "pod",
+            "label": "Admitted Pod",
+            "type": "pod",
+            "detail": "Only after selected checks",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "policy permits",
+            "state": "active",
+            "from": "verify"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Valid signature, wrong signer",
+        "description": "Cryptographic validity alone does not meet an organization trust policy.",
+        "frames": [
+          {
+            "title": "Evidence verifies cryptographically",
+            "narration": "The artifact has a valid signature associated with some identity.",
+            "nodes": [
+              {
+                "id": "build",
+                "label": "Build pipeline",
+                "type": "control",
+                "detail": "Produces image and evidence",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "registry",
+                "label": "Registry digest",
+                "type": "storage",
+                "detail": "Immutable content identity",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "signature",
+                "label": "Signature / provenance",
+                "type": "object",
+                "detail": "Signature verifies cryptographically",
+                "x": 545,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "verify",
+                "label": "Admission verifier",
+                "type": "control",
+                "detail": "Configured trust policy",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              },
+              {
+                "id": "pod",
+                "label": "Admitted Pod",
+                "type": "pod",
+                "detail": "Only after selected checks",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "verify",
+                "label": "digest to verify",
+                "state": "active",
+                "from": "registry"
+              },
+              {
+                "to": "verify",
+                "label": "identity and claims",
+                "state": "active",
+                "from": "signature"
+              }
+            ]
+          },
+          {
+            "title": "Identity is not approved",
+            "narration": "The configured policy requires a different signer or build provenance.",
+            "nodes": [
+              {
+                "id": "build",
+                "label": "Build pipeline",
+                "type": "control",
+                "detail": "Produces image and evidence",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "registry",
+                "label": "Registry digest",
+                "type": "storage",
+                "detail": "Immutable content identity",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "signature",
+                "label": "Signature / provenance",
+                "type": "object",
+                "detail": "Signer and build claims",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "verify",
+                "label": "Admission verifier",
+                "type": "control",
+                "detail": "Signer fails configured policy",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "pod",
+                "label": "Proposed Pod",
+                "type": "pod",
+                "detail": "Admission denied",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "verify",
+                "label": "identity and claims",
+                "state": "active",
+                "from": "signature"
+              },
+              {
+                "to": "pod",
+                "label": "signer rejected",
+                "state": "blocked",
+                "from": "verify"
+              }
+            ]
+          },
+          {
+            "title": "Request is rejected",
+            "narration": "An enforcing verifier denies the workload rather than trusting every valid signature.",
+            "nodes": [
+              {
+                "id": "build",
+                "label": "Build pipeline",
+                "type": "control",
+                "detail": "Produces image and evidence",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "registry",
+                "label": "Registry digest",
+                "type": "storage",
+                "detail": "Immutable content identity",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "signature",
+                "label": "Signature / provenance",
+                "type": "object",
+                "detail": "Signer and build claims",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "verify",
+                "label": "Admission verifier",
+                "type": "control",
+                "detail": "Signer fails configured policy",
+                "x": 35,
+                "y": 230,
+                "state": "failed"
+              },
+              {
+                "id": "pod",
+                "label": "Proposed Pod",
+                "type": "pod",
+                "detail": "Admission denied",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "signer rejected",
+                "state": "blocked",
+                "from": "verify"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m19-l02-artifact-trust"
+  }
+]

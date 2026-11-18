@@ -1,0 +1,804 @@
+[
+  {
+    "title": "Coverage follows eligible nodes",
+    "kind": "ownership",
+    "description": "Show a DaemonSet creating one agent per eligible node and reacting to a newly added worker.",
+    "assumption": "One agent Pod per eligible worker in steady state; update surge and transient overlap are omitted.",
+    "frames": [
+      {
+        "title": "Compute eligible nodes",
+        "narration": "The controller applies node selection and placement rules; the control node is excluded in this example.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "DaemonSet logs",
+            "detail": "Selects pool=workers",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Control node",
+            "detail": "Does not match pool",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Agent A",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Agent B",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "eligible",
+            "state": "active"
+          },
+          {
+            "from": "0",
+            "to": "3",
+            "label": "selector mismatch",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Create node-local instances",
+        "narration": "Agent A is assigned to Worker A. Its purpose is coverage of that node rather than satisfying a generic replica count.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "DaemonSet logs",
+            "detail": "Selects pool=workers",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Control node",
+            "detail": "Does not match pool",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Agent A",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Agent B",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "4",
+            "label": "create",
+            "state": "active"
+          },
+          {
+            "from": "4",
+            "to": "1",
+            "label": "assigned here",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Add another worker",
+        "narration": "Worker B joins with matching labels and acceptable taints, creating another node that needs coverage.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "DaemonSet logs",
+            "detail": "Selects pool=workers",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Control node",
+            "detail": "Does not match pool",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Agent A",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Agent B",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "new eligible node",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Reconcile the new instance",
+        "narration": "Agent B runs on Worker B and consumes that worker resources. Requests and permissions still matter for infrastructure agents.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "DaemonSet logs",
+            "detail": "Selects pool=workers",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker B",
+            "detail": "Eligible node",
+            "type": "node",
+            "state": "ready"
+          },
+          {
+            "id": "3",
+            "label": "Control node",
+            "detail": "Does not match pool",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Agent A",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Agent B",
+            "detail": "Node-local log collection",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "5",
+            "label": "create",
+            "state": "active"
+          },
+          {
+            "from": "5",
+            "to": "2",
+            "label": "assigned here",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "New node has an untolerated taint",
+        "description": "A matching node label is insufficient for placement.",
+        "frames": [
+          {
+            "title": "Worker joins the pool",
+            "narration": "Worker B has the correct pool label but also an additional dedicated taint.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "DaemonSet logs",
+                "detail": "Selects pool=workers",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "Eligible node",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker B",
+                "detail": "pool=workers; dedicated taint not tolerated by agent",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Control node",
+                "detail": "Does not match pool",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Agent A",
+                "detail": "Node-local log collection",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Agent B",
+                "detail": "Node-local log collection",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Agent cannot place",
+            "narration": "The DaemonSet Pod has no appropriate toleration for this taint and cannot provide coverage there.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "DaemonSet logs",
+                "detail": "Selects pool=workers",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "Eligible node",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker B",
+                "detail": "pool=workers; dedicated taint not tolerated by agent",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Control node",
+                "detail": "Does not match pool",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Agent A",
+                "detail": "Node-local log collection",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Agent B",
+                "detail": "Node-local log collection",
+                "type": "pod",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "5",
+                "to": "2",
+                "label": "untolerated taint",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Audit coverage and permissions",
+            "narration": "Inspect desired/current/ready counts and node events before adding only the narrowly required toleration.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "DaemonSet logs",
+                "detail": "Selects pool=workers",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "Eligible node",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker B",
+                "detail": "pool=workers; dedicated taint not tolerated by agent",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Control node",
+                "detail": "Does not match pool",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Agent A",
+                "detail": "Node-local log collection",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Agent B",
+                "detail": "Node-local log collection",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "2",
+                "label": "inspect eligibility",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe daemonset logs"
+          }
+        ]
+      }
+    ],
+    "id": "m10-l02-daemon"
+  },
+  {
+    "title": "A scheduled run contains retryable attempts",
+    "kind": "queue",
+    "description": "Follow CronJob scheduling into a Job, a failed attempt and a successful retry with duplicate side-effect risk.",
+    "assumption": "One CronJob and finite work; no exactly-once business guarantee.",
+    "frames": [
+      {
+        "title": "Trigger a Job",
+        "narration": "The CronJob evaluates its schedule and concurrency policy, then creates a Job for an eligible run.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "CronJob",
+            "detail": "Schedule + concurrencyPolicy",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Job run",
+            "detail": "Completion and retry budget",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Attempt 1",
+            "detail": "Writes then exits unsuccessfully",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Attempt 2",
+            "detail": "Replacement attempt",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Result store",
+            "detail": "Requires idempotency key",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "scheduled run",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Run the first attempt",
+        "narration": "The Job starts a Pod. It may produce an external side effect before its final exit status is known.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "CronJob",
+            "detail": "Schedule + concurrencyPolicy",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Job run",
+            "detail": "Completion and retry budget",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Attempt 1",
+            "detail": "Writes then exits unsuccessfully",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Attempt 2",
+            "detail": "Replacement attempt",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Result store",
+            "detail": "Requires idempotency key",
+            "type": "storage",
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "attempt",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "4",
+            "label": "write result",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Retry a failed attempt",
+        "narration": "A failure within backoffLimit can create another attempt. The controller does not know whether the previous external write was committed.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "CronJob",
+            "detail": "Schedule + concurrencyPolicy",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Job run",
+            "detail": "Completion and retry budget",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Attempt 1",
+            "detail": "Writes then exits unsuccessfully",
+            "type": "pod",
+            "state": "failed"
+          },
+          {
+            "id": "3",
+            "label": "Attempt 2",
+            "detail": "Replacement attempt",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Result store",
+            "detail": "Requires idempotency key",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "retry",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "1",
+            "label": "failed",
+            "state": "blocked"
+          }
+        ]
+      },
+      {
+        "title": "Complete idempotently",
+        "narration": "The second attempt uses the same business work key so the destination can deduplicate the result, then Job completion is recorded.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "CronJob",
+            "detail": "Schedule + concurrencyPolicy",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Job run",
+            "detail": "Completion and retry budget",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "2",
+            "label": "Attempt 1",
+            "detail": "Writes then exits unsuccessfully",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Attempt 2",
+            "detail": "Replacement attempt",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Result store",
+            "detail": "Requires idempotency key",
+            "type": "storage",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "same work key",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "1",
+            "label": "succeeded",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Forbid skips overlapping schedule times",
+        "description": "The previous Job remains active when the next schedule arrives.",
+        "frames": [
+          {
+            "title": "Previous run is active",
+            "narration": "The current Job is still processing its bounded work.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "CronJob",
+                "detail": "Schedule + concurrencyPolicy",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Job run",
+                "detail": "Completion and retry budget",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "2",
+                "label": "Attempt 1",
+                "detail": "Writes then exits unsuccessfully",
+                "type": "pod",
+                "state": "active"
+              },
+              {
+                "id": "3",
+                "label": "Attempt 2",
+                "detail": "Replacement attempt",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Result store",
+                "detail": "Requires idempotency key",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "still active",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "New scheduled time arrives",
+            "narration": "Forbid does not create overlapping work from this CronJob while that Job remains active.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "CronJob",
+                "detail": "Schedule + concurrencyPolicy",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "Job run",
+                "detail": "Completion and retry budget",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Attempt 1",
+                "detail": "Writes then exits unsuccessfully",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Attempt 2",
+                "detail": "Replacement attempt",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Result store",
+                "detail": "Requires idempotency key",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "new run skipped",
+                "state": "blocked"
+              }
+            ],
+            "code": "concurrencyPolicy: Forbid"
+          },
+          {
+            "title": "Business work needs durable tracking",
+            "narration": "If every interval must be processed, track intervals or queue items durably; concurrencyPolicy alone does not guarantee one result per schedule.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "CronJob",
+                "detail": "Schedule + concurrencyPolicy",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Job run",
+                "detail": "Completion and retry budget",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Attempt 1",
+                "detail": "Writes then exits unsuccessfully",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Attempt 2",
+                "detail": "Replacement attempt",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Result store",
+                "detail": "Requires idempotency key",
+                "type": "storage",
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "4",
+                "label": "record processed interval",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m10-l02-completion"
+  }
+]

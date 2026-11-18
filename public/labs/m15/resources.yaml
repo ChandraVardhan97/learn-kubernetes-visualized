@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m15
+  namespace: kv-lab
+  labels:
+    lab: m15
+data:
+  message: fixed-point
+---
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: m15
+  namespace: kv-lab
+  labels:
+    lab: m15
+spec:
+  holderIdentity: manual-demo
+  leaseDurationSeconds: 15

@@ -1,0 +1,83 @@
+---
+lessonId: "m20-l03"
+title: "Capstone: GitOps and an operator"
+description: "Keep custom-resource intent and generated-child ownership separate."
+level: "advanced"
+module: "m20"
+order: 3
+minutes: 16
+prerequisites: ["m16-l03", "m19-l01", "m20-l02"]
+objectives: ["Identify the GitOps and operator field-management boundaries.", "Demonstrate conflict, repeated reconciliation and drift repair.", "Verify child removal through parent ownership."]
+concepts: [{"id": "m20-l03-platform-ownership", "title": "GitOps owns intention; operator owns implementation", "scene": "m20-l03-platform-ownership"}, {"id": "m20-l03-platform-recovery", "title": "Repeat, repair, then collect owned children", "scene": "m20-l03-platform-recovery"}]
+sources: [{"title": "Server-side apply conflicts", "url": "https://kubernetes.io/docs/reference/using-api/server-side-apply/"}, {"title": "Operator pattern", "url": "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"}, {"title": "Owner references and garbage collection", "url": "https://kubernetes.io/docs/concepts/architecture/garbage-collection/"}, {"title": "Argo CD automated sync", "url": "https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/"}]
+lab: "m20"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: each controller needs a clear declaration boundary
+
+The final capstone has two declarative roles. GitOps, modeled locally by the `kv-gitops` field manager, owns the WebApp spec. The Python operator reads that intention and owns fields on the generated ConfigMap and Deployment as `kv-webapp-operator`. The operator also reports observed status on the WebApp's status subresource. GitOps should not independently declare the generated children's replica count or page contents, because doing so would create competing sources of intent.
+
+These are different forms of ownership. managedFields records which actor manages particular API fields. ownerReferences records the lifecycle relationship between each generated child and the WebApp UID. Neither is a universal permission grant; RBAC and admission still govern requests. A controller can be authorized yet encounter a field conflict, or own fields on a child whose lifecycle owner is a separate parent object. Name each boundary when explaining a failure.
+
+<Scene id="m20-l03-platform-ownership" />
+
+## Walkthrough: the conflict is an expected result
+
+Read `platform.yaml`, `platform-conflict.yaml` and `capstone-platform.sh` from the m20 download. The script installs the same WebApp API used in m16, applies the parent with `kv-gitops`, runs the operator and waits for the generated Deployment. It then attempts a second SSA declaration using `kv-human` with a different page message. The expected result is a conflict on a field managed by the declarative owner. The script fails if that conflicting apply unexpectedly succeeds.
+
+Next, the script captures the Deployment UID, repeats reconciliation and checks that UID remains stable. It deletes the generated ConfigMap, runs another pass, and verifies the recovered page data. Finally, it deletes the WebApp and waits for the generated Deployment and ConfigMap to disappear through garbage collection. Each assertion targets a different property: field coordination, idempotent identity, drift repair and lifecycle ownership. Passing one does not imply the others automatically hold.
+
+<Scene id="m20-l03-platform-recovery" />
+
+This is the actual desired parent. The provided conflict file uses the same object identity and a different message; it is not a new independent application.
+
+```yaml
+apiVersion: labs.kv.example/v1alpha1
+kind: WebApp
+metadata:
+  name: m20-platform
+  namespace: kv-lab
+  labels:
+    lab: m20
+spec:
+  replicas: 1
+  message: gitops-declared-page
+```
+
+```bash
+# Run only the platform investigation from the downloaded m20 directory.
+bash capstone-platform.sh
+# To inspect before the script's final parent deletion, run its early steps manually:
+kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f platform.yaml
+python3 operator.py --iterations 2 --interval 1
+kubectl --context kind-kv-lab -n kv-lab get webapp m20-platform -o yaml --show-managed-fields
+kubectl --context kind-kv-lab -n kv-lab get deployment m20-platform -o yaml --show-managed-fields
+```
+
+## Practice: report four independent observations
+
+Run the [m20 local exercise](/labs/#m20). Keep the parent apply conflict as a successful diagnostic observation rather than adding force-conflicts. Inspect which manager owns spec.message and compare the child's owner UID with the WebApp UID. Record the Deployment UID before and after repeated reconciliation, the new ConfigMap UID after repair, and the absence of both children after parent deletion. These observations explain precisely what the minimal controller demonstrated.
+
+If you use the manual inspection commands after the full script, they recreate the parent and children for inspection. Delete that parent again when finished so garbage collection can clean them up. The CRD is shared with m16; do not delete it while either module's resources are still needed. Cleanup of a CRD is a separate cluster-scoped destructive step, even though the host Python process has already exited.
+
+## Pitfalls: this is not a hidden production platform
+
+The mandatory capstone does not install Argo CD, provision remote Git credentials, implement external-resource finalizers, run leader election or provide an informer-backed queue. It models the relevant declaration boundary with real SSA and a working small polling controller. A production version needs least-privilege service-account permissions, per-resource error isolation, backoff, conditions, metrics, tested upgrade behavior and appropriate leadership or fencing for its side effects.
+
+For a deliberate extension, connect an optional Argo CD Application to the parent manifest while keeping child resources out of its desired set. Configure self-heal and prune intentionally, then observe what happens when the operator is stopped or the parent changes. GitOps may accept the WebApp while the generated application is unavailable; expose status that lets a user distinguish accepted intent from readiness. Preserve data retention policy before extending this pattern to stateful children.
+
+## Check your understanding
+
+<details>
+
+<summary>GitOps manages WebApp.spec.message. Should it also force the generated ConfigMap data to the same value?</summary>
+
+Usually no. The operator derives that ConfigMap from the parent intention and owns the child fields. Declaring both creates redundant competing control. Keep GitOps on the parent API and let the operator reconcile its implementation, with explicit exceptions only when the platform contract requires them.
+
+</details>
+
+Your final recovery record should connect cause, ownership, minimal action and verification for all three capstones. Add new failure scenarios one at a time, keeping the evidence and limitations specific to the mechanism actually exercised.

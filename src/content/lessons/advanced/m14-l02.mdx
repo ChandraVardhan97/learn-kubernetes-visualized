@@ -1,0 +1,80 @@
+---
+lessonId: "m14-l02"
+title: "Watches and server-side apply"
+description: "Follow a resumable watch cursor and negotiate field ownership explicitly."
+level: "advanced"
+module: "m14"
+order: 2
+minutes: 16
+prerequisites: ["m14-l01"]
+objectives: ["Resume watches without treating resourceVersion as a clock.", "Explain stale caches and relisting after expired history.", "Resolve server-side apply conflicts through an ownership decision."]
+concepts: [{"id": "m14-l02-watch-cursor", "title": "List, resume, and rebuild a watch", "scene": "m14-l02-watch-cursor"}, {"id": "m14-l02-apply-owners", "title": "Two managers and one declared field", "scene": "m14-l02-apply-owners"}]
+sources: [{"title": "API list and watch semantics", "url": "https://kubernetes.io/docs/reference/using-api/api-concepts/"}, {"title": "Server-side apply ownership", "url": "https://kubernetes.io/docs/reference/using-api/server-side-apply/"}]
+lab: "m14"
+reviewed: "2026-10-27"
+kubernetesVersion: "1.37"
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: observation and ownership solve different problems
+
+A watch delivers changes to a selected API collection. A client typically lists a baseline, then watches from its resourceVersion, preserving the string unchanged. Current kube-apiserver resources, including CRDs, support ordering versions within the same API group and resource type using arbitrary-size decimal comparison; conformant implementations guarantee this from Kubernetes 1.35. Extension APIs require checking their contract and numeric format. This permits constrained ordering, not subtraction to count changes, cross-resource ordering, or elapsed-time calculations.
+
+A disconnected client has not necessarily lost its ability to recover. It can reconnect from its last accepted version while history remains available. If the requested history is too old, the server can return an expired-history response such as HTTP 410 Gone. The client must rebuild its baseline and continue watching. A watch is therefore a resumable observation protocol, not a permanent audit log or a guarantee that every intermediate state reaches every controller.
+
+<Scene id="m14-l02-watch-cursor" />
+
+## Walkthrough: watch current state, negotiate field changes
+
+An informer uses watch information to maintain a local cache, but cache reads can lag a successful write. A reconcile loop must handle an object that is already changed on the API server while its cached copy still looks old. Kubernetes controllers work toward current desired state rather than executing an irreversible business transaction once for every watch notification. For durable audit requirements, configure an audit pipeline with its own retention and access model instead of retaining a controller's event stream.
+
+Server-side apply solves a separate coordination problem: multiple actors declare intentions for fields. The API server records field managers in managedFields. When an apply changes a field owned by another manager to a different value, it normally reports a conflict. Managers may share ownership when applying the same value; an ordinary update or patch can also change field ownership according to its operation. Ownership is field-specific and schema-dependent, including list merge behavior; it is not an exclusive lock on the entire object.
+
+<Scene id="m14-l02-apply-owners" />
+
+Save this as `ownership.yaml` in a disposable directory. Manager `kv-gitops` owns the declared data field after applying it. A second apply using another manager and a different value should conflict.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: m14-ownership
+  namespace: kv-lab
+  labels:
+    lab: m14
+# Only this key is part of this manager's intention.
+data:
+  release: git-declared
+```
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f ownership.yaml
+kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership -o yaml --show-managed-fields
+# Keep a second terminal watching while you edit and reapply the file.
+kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership --watch
+# After changing data.release locally, expect a field conflict here.
+kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-human -f ownership.yaml
+```
+
+## Practice: capture a conflict instead of suppressing it
+
+Run the [m14 local exercise](/labs/#m14). It creates a ConfigMap with one field manager and attempts a conflicting declaration with another. Observe the exact field path in the conflict and inspect managedFields before choosing a resolution. For this experiment the intended result is the conflict itself; do not add force simply to make every command green. Watch delivery may group closely timed changes differently from your terminal expectations, so inspect final state as well as the event stream.
+
+There are three useful resolutions to discuss. The second actor can stop declaring the field, both actors can agree on the same value, or an authorized owner can deliberately take ownership using force conflicts. That last option changes the ownership contract. Record who will manage the field on the next reconciliation, otherwise two automated systems can repeatedly undo each other's changes.
+
+## Pitfalls: persistence is not cache synchronization
+
+A successful apply is evidence about the API write, not proof that every cache has observed it. Check the resource's documented status conditions and, where reported, whether observedGeneration covers the desired generation; metadata.generation alone records desired-state changes, not convergence. A watch bookmark advances progress information without representing a normal object change, and clients must interpret event types correctly. Use maintained client libraries for list/watch recovery. Do not invent a cursor or use `resourceVersion: "0"` as a universal request for the newest possible read; resourceVersion semantics depend on the operation and associated options.
+
+## Check your understanding
+
+<details>
+
+<summary>A watch cursor changes from one numeric-looking string to another. How many updates occurred?</summary>
+
+The strings do not count updates. Documented same-resource ordering does not make resourceVersion a per-object event counter or a clock. Reconcile observed state; use an audit or application log when individual changes matter.
+
+</details>
+
+Next, connect field ownership to deletion ownership. managedFields controls declarations of fields; ownerReferences and finalizers control different lifecycle relationships.

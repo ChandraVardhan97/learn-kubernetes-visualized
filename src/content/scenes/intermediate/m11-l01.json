@@ -1,0 +1,731 @@
+[
+  {
+    "title": "A workload identity receives rotating, scoped credentials",
+    "kind": "flow",
+    "description": "Trace ServiceAccount selection, projected bound tokens and API authentication.",
+    "assumption": "Default modern projected token integration; external cloud identity federation is separate.",
+    "frames": [
+      {
+        "title": "Select a namespaced identity",
+        "narration": "The Pod chooses pod-reader in its own namespace. That identity name does not itself specify permissions.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod",
+            "detail": "serviceAccountName: pod-reader",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "ServiceAccount",
+            "detail": "learning / pod-reader",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "TokenRequest API",
+            "detail": "Audience + expiration + binding",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Projected volume",
+            "detail": "Kubelet refreshes token file",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "API server",
+            "detail": "Authenticates bearer token",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "workload identity",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Issue a bound token",
+        "narration": "The credential is requested with audience, lifetime and object binding rather than being a permanently valid password.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod",
+            "detail": "serviceAccountName: pod-reader",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "ServiceAccount",
+            "detail": "learning / pod-reader",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "TokenRequest API",
+            "detail": "Audience + expiration + binding",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Projected volume",
+            "detail": "Kubelet refreshes token file",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "API server",
+            "detail": "Authenticates bearer token",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "bound credential",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Project and refresh",
+        "narration": "The kubelet projects credentials and refreshes them. A long-running client must reread rotating credentials as its library requires.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod",
+            "detail": "serviceAccountName: pod-reader",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "ServiceAccount",
+            "detail": "learning / pod-reader",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "TokenRequest API",
+            "detail": "Audience + expiration + binding",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Projected volume",
+            "detail": "Kubelet refreshes token file",
+            "type": "storage",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "API server",
+            "detail": "Authenticates bearer token",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "short-lived token",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "0",
+            "label": "mounted file",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Authenticate the request",
+        "narration": "The API verifies the credential and obtains the ServiceAccount identity, then authorization separately evaluates the requested action.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod",
+            "detail": "serviceAccountName: pod-reader",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "ServiceAccount",
+            "detail": "learning / pod-reader",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "TokenRequest API",
+            "detail": "Audience + expiration + binding",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Projected volume",
+            "detail": "Kubelet refreshes token file",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "API server",
+            "detail": "Authenticates bearer token",
+            "type": "control",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "4",
+            "label": "API request",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Client caches an expired token",
+        "description": "The projected file rotates but the application keeps the old credential in memory.",
+        "frames": [
+          {
+            "title": "Initial request works",
+            "narration": "The original token is valid for its intended audience and lifetime.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod",
+                "detail": "serviceAccountName: pod-reader",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "ServiceAccount",
+                "detail": "learning / pod-reader",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "TokenRequest API",
+                "detail": "Audience + expiration + binding",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Projected volume",
+                "detail": "Kubelet refreshes token file",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "API server",
+                "detail": "Authenticates bearer token",
+                "type": "control",
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "valid token",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "File rotates, cache does not",
+            "narration": "The kubelet refreshes the projected file, while the application continues presenting its old cached token.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod",
+                "detail": "serviceAccountName: pod-reader",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "1",
+                "label": "ServiceAccount",
+                "detail": "learning / pod-reader",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "TokenRequest API",
+                "detail": "Audience + expiration + binding",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Projected volume",
+                "detail": "Kubelet refreshes token file",
+                "type": "storage",
+                "state": "ready"
+              },
+              {
+                "id": "4",
+                "label": "API server",
+                "detail": "Authenticates bearer token",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "0",
+                "label": "new token ignored",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Authentication fails",
+            "narration": "An expired credential can be rejected before RBAC is evaluated. Use a client that reloads the rotating token instead of granting a broader role.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod",
+                "detail": "serviceAccountName: pod-reader",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "ServiceAccount",
+                "detail": "learning / pod-reader",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "TokenRequest API",
+                "detail": "Audience + expiration + binding",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Projected volume",
+                "detail": "Kubelet refreshes token file",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "API server",
+                "detail": "Authenticates bearer token",
+                "type": "control",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "4",
+                "label": "expired token",
+                "state": "blocked"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m11-l01-identity"
+  },
+  {
+    "title": "Roles describe actions; bindings grant them",
+    "kind": "policy",
+    "description": "Follow namespaced RBAC evaluation and show why a second allow remains effective.",
+    "assumption": "RBAC is the relevant authorizer in this example; subjects may receive several grants.",
+    "frames": [
+      {
+        "title": "Describe the allowed actions",
+        "narration": "The Role grants explicit verbs on core Pods. Pod deletion, logs and exec are not implied by read access to the Pod resource.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Identity",
+            "detail": "learning:pod-reader",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Role read-pod-state",
+            "detail": "get/list/watch core pods",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "RoleBinding",
+            "detail": "Identity → Role in learning",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API authorization",
+            "detail": "Evaluate verb/resource/namespace",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Other binding",
+            "detail": "May add wider permission",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "rules",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Grant to a subject",
+        "narration": "The namespaced RoleBinding connects this ServiceAccount to those Role rules in learning.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Identity",
+            "detail": "learning:pod-reader",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Role read-pod-state",
+            "detail": "get/list/watch core pods",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "RoleBinding",
+            "detail": "Identity → Role in learning",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "API authorization",
+            "detail": "Evaluate verb/resource/namespace",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Other binding",
+            "detail": "May add wider permission",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "subject",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "1",
+            "label": "roleRef",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Evaluate the concrete request",
+        "narration": "list pods in learning is allowed through the binding; delete pods is not supplied by this role.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Identity",
+            "detail": "learning:pod-reader",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Role read-pod-state",
+            "detail": "get/list/watch core pods",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "RoleBinding",
+            "detail": "Identity → Role in learning",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API authorization",
+            "detail": "Evaluate verb/resource/namespace",
+            "type": "control",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Other binding",
+            "detail": "May add wider permission",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "list pods / learning",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl auth can-i list pods -n learning --as=system:serviceaccount:learning:pod-reader"
+      },
+      {
+        "title": "Union all applicable grants",
+        "narration": "Another binding can grant delete or cluster-wide access. The narrow role does not subtract those permissions.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Identity",
+            "detail": "learning:pod-reader",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Role read-pod-state",
+            "detail": "get/list/watch core pods",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "RoleBinding",
+            "detail": "Identity → Role in learning",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API authorization",
+            "detail": "Evaluate verb/resource/namespace",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Other binding",
+            "detail": "May add wider permission",
+            "type": "object",
+            "state": "warning"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "3",
+            "label": "additional allow",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Unexpected delete permission",
+        "description": "A broader binding already grants the action.",
+        "frames": [
+          {
+            "title": "Narrow role inspected",
+            "narration": "The read role contains no delete verb and appears safe when viewed alone.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Identity",
+                "detail": "learning:pod-reader",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Role read-pod-state",
+                "detail": "get/list/watch core pods",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "RoleBinding",
+                "detail": "Identity → Role in learning",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API authorization",
+                "detail": "Evaluate verb/resource/namespace",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Other binding",
+                "detail": "May add wider permission",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Other allow applies",
+            "narration": "A second binding authorizes deletion, so the effective RBAC decision is allowed.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Identity",
+                "detail": "learning:pod-reader",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Role read-pod-state",
+                "detail": "get/list/watch core pods",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "RoleBinding",
+                "detail": "Identity → Role in learning",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API authorization",
+                "detail": "Evaluate verb/resource/namespace",
+                "type": "control",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Other binding",
+                "detail": "May add wider permission",
+                "type": "object",
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "3",
+                "label": "delete allowed",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Remove the excessive grant",
+            "narration": "Audit bindings and groups, narrow the unintended grant and re-run can-i. An extra read-only role cannot function as a deny.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Identity",
+                "detail": "learning:pod-reader",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Role read-pod-state",
+                "detail": "get/list/watch core pods",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "RoleBinding",
+                "detail": "Identity → Role in learning",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API authorization",
+                "detail": "Evaluate verb/resource/namespace",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "4",
+                "label": "Other binding",
+                "detail": "May add wider permission",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "3",
+                "label": "recheck effective access",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl auth can-i delete pods -n learning --as=system:serviceaccount:learning:pod-reader"
+          }
+        ]
+      }
+    ],
+    "id": "m11-l01-authorization"
+  }
+]

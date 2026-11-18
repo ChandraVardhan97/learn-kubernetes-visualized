@@ -1,0 +1,433 @@
+[
+  {
+    "id": "m03-l01-object",
+    "title": "Read the object tree",
+    "kind": "ownership",
+    "description": "Distinguish API identity, metadata, desired configuration, and observed status.",
+    "assumption": "A Deployment is shown; not every Kubernetes kind has both spec and status.",
+    "frames": [
+      {
+        "title": "Choose the resource schema",
+        "narration": "apiVersion apps/v1 and kind Deployment select a specific resource schema. YAML is one serialization of that object.",
+        "nodes": [
+          {
+            "id": "yaml",
+            "label": "YAML document",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "kind",
+            "label": "apps/v1 Deployment",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "api",
+            "label": "API schema",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kind",
+            "label": "declares type",
+            "state": "active",
+            "from": "yaml"
+          },
+          {
+            "to": "kind",
+            "label": "validates shape",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Separate object and Pod metadata",
+        "narration": "Deployment metadata identifies the parent. template.metadata describes labels of child Pods, not the parent\u2019s existing metadata.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment metadata",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "spec",
+            "label": "Deployment spec",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "template",
+            "label": "Pod template metadata",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "spec",
+            "label": "same object",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "template",
+            "label": "nested recipe",
+            "state": "active",
+            "from": "spec"
+          }
+        ]
+      },
+      {
+        "title": "Server adds identity and observations",
+        "narration": "The API supplies a UID and metadata. Controllers report status; the authored spec remains the desired input.",
+        "nodes": [
+          {
+            "id": "meta",
+            "label": "Name + namespace + UID",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "spec",
+            "label": "spec.replicas: 2",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "status",
+            "label": "status.availableReplicas: 1",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "status",
+            "label": "eventual observation",
+            "state": "active",
+            "from": "spec"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m03-l01-object-failure",
+        "label": "Failure: valid YAML, wrong schema",
+        "description": "Failure: valid YAML, wrong schema",
+        "frames": [
+          {
+            "title": "Indentation changes the tree",
+            "narration": "A field under metadata is not the same as a field under spec. The parser can accept YAML that the API schema rejects.",
+            "nodes": [
+              {
+                "id": "yaml",
+                "label": "replicas under metadata",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "Deployment schema",
+                "type": "control",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "validate",
+                "state": "active",
+                "from": "yaml"
+              }
+            ]
+          },
+          {
+            "title": "The API rejects the request",
+            "narration": "With kubectl's default strict validation, unknown or wrongly typed fields reject this request. Other field-validation modes can warn about or ignore unknown fields. No controller can repair a change that was not accepted.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "Validation error",
+                "type": "control",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "controller",
+                "label": "No accepted change",
+                "type": "control",
+                "state": "idle",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Inspect the actual schema",
+            "narration": "Use explain and server dry-run to repair nesting and types, then reapply the corrected input.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "kubectl explain",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "yaml",
+                "label": "Correct spec.replicas",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "yaml",
+                "label": "correct tree",
+                "state": "active",
+                "from": "operator"
+              }
+            ],
+            "code": "kubectl explain deployment.spec.replicas"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m03-l01-apply",
+    "title": "Apply changes intent before status",
+    "kind": "flow",
+    "description": "Preview an object update and observe independent reconciliation.",
+    "assumption": "Default client-side apply is used; advanced managedFields conflict resolution is deferred.",
+    "frames": [
+      {
+        "title": "Preview the change",
+        "narration": "The local file requests two replicas. Diff compares intended configuration with the live object before a write.",
+        "nodes": [
+          {
+            "id": "file",
+            "label": "File: replicas 2",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "live",
+            "label": "Live spec: replicas 1",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "cli",
+            "label": "kubectl diff",
+            "type": "actor",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "cli",
+            "label": "desired input",
+            "state": "active",
+            "from": "file"
+          },
+          {
+            "to": "cli",
+            "label": "current API state",
+            "state": "active",
+            "from": "live"
+          }
+        ]
+      },
+      {
+        "title": "Persist the desired change",
+        "narration": "Apply updates the addressed Deployment. The spec is two while the status can still show one available replica.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "Accepted apply",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "spec",
+            "label": "Desired replicas: 2",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "status",
+            "label": "Available: 1",
+            "type": "object",
+            "state": "warning",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "spec",
+            "label": "write",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "status",
+            "label": "not synchronous",
+            "state": "active",
+            "from": "spec"
+          }
+        ]
+      },
+      {
+        "title": "Observe convergence",
+        "narration": "Controllers create and start the missing replica through their normal chain. Status eventually reports the new availability.",
+        "nodes": [
+          {
+            "id": "controller",
+            "label": "Controllers reconcile",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Second Pod ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "status",
+            "label": "Available: 2",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "managed creation",
+            "state": "active",
+            "from": "controller"
+          },
+          {
+            "to": "status",
+            "label": "reported observation",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m03-l01-apply-failure",
+        "label": "Failure: competing desired-state writers",
+        "description": "Failure: competing desired-state writers",
+        "frames": [
+          {
+            "title": "Manual scaling changes the live spec",
+            "narration": "An operator scales to four replicas, but the saved manifest still requests two.",
+            "nodes": [
+              {
+                "id": "live",
+                "label": "Live spec: 4",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "file",
+                "label": "Saved file: 2",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Reapply restores the file\u2019s target",
+            "narration": "Reapplying the authoritative-looking file requests two again. The controllers follow the latest accepted desired state.",
+            "nodes": [
+              {
+                "id": "file",
+                "label": "Apply replicas: 2",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "live",
+                "label": "Live target returns to 2",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "live",
+                "label": "accepted update",
+                "state": "active",
+                "from": "file"
+              }
+            ]
+          },
+          {
+            "title": "Coordinate field writers",
+            "narration": "Choose how replicas are managed and update the source deliberately. Reconciliation cannot decide which human intention was preferred.",
+            "nodes": [
+              {
+                "id": "owner",
+                "label": "Deliberate field owner",
+                "type": "actor",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "file",
+                "label": "Consistent desired input",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "file",
+                "label": "coordinate configuration",
+                "state": "active",
+                "from": "owner"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

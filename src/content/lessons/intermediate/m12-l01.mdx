@@ -1,0 +1,132 @@
+---
+{
+  "lessonId": "m12-l01",
+  "title": "Debug the failing workload",
+  "description": "Turn a visible Pod status into evidence about scheduling, image retrieval, process failure or runtime inspection.",
+  "level": "intermediate",
+  "module": "m12",
+  "order": 1,
+  "minutes": 18,
+  "prerequisites": [
+    "m11-l03"
+  ],
+  "objectives": [
+    "Distinguish Pod phase from container waiting and termination reasons",
+    "Choose evidence for Pending, ImagePullBackOff and CrashLoopBackOff",
+    "Use ephemeral containers within explicit permission and runtime limits"
+  ],
+  "concepts": [
+    {
+      "id": "m12-l01-pending",
+      "title": "Pending workload diagnosis",
+      "scene": "m12-l01-failure-boundary"
+    },
+    {
+      "id": "m12-l01-image-pull",
+      "title": "ImagePullBackOff diagnosis",
+      "scene": "m12-l01-failure-boundary"
+    },
+    {
+      "id": "m12-l01-crashloop",
+      "title": "CrashLoopBackOff diagnosis",
+      "scene": "m12-l01-failure-boundary"
+    },
+    {
+      "id": "m12-l01-ephemeral-debugging",
+      "title": "Ephemeral debug containers",
+      "scene": "m12-l01-debug-container"
+    },
+    {
+      "id": "m12-l01-evidence-workflow",
+      "title": "Evidence-driven workload debugging",
+      "scene": "m12-l01-debug-container"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Debug running Pods",
+      "url": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/"
+    },
+    {
+      "title": "Debug init containers",
+      "url": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-init-containers/"
+    },
+    {
+      "title": "Ephemeral containers",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers/"
+    },
+    {
+      "title": "Pod lifecycle",
+      "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/"
+    }
+  ],
+  "lab": "m12",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: the status column is a clue, not a root cause
+
+Start a workload investigation by locating its current lifecycle boundary. Has the API accepted the object? Has a controller created a Pod? Has the scheduler assigned a node? Has the runtime retrieved images and prepared volumes? Has the process started and failed? Each boundary has different evidence. Reading application logs cannot explain a scheduler that has never placed the Pod, and adding memory cannot repair an image name that does not exist.
+
+**Pending** is a Pod phase, not a synonym for insufficient CPU. It can include time waiting for scheduling and time preparing containers after assignment. A **CrashLoopBackOff** display is a container waiting reason indicating repeated restarts with restart backoff; it is not a separate Pod phase. A process that repeatedly exits successfully can also enter this loop under `restartPolicy: Always`. **ImagePullBackOff** likewise describes delayed retry after image retrieval failure. Inspect the structured container states, Pod conditions and events so that a convenient CLI status string does not become the entire diagnosis.
+
+<Scene id="m12-l01-failure-boundary" />
+
+## Walkthrough: capture the evidence before changing the workload
+
+```bash
+kubectl get deployment,replicaset,pod -n learning -o wide
+kubectl describe pod FAILING_POD -n learning
+kubectl get events -n learning --sort-by=.metadata.creationTimestamp
+kubectl logs FAILING_POD -n learning -c app --tail=100
+kubectl logs FAILING_POD -n learning -c app --previous --tail=100
+kubectl get pod FAILING_POD -n learning -o yaml
+```
+
+Replace the resource and container names with those shown by the first commands. `--previous` retrieves logs from the previous terminated container instance when available, which is useful when the current instance has not yet emitted the failing startup message. An error saying no previous instance exists is itself a limit of that evidence source. Capture logs promptly because log rotation, Pod replacement and node loss can remove local history. Avoid copying tokens, connection strings or sensitive user payloads into an incident note.
+
+For an unscheduled Pending Pod, read `FailedScheduling` events and compare requests, labels, affinity, taints and volume constraints. If a node is already assigned, inspect image, volume and sandbox events instead. For ImagePullBackOff, distinguish image-not-found, authentication, authorization, rate limiting, network and certificate failures from the actual event message. The kubelet pulls images using its configured credentials and referenced pull Secrets; a successful `docker pull` on your laptop does not prove the worker has the same network path or identity.
+
+For CrashLoopBackOff, read the last termination reason, exit code, restart count and previous logs. A failing liveness probe can repeatedly kill a process that would otherwise remain alive; a startup probe can protect a deliberately slow startup. An OOM kill has a different evidence pattern from an application configuration exception. Fix the smallest demonstrated cause and preserve the manifest revision so you can explain what changed.
+
+<Scene id="m12-l01-debug-container" />
+
+## Practice: inspect a minimal image without changing its production contents
+
+**Ephemeral containers** add a debug container to an existing Pod through a dedicated subresource. They are useful when the application image lacks a shell or diagnostic tools. They need permission and appropriate admission settings. They share the Pod's network namespace, while process visibility targeting depends on the runtime and configuration. Seeing localhost does not automatically mean seeing every target process or its full filesystem.
+
+```bash
+# Use a throwaway Pod and an approved debug image in the local lab.
+kubectl debug -it FAILING_POD -n learning \
+  --image=busybox:1.36 --target=app
+# From the debug shell, inspect connectivity without printing credentials.
+# An exit returns to your local shell; it does not delete the application Pod.
+```
+
+A debug container is added to the Pod's specification and is not a general replacement for the application container or a routine deployment mechanism. It cannot make a not-yet-running image supply logs, and the chosen image may still lack the tool you need. A copied debug Pod or a disposable separate client can be safer when changing the live Pod would introduce unnecessary risk. Use only the privileges required for the question being tested.
+
+## Pitfalls: repeated restarts can hide the first useful error
+
+Deleting all failed Pods before capturing events and previous logs erases the clearest evidence. A controller may instantly create fresh Pods with the same defect, making the system appear active without progress. Compare the failing Pod's image, configuration references and owning ReplicaSet to the intended revision. Avoid an unrelated bundle of fixes because a green Pod afterward would not establish which hypothesis was correct.
+
+## Check your understanding
+
+<details>
+<summary>A Pod shows Pending, has a nodeName, and reports FailedMount. Should you first lower its CPU request?</summary>
+
+No. Assignment has already occurred, so the immediate failing boundary is volume setup on the selected node. Read the mount event, claim and driver evidence. Lowering CPU may create another revision but does not address a demonstrated mount failure.
+
+</details>
+
+Use the [diagnostics lab](/labs/#m12) to record a symptom, a hypothesis and the single observation that can disprove it. Next, apply the same boundary-by-boundary method to networking and storage.
+
+## Primary documentation
+
+- [Debug running Pods](https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/)
+- [Debug init containers](https://kubernetes.io/docs/tasks/debug/debug-application/debug-init-containers/)
+- [Ephemeral containers](https://kubernetes.io/docs/concepts/workloads/pods/ephemeral-containers/)
+- [Pod lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)

@@ -1,0 +1,10 @@
+---
+import Base from '../layouts/Base.astro';
+import {getLessons,lessonHref} from '../lib/content';
+import {levelNames} from '../data/modules';
+const lessons=await getLessons();
+const concepts=lessons.flatMap(l=>l.data.concepts.map(c=>({...c,href:`${lessonHref(l)}#scene-${c.scene}`,lesson:l.data.title,level:l.data.level}))).sort((a,b)=>a.title.localeCompare(b.title));
+---
+<Base title="Concept atlas"><div class="page-pad"><header class="page-header"><h1>Find the idea.<br/>See the mechanism.</h1><p>An index of {concepts.length} explained concepts. Each link opens the relevant visual explanation in its lesson.</p></header><label class="atlas-search"><span class="sr-only">Filter concepts</span><input id="concept-filter" type="search" placeholder="Find a concept, such as readiness or quorum…" autocomplete="off"/></label><p class="concept-empty" id="concept-empty" role="status">No matching concepts. Try a component, resource, or behavior.</p><div class="concept-list">{concepts.map(c=><article class="concept-row" data-filter={`${c.title} ${c.lesson} ${c.level}`.toLowerCase()}><a href={c.href}><span>{c.title}<small>{levelNames[c.level]} · {c.lesson}</small></span><span class="arrow" aria-hidden="true">↗</span></a></article>)}</div></div>
+ <script>const input=document.querySelector<HTMLInputElement>('#concept-filter')!;const rows=[...document.querySelectorAll<HTMLElement>('.concept-row')];input.addEventListener('input',()=>{const q=input.value.toLowerCase().trim();let shown=0;for(const row of rows){row.hidden=!row.dataset.filter!.includes(q);if(!row.hidden)shown++;}document.querySelector<HTMLElement>('#concept-empty')!.style.display=shown?'none':'block';});</script>
+</Base>

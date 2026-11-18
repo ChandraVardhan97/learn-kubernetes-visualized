@@ -1,0 +1,1026 @@
+[
+  {
+    "title": "A named barrier requires a controller",
+    "kind": "lifecycle",
+    "description": "After cleanup evidence, the controller removes its own finalizer and deletion can complete.",
+    "assumption": "An external cleanup obligation illustrates the mechanism; the lab ConfigMap deliberately has none.",
+    "frames": [
+      {
+        "title": "Object enters termination",
+        "narration": "The API records deletionTimestamp while preserving an object that still has a finalizer.",
+        "nodes": [
+          {
+            "id": "delete",
+            "label": "Delete request",
+            "type": "actor",
+            "detail": "Requests removal",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "object",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "Finalizer + deletionTimestamp",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "controller",
+            "label": "Cleanup controller",
+            "type": "control",
+            "detail": "Performs cleanup if implemented",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "external",
+            "label": "External resource",
+            "type": "storage",
+            "detail": "Cleanup obligation",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "object",
+            "label": "set termination",
+            "state": "active",
+            "from": "delete"
+          },
+          {
+            "to": "controller",
+            "label": "observe finalizer",
+            "state": "active",
+            "from": "object"
+          }
+        ]
+      },
+      {
+        "title": "Controller fulfills obligation",
+        "narration": "The responsible controller cleans its external resource; the finalizer string itself runs no code.",
+        "nodes": [
+          {
+            "id": "delete",
+            "label": "Delete request",
+            "type": "actor",
+            "detail": "Requests removal",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "object",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "Finalizer + deletionTimestamp",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "controller",
+            "label": "Cleanup controller",
+            "type": "control",
+            "detail": "Performs cleanup if implemented",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "external",
+            "label": "External resource",
+            "type": "storage",
+            "detail": "Cleanup obligation",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "external",
+            "label": "idempotent cleanup",
+            "state": "active",
+            "from": "controller"
+          }
+        ]
+      },
+      {
+        "title": "Barrier is removed",
+        "narration": "After cleanup evidence, the controller removes its own finalizer and deletion can complete.",
+        "nodes": [
+          {
+            "id": "delete",
+            "label": "Delete request",
+            "type": "actor",
+            "detail": "Requests removal",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "object",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "Finalizer + deletionTimestamp",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "controller",
+            "label": "Cleanup controller",
+            "type": "control",
+            "detail": "Performs cleanup if implemented",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "external",
+            "label": "External resource",
+            "type": "storage",
+            "detail": "Cleanup obligation",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "object",
+            "label": "remove own key",
+            "state": "active",
+            "from": "controller"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No implementation for the key",
+        "description": "An artificial training finalizer holds the ConfigMap indefinitely.",
+        "frames": [
+          {
+            "title": "Training key is present",
+            "narration": "The object has labs.kv.example/hold, but no controller implements that key.",
+            "nodes": [
+              {
+                "id": "delete",
+                "label": "Delete request",
+                "type": "actor",
+                "detail": "Requests removal",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "object",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Finalizer + deletionTimestamp",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "controller",
+                "label": "Cleanup controller",
+                "type": "control",
+                "detail": "No controller implements this key",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "external",
+                "label": "External resource",
+                "type": "storage",
+                "detail": "Cleanup obligation",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "controller",
+                "label": "observe finalizer",
+                "state": "blocked",
+                "from": "object"
+              }
+            ]
+          },
+          {
+            "title": "Delete remains pending",
+            "narration": "deletionTimestamp is present and the object remains retrievable because its finalizer list is nonempty.",
+            "nodes": [
+              {
+                "id": "delete",
+                "label": "Delete request",
+                "type": "actor",
+                "detail": "Requests removal",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "object",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Deletion timestamp set; key remains",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "controller",
+                "label": "Cleanup controller",
+                "type": "control",
+                "detail": "No controller implements this key",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "external",
+                "label": "External resource",
+                "type": "storage",
+                "detail": "Cleanup obligation",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "object",
+                "label": "set termination",
+                "state": "active",
+                "from": "delete"
+              },
+              {
+                "to": "object",
+                "label": "no automatic removal",
+                "state": "blocked",
+                "from": "controller"
+              }
+            ]
+          },
+          {
+            "title": "Inspect before intervening",
+            "narration": "Only the isolated training key is removed manually; real cleanup obligations require investigation.",
+            "nodes": [
+              {
+                "id": "delete",
+                "label": "Delete request",
+                "type": "actor",
+                "detail": "Requests removal",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "object",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Isolated training key removed manually",
+                "x": 290,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "controller",
+                "label": "Cleanup controller",
+                "type": "control",
+                "detail": "Performs cleanup if implemented",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "external",
+                "label": "External resource",
+                "type": "storage",
+                "detail": "Cleanup obligation",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m14-l03-finalizer-hold"
+  },
+  {
+    "title": "Garbage collection follows owner identity",
+    "kind": "ownership",
+    "description": "Eligible ReplicaSets and Pods are removed through their owner graph; unrelated objects remain.",
+    "assumption": "The diagram summarizes garbage collection; foreground blocking and cache timing affect the exact removal sequence.",
+    "frames": [
+      {
+        "title": "Record actual owner",
+        "narration": "The ReplicaSet references Deployment UID A; labels do not define this lifecycle edge.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment UID A",
+            "type": "object",
+            "detail": "Owner of ReplicaSet",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet",
+            "type": "object",
+            "detail": "ownerReference UID A",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pod",
+            "label": "Pod",
+            "type": "pod",
+            "detail": "Owned by ReplicaSet",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Traverses owner references",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "replacement",
+            "label": "Deployment UID B",
+            "type": "object",
+            "detail": "Same name, new identity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "owns by UID",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "pod",
+            "label": "owns by UID",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      },
+      {
+        "title": "Choose propagation",
+        "narration": "Deleting UID A initiates background, foreground or orphan behavior according to the selected policy.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment UID A",
+            "type": "object",
+            "detail": "Owner of ReplicaSet",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet",
+            "type": "object",
+            "detail": "ownerReference UID A",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pod",
+            "label": "Pod",
+            "type": "pod",
+            "detail": "Owned by ReplicaSet",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Traverses owner references",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "replacement",
+            "label": "Deployment UID B",
+            "type": "object",
+            "detail": "Same name, new identity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "collect eligible dependent",
+            "state": "active",
+            "from": "gc"
+          }
+        ]
+      },
+      {
+        "title": "Collect dependent chain",
+        "narration": "Eligible ReplicaSets and Pods are removed through their owner graph; unrelated objects remain.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment UID A",
+            "type": "object",
+            "detail": "Owner of ReplicaSet",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet",
+            "type": "object",
+            "detail": "ownerReference UID A",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pod",
+            "label": "Pod",
+            "type": "pod",
+            "detail": "Owned by ReplicaSet",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Traverses owner references",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "replacement",
+            "label": "Deployment UID B",
+            "type": "object",
+            "detail": "Same name, new identity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "collect eligible dependent",
+            "state": "active",
+            "from": "gc"
+          },
+          {
+            "to": "pod",
+            "label": "owns by UID",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Name reuse is not adoption",
+        "description": "A new Deployment with UID B does not become the old dependent owner.",
+        "frames": [
+          {
+            "title": "Owner A is gone",
+            "narration": "The dependent still names owner UID A even after the original name becomes available.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "Deployment UID A",
+                "type": "object",
+                "detail": "Original owner UID A deleted",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "rs",
+                "label": "ReplicaSet",
+                "type": "object",
+                "detail": "Still references UID A",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pod",
+                "label": "Pod",
+                "type": "pod",
+                "detail": "Owned by ReplicaSet",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Traverses owner references",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "replacement",
+                "label": "Deployment UID B",
+                "type": "object",
+                "detail": "Replacement has yet to appear",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "rs",
+                "label": "owns by UID",
+                "state": "active",
+                "from": "deploy"
+              }
+            ]
+          },
+          {
+            "title": "Replacement appears",
+            "narration": "A Deployment reuses the name but receives UID B. The reference remains tied to UID A.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "Deployment UID A",
+                "type": "object",
+                "detail": "Original owner UID A deleted",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "rs",
+                "label": "ReplicaSet",
+                "type": "object",
+                "detail": "Still references UID A",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "pod",
+                "label": "Pod",
+                "type": "pod",
+                "detail": "Owned by ReplicaSet",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Traverses owner references",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "replacement",
+                "label": "Deployment UID B",
+                "type": "object",
+                "detail": "Same name, different UID B",
+                "x": 290,
+                "y": 230,
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "to": "rs",
+                "label": "does not match UID A",
+                "state": "blocked",
+                "from": "replacement"
+              }
+            ]
+          },
+          {
+            "title": "No implicit repair",
+            "narration": "Garbage collection and controllers do not treat equal names as equal identities. Investigate intended adoption.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "Deployment UID A",
+                "type": "object",
+                "detail": "Original owner UID A deleted",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "rs",
+                "label": "ReplicaSet",
+                "type": "object",
+                "detail": "Still references UID A",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "pod",
+                "label": "Pod",
+                "type": "pod",
+                "detail": "Owned by ReplicaSet",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Traverses owner references",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "replacement",
+                "label": "Deployment UID B",
+                "type": "object",
+                "detail": "Same name, new identity",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "rs",
+                "label": "does not match UID A",
+                "state": "blocked",
+                "from": "replacement"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m14-l03-owner-uid"
+  },
+  {
+    "title": "Migrate consumers before removing an API",
+    "kind": "flow",
+    "description": "Check stored-version migration and release policy before disabling the old representation.",
+    "assumption": "Specific removal releases and CRD conversion mechanics must be checked for the chosen resource and upgrade path.",
+    "frames": [
+      {
+        "title": "Inventory consumers",
+        "narration": "Identify controllers, manifests and webhook rules using the deprecated endpoint before an upgrade.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Old API client",
+            "type": "actor",
+            "detail": "Uses deprecated version",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Served representations",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "storage",
+            "label": "Stored objects",
+            "type": "storage",
+            "detail": "Storage representation",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "new",
+            "label": "Updated client",
+            "type": "actor",
+            "detail": "Uses supported version",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "old request version",
+            "state": "active",
+            "from": "old"
+          }
+        ]
+      },
+      {
+        "title": "Migrate representation",
+        "narration": "Update clients and test conversion while old and new supported versions are still available.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Old API client",
+            "type": "actor",
+            "detail": "Uses deprecated version",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Served representations",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "storage",
+            "label": "Stored objects",
+            "type": "storage",
+            "detail": "Storage representation",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "new",
+            "label": "Updated client",
+            "type": "actor",
+            "detail": "Uses supported version",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "new request version",
+            "state": "active",
+            "from": "new"
+          },
+          {
+            "to": "storage",
+            "label": "convert and persist",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Verify storage and removal path",
+        "narration": "Check stored-version migration and release policy before disabling the old representation.",
+        "nodes": [
+          {
+            "id": "old",
+            "label": "Old API client",
+            "type": "actor",
+            "detail": "Uses deprecated version",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Served representations",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "storage",
+            "label": "Stored objects",
+            "type": "storage",
+            "detail": "Storage representation",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "new",
+            "label": "Updated client",
+            "type": "actor",
+            "detail": "Uses supported version",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "storage",
+            "label": "convert and persist",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Endpoint removed too early",
+        "description": "Old clients fail even when equivalent objects still exist in storage.",
+        "frames": [
+          {
+            "title": "Server no longer serves old version",
+            "narration": "The upgrade removes the endpoint expected by the old client.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old API client",
+                "type": "actor",
+                "detail": "Uses deprecated version",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Old endpoint removed",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "storage",
+                "label": "Stored objects",
+                "type": "storage",
+                "detail": "Storage representation",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "new",
+                "label": "Updated client",
+                "type": "actor",
+                "detail": "Uses supported version",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "old request version",
+                "state": "blocked",
+                "from": "old"
+              }
+            ]
+          },
+          {
+            "title": "Client request fails",
+            "narration": "An old manifest or controller cannot use its requested representation.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old API client",
+                "type": "actor",
+                "detail": "Uses deprecated version",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Requested version no longer served",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "storage",
+                "label": "Stored objects",
+                "type": "storage",
+                "detail": "Storage representation",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "new",
+                "label": "Updated client",
+                "type": "actor",
+                "detail": "Uses supported version",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "old request version",
+                "state": "blocked",
+                "from": "old"
+              }
+            ]
+          },
+          {
+            "title": "Stored object is not a client upgrade",
+            "narration": "Existing persisted state does not rewrite Git manifests or update client libraries.",
+            "nodes": [
+              {
+                "id": "old",
+                "label": "Old API client",
+                "type": "actor",
+                "detail": "Uses deprecated version",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Served representations",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "storage",
+                "label": "Stored objects",
+                "type": "storage",
+                "detail": "Stored data remains available",
+                "x": 545,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "new",
+                "label": "Updated client",
+                "type": "actor",
+                "detail": "Uses supported version",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m14-l03-api-evolution"
+  }
+]

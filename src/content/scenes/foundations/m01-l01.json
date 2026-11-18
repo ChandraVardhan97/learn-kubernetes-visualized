@@ -1,0 +1,427 @@
+[
+  {
+    "id": "m01-l01-isolation",
+    "title": "One kernel, separate views",
+    "kind": "cluster",
+    "description": "Follow the runtime creating a Linux process namespace boundary.",
+    "assumption": "Two Linux containers share one Linux host; sandboxed runtimes are outside this diagram.",
+    "frames": [
+      {
+        "title": "Start from the host",
+        "narration": "The host kernel runs processes. A container runtime asks that kernel to create the isolation needed for the configured executable.",
+        "nodes": [
+          {
+            "id": "kernel",
+            "label": "Linux host kernel",
+            "type": "node",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "Container runtime",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "Process A",
+            "type": "actor",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kernel",
+            "label": "create namespaces",
+            "state": "active",
+            "from": "runtime"
+          }
+        ]
+      },
+      {
+        "title": "Create a private view",
+        "narration": "Process A sees its own PID and mount namespaces. Another process can see different IDs and filesystem roots while still calling the same kernel.",
+        "nodes": [
+          {
+            "id": "kernel",
+            "label": "Shared kernel",
+            "type": "node",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "Container A: PID 1",
+            "type": "pod",
+            "state": "ready",
+            "detail": "Private PID and mount view"
+          },
+          {
+            "id": "b",
+            "label": "Container B: PID 1",
+            "type": "pod",
+            "state": "ready",
+            "detail": "Different PID and mount view"
+          }
+        ],
+        "edges": [
+          {
+            "to": "kernel",
+            "label": "system calls",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "kernel",
+            "label": "system calls",
+            "state": "active",
+            "from": "b"
+          }
+        ]
+      },
+      {
+        "title": "Stop the application",
+        "narration": "When A exits, its container stops. B can keep running; no guest operating system needs to be shut down.",
+        "nodes": [
+          {
+            "id": "kernel",
+            "label": "Shared kernel",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "A: executable exited",
+            "type": "pod",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "B: still running",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "kernel",
+            "label": "system calls",
+            "state": "active",
+            "from": "b"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m01-l01-isolation-failure",
+        "label": "Failure: host access weakens isolation",
+        "description": "Failure: host access weakens isolation",
+        "frames": [
+          {
+            "title": "A privileged choice",
+            "narration": "A container started with unnecessary host access no longer has the intended restricted view.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Container A",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "host",
+                "label": "Host filesystem",
+                "type": "storage",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "host",
+                "label": "host mount",
+                "state": "active",
+                "from": "a"
+              }
+            ]
+          },
+          {
+            "title": "The shared boundary matters",
+            "narration": "A writable host mount exposes real host files; the image filesystem is not a protective copy of that mount.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Process writes",
+                "type": "actor",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "host",
+                "label": "Host files changed",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "host",
+                "label": "write permitted path",
+                "state": "active",
+                "from": "a"
+              }
+            ]
+          },
+          {
+            "title": "Reduce access",
+            "narration": "Use only necessary mounts and privileges. Namespace isolation is one mechanism, not a complete trust policy.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Restricted process",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "host",
+                "label": "Host files",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "host",
+                "label": "access denied",
+                "state": "blocked",
+                "from": "a"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m01-l01-resource-boundary",
+    "title": "Visibility is not a resource limit",
+    "kind": "policy",
+    "description": "Contrast namespaces with cgroup accounting and enforcement.",
+    "assumption": "A Linux node uses cgroup v2 memory.max; reclaim, temporary limit overshoot, and exact OOM victim selection are simplified.",
+    "frames": [
+      {
+        "title": "An isolated process can allocate",
+        "narration": "A PID namespace changes visible process IDs. It does not impose a memory budget.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Isolated process",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "memory",
+            "label": "Host memory",
+            "type": "storage",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "memory",
+            "label": "allocate",
+            "state": "active",
+            "from": "a"
+          }
+        ]
+      },
+      {
+        "title": "Apply a cgroup boundary",
+        "narration": "The runtime places the process in a cgroup. Memory usage is accounted against the configured 64 MiB maximum.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Process in cgroup",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "cg",
+            "label": "memory.max: 67108864",
+            "type": "control",
+            "state": "active",
+            "detail": "64 MiB, expressed in bytes"
+          },
+          {
+            "id": "memory",
+            "label": "Host memory",
+            "type": "storage",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "cg",
+            "label": "account usage",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "memory",
+            "label": "constrain",
+            "state": "active",
+            "from": "cg"
+          }
+        ]
+      },
+      {
+        "title": "Observe both mechanisms",
+        "narration": "The process has a private view and bounded consumption. Neither creates separate physical memory or a separate kernel.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Private PID view",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "cg",
+            "label": "Bounded consumption",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "kernel",
+            "label": "Same Linux kernel",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "cg",
+            "label": "resource accounting",
+            "state": "active",
+            "from": "a"
+          },
+          {
+            "to": "kernel",
+            "label": "system calls",
+            "state": "active",
+            "from": "a"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m01-l01-resource-boundary-failure",
+        "label": "Failure: allocate past the limit",
+        "description": "Failure: allocate past the limit",
+        "frames": [
+          {
+            "title": "Usage approaches maximum",
+            "narration": "The application allocates memory inside its cgroup. The host may have free memory while this cgroup has no remaining allowance.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Application allocating",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "cg",
+                "label": "64 MiB maximum",
+                "type": "control",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "cg",
+                "label": "memory charge",
+                "state": "active",
+                "from": "a"
+              }
+            ]
+          },
+          {
+            "title": "OOM can terminate a process",
+            "narration": "If the constrained group cannot satisfy allocation, an OOM kill can end the application. Namespace isolation does not change this limit.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Application killed",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "cg",
+                "label": "Limit enforced",
+                "type": "control",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "a",
+                "label": "OOM kill",
+                "state": "active",
+                "from": "cg"
+              }
+            ]
+          },
+          {
+            "title": "Investigate, then resize",
+            "narration": "Inspect memory demand and termination evidence. Increasing a limit without understanding demand can merely move the pressure to the host.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Inspect exit evidence",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "cg",
+                "label": "Measured resource budget",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "cg",
+                "label": "choose deliberate limit",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,144 @@
+---
+{
+  "lessonId": "m11-l02",
+  "title": "Security contexts and Pod Security",
+  "description": "Constrain process privileges and use admission policy to keep unsafe Pod settings out of a namespace.",
+  "level": "intermediate",
+  "module": "m11",
+  "order": 2,
+  "minutes": 18,
+  "prerequisites": [
+    "m11-l01"
+  ],
+  "objectives": [
+    "Explain UID, capabilities, seccomp and privilege escalation settings",
+    "Handle read-only filesystems and volume ownership deliberately",
+    "Separate Pod Security Admission enforcement from runtime controls"
+  ],
+  "concepts": [
+    {
+      "id": "m11-l02-security-context",
+      "title": "Container security context",
+      "scene": "m11-l02-process-boundary"
+    },
+    {
+      "id": "m11-l02-filesystem-permissions",
+      "title": "Filesystem ownership and writable paths",
+      "scene": "m11-l02-process-boundary"
+    },
+    {
+      "id": "m11-l02-pod-security",
+      "title": "Pod Security Standards",
+      "scene": "m11-l02-admission"
+    },
+    {
+      "id": "m11-l02-psa",
+      "title": "Pod Security Admission",
+      "scene": "m11-l02-admission"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Configure a security context",
+      "url": "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/"
+    },
+    {
+      "title": "Pod Security Standards",
+      "url": "https://kubernetes.io/docs/concepts/security/pod-security-standards/"
+    },
+    {
+      "title": "Pod Security Admission",
+      "url": "https://kubernetes.io/docs/concepts/security/pod-security-admission/"
+    }
+  ],
+  "lab": "m11",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: authorization to create a Pod is only the first boundary
+
+A user who can create Pods can ask a node to execute processes. The Pod's **security context** determines important parts of the resulting privilege boundary: user identity, Linux capabilities, privilege escalation, syscall filtering and filesystem access. Running as a non-root UID reduces exposure, but UID alone is not a complete sandbox. Host mounts, privileged mode, host namespaces and powerful capabilities can expose the host even when an image is described as a container.
+
+Security settings exist at Pod and container levels, with particular fields applying at one or both levels. A Pod-level `runAsUser` provides a default for eligible containers; a container can override fields where the API permits it. `runAsNonRoot` asks Kubernetes to prevent root execution according to its checks. `allowPrivilegeEscalation: false` restricts gaining additional privileges through mechanisms such as setuid executables on Linux. Dropping capabilities removes selected kernel powers, while **seccomp** filters the syscall surface. `RuntimeDefault` selects the runtime's default profile, not a universal identical syscall list on every runtime.
+
+<Scene id="m11-l02-process-boundary" />
+
+## Walkthrough: supply the writable paths the application actually needs
+
+This complete Pod uses a non-root training process and a read-only root filesystem, with a deliberate writable volume at `/work`. It demonstrates mechanics rather than claiming that arbitrary production software works without additional image or permission changes.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: restricted-writer
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: writer
+      image: busybox:1.36
+      command: ["sh", "-c", "id; echo ready > /work/status; sleep 3600"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      volumeMounts:
+        - name: work
+          mountPath: /work
+  volumes:
+    - name: work
+      emptyDir: {}
+```
+
+`readOnlyRootFilesystem` prevents writes to the container root filesystem; it does not make separately mounted volumes read-only automatically. Give applications explicit writable paths for temporary files or state. `fsGroup` can help make supported mounted volumes accessible to the process group, but ownership handling depends on the volume type and CSI behavior. An existing backend with incompatible ownership may still fail. Test actual write permissions instead of solving every error by enabling root or making all directories world-writable.
+
+<Scene id="m11-l02-admission" />
+
+## Practice: reject an unsafe proposal before it reaches a node
+
+**Pod Security Standards** define Privileged, Baseline and Restricted policy levels. **Pod Security Admission**, or PSA, evaluates Pods against the chosen level according to namespace labels and cluster configuration. Enforcement rejects violating new Pod admissions; warning and audit modes communicate violations without the same rejection behavior. These checks evaluate Pod configuration, not application code quality, image provenance or every tenant risk.
+
+```bash
+# Use a new disposable namespace with no production workloads.
+kubectl create namespace security-practice
+kubectl label namespace security-practice \
+  pod-security.kubernetes.io/enforce=restricted \
+  pod-security.kubernetes.io/enforce-version=v1.37
+kubectl apply -n security-practice -f restricted-writer.yaml
+kubectl exec -n security-practice restricted-writer -- cat /work/status
+kubectl exec -n security-practice restricted-writer -- id
+```
+
+Expect the compliant Pod to be admitted and the mounted-path write to work on a compatible cluster. Try a separately named copy with `privileged: true` only in this disposable namespace and expect rejection under Restricted enforcement. For workload controllers, admission may accept the controller object while later Pod creation is rejected; inspect ReplicaSet or Job events for the denied template. A namespace policy change does not retroactively rewrite an already running Pod's security context.
+
+## Pitfalls: admission and runtime protection are complementary
+
+PSA does not install NetworkPolicy, limit RBAC grants or prove the container image lacks vulnerabilities. Namespace labels also need governance: a tenant able to remove enforcement labels may weaken the intended boundary. Pinning the policy version makes upgrades deliberate, but it also means reviewing new restrictions rather than leaving a historical policy forever. Linux security fields and operating-system support vary; verify the target nodes and runtime, especially in mixed-OS clusters.
+
+## Check your understanding
+
+<details>
+<summary>A non-root container has a read-only root filesystem but mounts a writable PVC. Can it still modify that PVC?</summary>
+
+Yes, if the volume is mounted writable and its permissions allow the process UID or group to write. The read-only root setting applies to the container root filesystem, not every mount. Set mount access and filesystem permissions deliberately, then test the exact path the application uses.
+
+</details>
+
+Use the [security lab](/labs/#m11) to compare an API rejection with a runtime permission error. Next, protect credentials and combine namespace controls into a realistic tenant boundary.
+
+## Primary documentation
+
+- [Configure a security context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)
+- [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+- [Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/)

@@ -1,0 +1,134 @@
+---
+{
+  "lessonId": "m09-l02",
+  "title": "Dynamic provisioning and CSI",
+  "description": "Follow delayed binding through StorageClass selection, provisioner reconciliation, attachment and mount.",
+  "level": "intermediate",
+  "module": "m09",
+  "order": 2,
+  "minutes": 18,
+  "prerequisites": [
+    "m09-l01"
+  ],
+  "objectives": [
+    "Explain StorageClass parameters and provisioner ownership",
+    "Trace WaitForFirstConsumer through scheduler topology decisions",
+    "Separate CSI provisioning, attachment and node mounting failures"
+  ],
+  "concepts": [
+    {
+      "id": "m09-l02-storage-class",
+      "title": "StorageClass and dynamic provisioning",
+      "scene": "m09-l02-binding"
+    },
+    {
+      "id": "m09-l02-delayed-binding",
+      "title": "WaitForFirstConsumer binding",
+      "scene": "m09-l02-binding"
+    },
+    {
+      "id": "m09-l02-csi",
+      "title": "Container Storage Interface",
+      "scene": "m09-l02-csi-path"
+    },
+    {
+      "id": "m09-l02-volume-expansion",
+      "title": "Volume expansion",
+      "scene": "m09-l02-csi-path"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Storage classes",
+      "url": "https://kubernetes.io/docs/concepts/storage/storage-classes/"
+    },
+    {
+      "title": "Dynamic volume provisioning",
+      "url": "https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/"
+    },
+    {
+      "title": "CSI volumes",
+      "url": "https://kubernetes.io/docs/concepts/storage/volumes/#csi"
+    },
+    {
+      "title": "CSI specification",
+      "url": "https://github.com/container-storage-interface/spec/blob/master/spec.md"
+    }
+  ],
+  "lab": "m09",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: the claim describes demand, the class selects a supply mechanism
+
+A **StorageClass** describes a storage offering: which provisioner should create volumes, provider-specific parameters, binding mode, reclaim policy and expansion policy. It is cluster-scoped, while PVCs are namespaced. A PVC can explicitly name a class or use the applicable default. An explicit empty `storageClassName` asks for no class, which is different from omitting the field and allowing defaulting. Inspect the admitted claim to see which class is actually selected.
+
+Dynamic provisioning turns a claim into storage through a controller and storage backend. The API server does not allocate a disk itself. A provisioner observes the claim, creates a backend volume, and arranges the PV that will bind to it. A missing driver, exhausted backend quota or invalid class parameter can leave the claim Pending even though the YAML is valid. Events often name the provisioner being awaited, giving a better starting point than repeatedly deleting and recreating the claim.
+
+<Scene id="m09-l02-binding" />
+
+## Walkthrough: delay a decision until workload topology is known
+
+Storage can have locality constraints: a cloud disk may exist in one zone, and a local volume may exist on one worker. `Immediate` binding can choose storage before the consuming Pod's placement constraints are known. **WaitForFirstConsumer** delays binding or provisioning until scheduling can account for a consumer's topology. This avoids allocating a volume in a zone that the consuming Pod cannot use.
+
+```yaml
+# Inspect the existing class; do not substitute an invented driver name.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: report-data
+spec:
+  storageClassName: standard  # Replace with an actual lab class.
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+```
+
+```bash
+kubectl get storageclass
+kubectl get storageclass standard -o yaml
+kubectl apply -f report-data.yaml
+kubectl describe pvc report-data
+# After creating the lab consumer Pod:
+kubectl get pvc report-data -w
+kubectl describe pod report-writer
+```
+
+If the chosen class uses WaitForFirstConsumer, a Pending claim with a message about waiting for a first consumer can be healthy. Create the workload that uses it, then follow the scheduler-selected topology and provisioning events. Do not set `spec.nodeName` to bypass scheduling during this experiment: that can bypass the scheduler coordination needed for delayed binding. Use node affinity or a node selector when the workload legitimately requires a placement restriction.
+
+The **Container Storage Interface**, or CSI, separates Kubernetes storage integration from individual provider implementations. A driver can provide controller operations such as creating and attaching storage and node operations such as staging or publishing a volume into a Pod. Kubernetes integrations commonly use external sidecar controllers around the driver. Exact components and supported operations vary. A PV being Bound says claim matching finished; it does not prove controller attachment, node mount or filesystem ownership succeeded.
+
+<Scene id="m09-l02-csi-path" />
+
+## Practice: read the lifecycle in order
+
+Compare the PVC status, PV source and Pod events. A Pending PVC points toward class selection, binding or provisioning. `FailedAttachVolume` points toward attachment or topology/access limitations. `FailedMount` points toward node-side publication, filesystem, credentials or other mount setup. Names alone do not identify the complete cause; read the event message and relevant driver logs with an administrator when required. Do not delete a PV to clear an attachment error before understanding the data lifecycle.
+
+**Volume expansion** requires support from the class and driver. With `allowVolumeExpansion: true`, increase the PVC's requested size rather than editing the PV capacity as a shortcut. Controller and filesystem expansion can occur at different points, and support for online expansion depends on the driver and filesystem. Kubernetes does not support shrinking a PVC by simply lowering its requested storage. Test resizing with disposable data and watch conditions until the filesystem exposes the expected capacity.
+
+## Pitfalls: local storage is still local
+
+A host-local provisioner can make PVCs convenient on a laptop while retaining node affinity to one worker's directory. That is valuable for lifecycle practice but does not promise node replacement recovery. Multi-attach failures can arise when a replacement Pod tries to use a single-node-access disk while the old attachment is still active elsewhere. Resolve ownership and detach state carefully; force removal without fencing the old writer can threaten application data.
+
+## Check your understanding
+
+<details>
+<summary>A WaitForFirstConsumer PVC is Pending before any consuming Pod exists. Is provisioning necessarily broken?</summary>
+
+No. Waiting can be the class's intended behavior because the scheduler needs a consumer's placement constraints before selecting a storage topology. Read the claim events and create the intended consumer. If it remains Pending afterward, investigate the workload's scheduling constraints and provisioner events together rather than treating the PVC as an isolated object.
+
+</details>
+
+Use the [storage lab](/labs/#m09) to observe class, claim, PV and mount events in sequence. Next, recover data into a new claim instead of assuming persistence alone provides a recovery point.
+
+## Primary documentation
+
+- [Storage classes](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+- [Dynamic volume provisioning](https://kubernetes.io/docs/concepts/storage/dynamic-provisioning/)
+- [CSI volumes](https://kubernetes.io/docs/concepts/storage/volumes/#csi)
+- [CSI specification](https://github.com/container-storage-interface/spec/blob/master/spec.md)

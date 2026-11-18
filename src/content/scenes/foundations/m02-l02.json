@@ -1,0 +1,499 @@
+[
+  {
+    "id": "m02-l02-reconcile",
+    "title": "Close the observed-state gap",
+    "kind": "ownership",
+    "description": "A ReplicaSet controller compares its target with active owned Pods.",
+    "assumption": "A Deployment has already set its ReplicaSet target to three; all observed Pods are healthy in this branch.",
+    "frames": [
+      {
+        "title": "Declare three replicas",
+        "narration": "The ReplicaSet target is three but only two matching active owned Pods exist. Terminal or deleting Pods do not fill the target. The controller observes a count gap.",
+        "nodes": [
+          {
+            "id": "rs",
+            "label": "ReplicaSet desired: 3",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "controller",
+            "label": "ReplicaSet controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "Pod A",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Pod B",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "read target",
+            "state": "active",
+            "from": "controller"
+          },
+          {
+            "to": "a",
+            "label": "owns",
+            "state": "active",
+            "from": "rs"
+          },
+          {
+            "to": "b",
+            "label": "owns",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      },
+      {
+        "title": "Create one missing Pod",
+        "narration": "The ReplicaSet controller creates one Pod object. It does not create three more because three was the original request.",
+        "nodes": [
+          {
+            "id": "controller",
+            "label": "ReplicaSet controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "rs",
+            "label": "Desired: 3",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "Pod A",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Pod B",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "c",
+            "label": "Pod C: new",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "c",
+            "label": "create missing object",
+            "state": "active",
+            "from": "controller"
+          },
+          {
+            "to": "c",
+            "label": "owns",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      },
+      {
+        "title": "Observe again before acting",
+        "narration": "Three active managed Pods now exist. A repeated reconciliation observes no count gap and does not duplicate them. Readiness is still a separate observation.",
+        "nodes": [
+          {
+            "id": "rs",
+            "label": "Desired: 3, observed: 3",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "controller",
+            "label": "No count repair needed",
+            "type": "control",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "c",
+            "label": "Pod C ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "latest observation",
+            "state": "active",
+            "from": "controller"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m02-l02-reconcile-failure",
+        "label": "Failure: the target is infeasible",
+        "description": "Failure: the target is infeasible",
+        "frames": [
+          {
+            "title": "Replica target remains three",
+            "narration": "The desired count is valid even though the referenced image is missing from its registry.",
+            "nodes": [
+              {
+                "id": "rs",
+                "label": "Desired replicas: 3",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "image",
+                "label": "Missing image tag",
+                "type": "storage",
+                "state": "failed",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "image",
+                "label": "Pod template reference",
+                "state": "active",
+                "from": "rs"
+              }
+            ]
+          },
+          {
+            "title": "Objects exist without health",
+            "narration": "The controller can satisfy the object count while containers fail image pulls. Count convergence does not prove readiness.",
+            "nodes": [
+              {
+                "id": "a",
+                "label": "Pod A: pull failure",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "b",
+                "label": "Pod B: pull failure",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "c",
+                "label": "Pod C: pull failure",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "rs",
+                "label": "3 exist, 0 ready",
+                "type": "object",
+                "state": "warning",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "a",
+                "label": "owns",
+                "state": "active",
+                "from": "rs"
+              },
+              {
+                "to": "b",
+                "label": "owns",
+                "state": "active",
+                "from": "rs"
+              },
+              {
+                "to": "c",
+                "label": "owns",
+                "state": "active",
+                "from": "rs"
+              }
+            ]
+          },
+          {
+            "title": "Correct the enduring input",
+            "narration": "Fix the owning Deployment image reference. Repeatedly deleting these Pods would reproduce the same bad template.",
+            "nodes": [
+              {
+                "id": "operator",
+                "label": "Correct Deployment template",
+                "type": "actor",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "image",
+                "label": "Verified image reference",
+                "type": "storage",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "image",
+                "label": "release correct input",
+                "state": "active",
+                "from": "operator"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m02-l02-repair",
+    "title": "Replacement is a new identity",
+    "kind": "lifecycle",
+    "description": "Trace deletion, replacement creation, binding, and execution.",
+    "assumption": "One Pod is deleted from a healthy three-replica workload; termination overlap is simplified.",
+    "frames": [
+      {
+        "title": "A managed Pod disappears",
+        "narration": "Deleting Pod B leaves the ReplicaSet target unchanged. Remaining Pods continue independently.",
+        "nodes": [
+          {
+            "id": "rs",
+            "label": "ReplicaSet desired: 3",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "old",
+            "label": "Pod B: deleted UID",
+            "type": "pod",
+            "state": "failed",
+            "detail": ""
+          },
+          {
+            "id": "others",
+            "label": "Pods A and C",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "others",
+            "label": "owns",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      },
+      {
+        "title": "The ReplicaSet creates Pod D",
+        "narration": "The ReplicaSet controller creates a new object with a new UID. Scheduling assigns that object to a node.",
+        "nodes": [
+          {
+            "id": "controller",
+            "label": "ReplicaSet controller",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "Pod D: new UID",
+            "type": "pod",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "sched",
+            "label": "Scheduler",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "new",
+            "label": "create",
+            "state": "active",
+            "from": "controller"
+          },
+          {
+            "to": "new",
+            "label": "bind eligible node",
+            "state": "active",
+            "from": "sched"
+          }
+        ]
+      },
+      {
+        "title": "The worker starts D",
+        "narration": "The selected node kubelet uses its runtime to start D. Recovery preserves replica intent, not B\u2019s process memory or Pod IP.",
+        "nodes": [
+          {
+            "id": "kubelet",
+            "label": "Selected node kubelet",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "runtime",
+            "label": "Container runtime",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "new",
+            "label": "Pod D ready",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "runtime",
+            "label": "CRI start",
+            "state": "active",
+            "from": "kubelet"
+          },
+          {
+            "to": "new",
+            "label": "new execution",
+            "state": "active",
+            "from": "runtime"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m02-l02-repair-failure",
+        "label": "Failure: no controller owns the deleted Pod",
+        "description": "Failure: no controller owns the deleted Pod",
+        "frames": [
+          {
+            "title": "A naked Pod exists",
+            "narration": "A directly created Pod has no ReplicaSet maintaining a count for it.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Standalone Pod",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "stored object",
+                "state": "active",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "Delete the only intention",
+            "narration": "Deleting that Pod removes the object. There is no replica controller with an outstanding count gap.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pod object removed",
+                "type": "pod",
+                "state": "failed",
+                "detail": ""
+              },
+              {
+                "id": "api",
+                "label": "No owning workload",
+                "type": "control",
+                "state": "idle",
+                "detail": ""
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Use a managed workload",
+            "narration": "For a replaceable long-running application, declare a Deployment. Its ReplicaSet provides the enduring replacement obligation.",
+            "nodes": [
+              {
+                "id": "deployment",
+                "label": "Deployment",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "rs",
+                "label": "ReplicaSet",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "New managed Pod",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "rs",
+                "label": "owns",
+                "state": "active",
+                "from": "deployment"
+              },
+              {
+                "to": "pod",
+                "label": "owns",
+                "state": "active",
+                "from": "rs"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

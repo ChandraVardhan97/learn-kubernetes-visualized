@@ -1,0 +1,133 @@
+---
+{
+  "lessonId": "m03-l03",
+  "title": "kubectl and your cluster context",
+  "description": "Address the intended cluster, identity, and namespace before inspecting or changing objects.",
+  "level": "foundations",
+  "module": "m03",
+  "order": 3,
+  "minutes": 14,
+  "prerequisites": [
+    "m03-l02"
+  ],
+  "objectives": [
+    "Read kubeconfig contexts without exposing credentials",
+    "Use explicit context and namespace flags",
+    "Choose get, describe, explain, logs, and diff for distinct evidence"
+  ],
+  "concepts": [
+    {
+      "id": "m03-l03-kubeconfig",
+      "title": "kubeconfig",
+      "scene": "m03-l03-context"
+    },
+    {
+      "id": "m03-l03-contexts",
+      "title": "Contexts and namespaces",
+      "scene": "m03-l03-context"
+    },
+    {
+      "id": "m03-l03-kubectl",
+      "title": "kubectl inspection workflow",
+      "scene": "m03-l03-evidence"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Organizing cluster access",
+      "url": "https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/"
+    },
+    {
+      "title": "Configure access to multiple clusters",
+      "url": "https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/"
+    },
+    {
+      "title": "kubectl overview",
+      "url": "https://kubernetes.io/docs/reference/kubectl/"
+    }
+  ],
+  "lab": "m03",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: every command has a destination
+
+A kubeconfig file describes how clients access clusters. It contains named cluster connection definitions, user credential configurations, and contexts that combine a cluster, a user, and an optional default namespace. The current context supplies defaults when you do not override them. A short command such as `kubectl get pods` therefore contains hidden choices: which API endpoint, which authentication configuration, and which namespace.
+
+A context's friendly name is not a security boundary. A context named `training` could point to a production endpoint if the configuration is wrong. Inspect the mapping instead of trusting the name alone. The kubeconfig “user” entry is a local configuration name; actual authentication and authorization depend on the credentials it supplies and the server's policies. Renaming the entry does not grant new permissions.
+
+kubectl normally reads its default kubeconfig location, can merge files listed in `KUBECONFIG`, and can use a specified file with `--kubeconfig`. Merging makes duplicate names and precedence meaningful. Use trusted kubeconfig files: they may reference local files or executable credential plugins. Treat an unfamiliar configuration as active access configuration, not a harmless list of server URLs.
+
+<Scene id="m03-l03-context" />
+
+## Walkthrough: inspect without spilling credentials
+
+Start with read-only commands. Avoid `kubectl config view --raw` in shared terminals, screenshots, or support messages because it can expose credential material. Even redacted configuration can contain internal endpoints and identifying names; share only the necessary fields.
+
+```bash
+kubectl config get-contexts
+kubectl config current-context
+# Show only the chosen endpoint and default namespace, not credential data.
+kubectl config view --minify \
+  -o jsonpath='{.clusters[0].cluster.server}{"\n"}{.contexts[0].context.namespace}{"\n"}'
+kubectl cluster-info
+kubectl get namespaces
+```
+
+An omitted namespace normally means `default` for namespaced requests. It does not mean “all namespaces.” `kubectl get pods -A` explicitly asks for all namespaces, subject to permissions. Cluster-scoped resources such as Nodes are not restricted by a namespace flag. This distinction explains why `get nodes` works while `get pods` appears empty in the currently selected namespace.
+
+For the following examples, replace `YOUR_LAB_CONTEXT` with the verified context name from your own listing. The placeholder is not a context that this curriculum creates.
+
+```bash
+kubectl --context YOUR_LAB_CONTEXT -n selection-lab get pods
+kubectl --context YOUR_LAB_CONTEXT -n selection-lab describe pod catalog-demo
+kubectl --context YOUR_LAB_CONTEXT auth can-i get pods -n selection-lab
+# A local preference change, not a server-side namespace creation:
+kubectl config set-context YOUR_LAB_CONTEXT --namespace=selection-lab
+```
+
+The explicit `--context` and `-n` flags make the destination reviewable. Setting a context's namespace updates local client configuration; it does not create that namespace, move existing resources, or change authorization. If the namespace does not exist, create a dedicated lab namespace using the verified context rather than assuming a local preference change did it.
+
+## Choose evidence by question
+
+`get` returns API object records or a summary table. `describe` assembles useful details and related events for a named object. `explain` describes API schema fields; it does not show the live workload. `logs` reads available container output through the supported API/node path. `exec` runs an additional command in a running container and can change its state. Use it deliberately, and remember minimal images may not include a shell or curl.
+
+<Scene id="m03-l03-evidence" />
+
+```bash
+kubectl --context YOUR_LAB_CONTEXT -n selection-lab get pod catalog-demo -o yaml
+kubectl --context YOUR_LAB_CONTEXT -n selection-lab logs catalog-demo -c web --tail=20
+kubectl explain pod.spec.containers
+# Preview an existing local manifest before its next write.
+kubectl --context YOUR_LAB_CONTEXT -n selection-lab diff -f catalog-demo.yaml
+```
+
+## Practice: make a command reviewable
+
+Write the intended context, namespace, resource type, and name next to a planned change. Confirm them with a read-only request. If a manifest contains `metadata.namespace`, align it with your explicit flag; kubectl can reject mismatched namespace inputs rather than moving the resource for you. Scope a diff to the exact file you intend to apply. A folder-wide apply can include additional documents that were not part of the intended experiment.
+
+## Pitfalls
+
+“Forbidden” differs from “not found” and from a connection failure. Authentication identifies the caller; authorization determines allowed actions. A context switch can change either endpoint or credentials, so do not blindly retry a failed mutation under another identity. Inspect what changed and use least-privileged lab access.
+
+## Check your understanding
+
+<details>
+
+<summary>After changing the default namespace, the Pod disappeared from get pods. Was it deleted?</summary>
+
+Not necessarily. The same short command now addresses another namespace. Query the original namespace explicitly, or list across namespaces if authorized. A client default changes where you look; it does not relocate or delete API objects. Check context as well before drawing conclusions from an empty listing.
+
+</details>
+
+Practice explicit destinations and small inspection commands in the [module lab](/labs/#m03). Next, inspect what an individual Pod shares and how its containers live and fail.
+
+## Primary documentation
+
+- [Organizing cluster access](https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/)
+- [Configure access to multiple clusters](https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/)
+- [kubectl overview](https://kubernetes.io/docs/reference/kubectl/)

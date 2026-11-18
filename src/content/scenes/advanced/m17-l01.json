@@ -1,0 +1,677 @@
+[
+  {
+    "title": "CPU delays work; memory can terminate it",
+    "kind": "chart",
+    "description": "The enforced memory boundary can trigger a kernel OOM kill recorded in container termination state.",
+    "assumption": "Linux cgroup-style CPU quota and memory behavior is summarized; kernel and runtime accounting affect exact observations.",
+    "frames": [
+      {
+        "title": "Requests inform placement",
+        "narration": "CPU and memory requests inform scheduling; they are distinct from enforced runtime limits.",
+        "nodes": [
+          {
+            "id": "cpu",
+            "label": "CPU-limited process",
+            "type": "pod",
+            "detail": "Burst exceeds available quota",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "quota",
+            "label": "CPU quota",
+            "type": "control",
+            "detail": "Execution delayed",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mem",
+            "label": "Memory-limited process",
+            "type": "pod",
+            "detail": "Allocation exceeds enforced limit",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "oom",
+            "label": "Kernel OOM",
+            "type": "control",
+            "detail": "May terminate container",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Container status",
+            "type": "object",
+            "detail": "Reason + restart evidence",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": []
+      },
+      {
+        "title": "CPU quota is exhausted",
+        "narration": "CPU work waits for execution budget, potentially increasing latency without terminating the process.",
+        "nodes": [
+          {
+            "id": "cpu",
+            "label": "CPU-limited process",
+            "type": "pod",
+            "detail": "Burst exceeds available quota",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "quota",
+            "label": "CPU quota",
+            "type": "control",
+            "detail": "Execution delayed",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "mem",
+            "label": "Memory-limited process",
+            "type": "pod",
+            "detail": "Allocation exceeds enforced limit",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "oom",
+            "label": "Kernel OOM",
+            "type": "control",
+            "detail": "May terminate container",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "Container status",
+            "type": "object",
+            "detail": "Reason + restart evidence",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "quota",
+            "label": "throttled execution",
+            "state": "active",
+            "from": "cpu"
+          }
+        ]
+      },
+      {
+        "title": "Memory allocation cannot continue",
+        "narration": "The enforced memory boundary can trigger a kernel OOM kill recorded in container termination state.",
+        "nodes": [
+          {
+            "id": "cpu",
+            "label": "CPU-limited process",
+            "type": "pod",
+            "detail": "Burst exceeds available quota",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "quota",
+            "label": "CPU quota",
+            "type": "control",
+            "detail": "Execution delayed",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "mem",
+            "label": "Memory-limited process",
+            "type": "pod",
+            "detail": "Allocation exceeds enforced limit",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "oom",
+            "label": "Kernel OOM",
+            "type": "control",
+            "detail": "May terminate container",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "status",
+            "label": "Container status",
+            "type": "object",
+            "detail": "Reason + restart evidence",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "oom",
+            "label": "memory boundary",
+            "state": "active",
+            "from": "mem"
+          },
+          {
+            "to": "status",
+            "label": "OOMKilled evidence",
+            "state": "active",
+            "from": "oom"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Misdiagnose throttling as OOM",
+        "description": "A slow process needs evidence before a memory-limit change.",
+        "frames": [
+          {
+            "title": "Latency rises",
+            "narration": "The CPU-limited container remains Running while requests queue.",
+            "nodes": [
+              {
+                "id": "cpu",
+                "label": "CPU-limited process",
+                "type": "pod",
+                "detail": "Running; CPU throttling raises latency",
+                "x": 35,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "quota",
+                "label": "CPU quota",
+                "type": "control",
+                "detail": "Execution delayed",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "mem",
+                "label": "Memory-limited process",
+                "type": "pod",
+                "detail": "Allocation exceeds enforced limit",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "oom",
+                "label": "Kernel OOM",
+                "type": "control",
+                "detail": "May terminate container",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "Container status",
+                "type": "object",
+                "detail": "Reason + restart evidence",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "quota",
+                "label": "throttled execution",
+                "state": "active",
+                "from": "cpu"
+              }
+            ]
+          },
+          {
+            "title": "No memory termination",
+            "narration": "There is no OOMKilled evidence; changing memory does not address CPU quota exhaustion.",
+            "nodes": [
+              {
+                "id": "cpu",
+                "label": "CPU-limited process",
+                "type": "pod",
+                "detail": "Burst exceeds available quota",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "quota",
+                "label": "CPU quota",
+                "type": "control",
+                "detail": "Execution delayed",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "mem",
+                "label": "Memory-limited process",
+                "type": "pod",
+                "detail": "Allocation exceeds enforced limit",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "oom",
+                "label": "Kernel OOM",
+                "type": "control",
+                "detail": "May terminate container",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "Container status",
+                "type": "object",
+                "detail": "No OOMKilled evidence",
+                "x": 290,
+                "y": 230,
+                "state": "ready"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Inspect the right signal",
+            "narration": "Correlate quota throttling with latency and concurrency before changing CPU configuration.",
+            "nodes": [
+              {
+                "id": "cpu",
+                "label": "CPU-limited process",
+                "type": "pod",
+                "detail": "Burst exceeds available quota",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "quota",
+                "label": "CPU quota",
+                "type": "control",
+                "detail": "Execution delayed",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "mem",
+                "label": "Memory-limited process",
+                "type": "pod",
+                "detail": "Allocation exceeds enforced limit",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "oom",
+                "label": "Kernel OOM",
+                "type": "control",
+                "detail": "May terminate container",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "Container status",
+                "type": "object",
+                "detail": "Reason + restart evidence",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "quota",
+                "label": "throttled execution",
+                "state": "active",
+                "from": "cpu"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m17-l01-cpu-memory-boundary"
+  },
+  {
+    "title": "Node pressure differs from a container OOM",
+    "kind": "lifecycle",
+    "description": "A controller can create a new Pod, but it still needs a feasible node and does not retain the evicted UID.",
+    "assumption": "Eviction thresholds and ranking depend on the pressured resource and kubelet configuration; QoS is not universal protection.",
+    "frames": [
+      {
+        "title": "Observe node pressure",
+        "narration": "The kubelet detects a configured resource pressure signal and attempts reclaim.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Worker node",
+            "type": "node",
+            "detail": "Memory / disk / inode pressure",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "detail": "Reclaim and eviction decisions",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pod",
+            "label": "Selected Pod",
+            "type": "pod",
+            "detail": "May exceed resource requests",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "replacement",
+            "label": "Replacement Pod",
+            "type": "pod",
+            "detail": "New UID if controller creates it",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "kubelet",
+            "label": "threshold signal",
+            "state": "active",
+            "from": "node"
+          }
+        ]
+      },
+      {
+        "title": "Choose eviction when needed",
+        "narration": "If reclaim is insufficient, the kubelet ranks eligible Pods using relevant usage, requests and priority.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Worker node",
+            "type": "node",
+            "detail": "Memory / disk / inode pressure",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "detail": "Reclaim and eviction decisions",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pod",
+            "label": "Selected Pod",
+            "type": "pod",
+            "detail": "May exceed resource requests",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "replacement",
+            "label": "Replacement Pod",
+            "type": "pod",
+            "detail": "New UID if controller creates it",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pod",
+            "label": "evict when necessary",
+            "state": "active",
+            "from": "kubelet"
+          }
+        ]
+      },
+      {
+        "title": "Replacement needs capacity",
+        "narration": "A controller can create a new Pod, but it still needs a feasible node and does not retain the evicted UID.",
+        "nodes": [
+          {
+            "id": "node",
+            "label": "Worker node",
+            "type": "node",
+            "detail": "Memory / disk / inode pressure",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "detail": "Reclaim and eviction decisions",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pod",
+            "label": "Selected Pod",
+            "type": "pod",
+            "detail": "May exceed resource requests",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "replacement",
+            "label": "Replacement Pod",
+            "type": "pod",
+            "detail": "New UID if controller creates it",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "replacement",
+            "label": "controller replaces",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Replacement also cannot fit",
+        "description": "Eviction does not create additional cluster capacity.",
+        "frames": [
+          {
+            "title": "Pressure removes a Pod",
+            "narration": "A node-pressure eviction produces Pod failure evidence distinct from a container restart.",
+            "nodes": [
+              {
+                "id": "node",
+                "label": "Worker node",
+                "type": "node",
+                "detail": "Memory / disk / inode pressure",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "kubelet",
+                "label": "Kubelet",
+                "type": "control",
+                "detail": "Reclaim and eviction decisions",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pod",
+                "label": "Selected Pod",
+                "type": "pod",
+                "detail": "Evicted under node pressure",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "replacement",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "New UID if controller creates it",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "evict when necessary",
+                "state": "active",
+                "from": "kubelet"
+              }
+            ]
+          },
+          {
+            "title": "Controller requests replacement",
+            "narration": "Desired replicas remain, so a new Pod is created.",
+            "nodes": [
+              {
+                "id": "node",
+                "label": "Worker node",
+                "type": "node",
+                "detail": "Memory / disk / inode pressure",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "kubelet",
+                "label": "Kubelet",
+                "type": "control",
+                "detail": "Reclaim and eviction decisions",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pod",
+                "label": "Selected Pod",
+                "type": "pod",
+                "detail": "May exceed resource requests",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "replacement",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "New UID if controller creates it",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "replacement",
+                "label": "controller replaces",
+                "state": "active",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Capacity remains exhausted",
+            "narration": "The new Pod can remain Pending or encounter pressure again until demand or capacity changes.",
+            "nodes": [
+              {
+                "id": "node",
+                "label": "Worker node",
+                "type": "node",
+                "detail": "Memory / disk / inode pressure",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "kubelet",
+                "label": "Kubelet",
+                "type": "control",
+                "detail": "Reclaim and eviction decisions",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pod",
+                "label": "Selected Pod",
+                "type": "pod",
+                "detail": "May exceed resource requests",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "replacement",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "Pending; no feasible node",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m17-l01-pressure-eviction"
+  }
+]

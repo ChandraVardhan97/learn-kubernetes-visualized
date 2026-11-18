@@ -1,0 +1,14 @@
+---
+import ScenePlayer from './ScenePlayer';
+import { getScene,scenes } from '../lib/scenes';
+import type {ExperimentKind} from './MechanismExperiment';
+const {id}=Astro.props;
+const scene=getScene(id);
+const experiments:Record<string,ExperimentKind>={'m06-l01':'endpoints','m07-l01':'scheduling','m09-l01':'storage','m11-l01':'authorization','m16-l02':'operator'};
+const prefix=scene.id.slice(0,7);
+const experiment=scenes.find(s=>s.id.startsWith(prefix))?.id===scene.id?experiments[prefix]:undefined;
+---
+<figure id={`scene-${id}`} class="scene" data-ui>
+ <figcaption><h3>{scene.title}</h3><p>{scene.description}</p></figcaption>
+ <ScenePlayer scene={scene} experiment={experiment} client:visible />
+</figure>

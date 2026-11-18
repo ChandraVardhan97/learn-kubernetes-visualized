@@ -1,0 +1,777 @@
+[
+  {
+    "title": "Review the overlay output that the API will receive",
+    "kind": "ownership",
+    "description": "Follow a reusable base through structured transformations, rendering and server validation.",
+    "assumption": "The base already contains a Deployment with a replicas field and a matching Service.",
+    "frames": [
+      {
+        "title": "Start from a known base",
+        "narration": "The base holds ordinary Kubernetes objects. Its selector and port relationships remain important after reuse.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Base resources",
+            "detail": "Deployment + Service",
+            "type": "object",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Training overlay",
+            "detail": "Namespace, image and replica patch",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Rendered manifests",
+            "detail": "Actual objects after transforms",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API dry-run",
+            "detail": "Schema + admission checks",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Cluster controllers",
+            "detail": "Reconcile admitted objects",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "resources reference",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Apply focused transformations",
+        "narration": "The overlay changes only intended fields, producing a concrete rendered artifact that can be reviewed.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Base resources",
+            "detail": "Deployment + Service",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Training overlay",
+            "detail": "Namespace, image and replica patch",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered manifests",
+            "detail": "Actual objects after transforms",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "API dry-run",
+            "detail": "Schema + admission checks",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Cluster controllers",
+            "detail": "Reconcile admitted objects",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "render",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl kustomize overlays/training"
+      },
+      {
+        "title": "Validate and diff the result",
+        "narration": "Server dry-run tests API validation and admission without running the application; diff exposes live changes.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Base resources",
+            "detail": "Deployment + Service",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Training overlay",
+            "detail": "Namespace, image and replica patch",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered manifests",
+            "detail": "Actual objects after transforms",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API dry-run",
+            "detail": "Schema + admission checks",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Cluster controllers",
+            "detail": "Reconcile admitted objects",
+            "type": "control",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "dry-run + diff",
+            "state": "active"
+          }
+        ],
+        "code": "kubectl apply --dry-run=server -f rendered.yaml"
+      },
+      {
+        "title": "Apply then verify behavior",
+        "narration": "Controllers see the rendered resources. A rollout check and a real request test are still required after apply.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Base resources",
+            "detail": "Deployment + Service",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Training overlay",
+            "detail": "Namespace, image and replica patch",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered manifests",
+            "detail": "Actual objects after transforms",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "API dry-run",
+            "detail": "Schema + admission checks",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Cluster controllers",
+            "detail": "Reconcile admitted objects",
+            "type": "control",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "4",
+            "label": "apply",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Patch targets the wrong resource",
+        "description": "The intended replica change is absent or rendering fails.",
+        "frames": [
+          {
+            "title": "Target name differs",
+            "narration": "The overlay expects api while the base uses another Deployment name.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Base resources",
+                "detail": "Deployment + Service",
+                "type": "object",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Training overlay",
+                "detail": "Namespace, image and replica patch",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "Rendered manifests",
+                "detail": "Actual objects after transforms",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API dry-run",
+                "detail": "Schema + admission checks",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Cluster controllers",
+                "detail": "Reconcile admitted objects",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Rendering reveals the mismatch",
+            "narration": "Depending on patch form and matching, the change can fail or not affect the intended object. Inspect the concrete output before applying.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Base resources",
+                "detail": "Deployment + Service",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Training overlay",
+                "detail": "Namespace, image and replica patch",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Rendered manifests",
+                "detail": "Actual objects after transforms",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "API dry-run",
+                "detail": "Schema + admission checks",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Cluster controllers",
+                "detail": "Reconcile admitted objects",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "wrong or missing change",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Correct the source target",
+            "narration": "Repair the overlay target and re-render; do not manually edit the live Deployment as the only lasting fix.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Base resources",
+                "detail": "Deployment + Service",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Training overlay",
+                "detail": "Namespace, image and replica patch",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "2",
+                "label": "Rendered manifests",
+                "detail": "Actual objects after transforms",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "API dry-run",
+                "detail": "Schema + admission checks",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Cluster controllers",
+                "detail": "Reconcile admitted objects",
+                "type": "control",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "correct target",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m13-l01-overlay"
+  },
+  {
+    "title": "A chart produces resources and a named release history",
+    "kind": "ownership",
+    "description": "Follow chart templates and values into release application, verification and later rollback limits.",
+    "assumption": "Local chart and values are already reviewed; external business state is outside Helm resource rollback.",
+    "frames": [
+      {
+        "title": "Combine templates and values",
+        "narration": "The chart defines the configuration interface; final values select the manifest details. Package version and application image version are different identifiers.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Chart",
+            "detail": "Templates + package version",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Values",
+            "detail": "Defaults plus explicit overrides",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete Kubernetes objects",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Helm release api",
+            "detail": "Revision history in namespace",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Cluster workload",
+            "detail": "Readiness and customer behavior",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "External database",
+            "detail": "Migration side effects",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "2",
+            "label": "template structure",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "2",
+            "label": "effective values",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Inspect before install",
+        "narration": "Lint and template make output reviewable, including selectors, privileges and configuration references.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Chart",
+            "detail": "Templates + package version",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Values",
+            "detail": "Defaults plus explicit overrides",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete Kubernetes objects",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Helm release api",
+            "detail": "Revision history in namespace",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Cluster workload",
+            "detail": "Readiness and customer behavior",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "External database",
+            "detail": "Migration side effects",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "reviewed artifact",
+            "state": "active"
+          }
+        ],
+        "code": "helm template api ./chart -n learning -f values-training.yaml"
+      },
+      {
+        "title": "Apply a release revision",
+        "narration": "Helm tracks a named release while Kubernetes reconciles its objects. Wait settings do not prove every business request works.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Chart",
+            "detail": "Templates + package version",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Values",
+            "detail": "Defaults plus explicit overrides",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete Kubernetes objects",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Helm release api",
+            "detail": "Revision history in namespace",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Cluster workload",
+            "detail": "Readiness and customer behavior",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "5",
+            "label": "External database",
+            "detail": "Migration side effects",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "install / upgrade",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Separate resource rollback from data",
+        "narration": "A historical manifest revision can be reapplied, but external migrations or messages may be irreversible or incompatible with old code.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Chart",
+            "detail": "Templates + package version",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Values",
+            "detail": "Defaults plus explicit overrides",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Rendered resources",
+            "detail": "Concrete Kubernetes objects",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Helm release api",
+            "detail": "Revision history in namespace",
+            "type": "control",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Cluster workload",
+            "detail": "Readiness and customer behavior",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "External database",
+            "detail": "Migration side effects",
+            "type": "storage",
+            "state": "warning"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "5",
+            "label": "outside rollback boundary",
+            "state": "blocked"
+          }
+        ],
+        "code": "helm history api -n learning"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Resource readiness hides a semantic defect",
+        "description": "All Pods are ready but the configured external backend is wrong.",
+        "frames": [
+          {
+            "title": "Release checks pass",
+            "narration": "The configured readiness checks complete and the release command can report success.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Chart",
+                "detail": "Templates + package version",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Values",
+                "detail": "Defaults plus explicit overrides",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Rendered resources",
+                "detail": "Concrete Kubernetes objects",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Helm release api",
+                "detail": "Revision history in namespace",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Cluster workload",
+                "detail": "Readiness and customer behavior",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "5",
+                "label": "External database",
+                "detail": "Migration side effects",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "4",
+                "label": "ready",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Customer path fails",
+            "narration": "The application targets an incorrect external database or endpoint that the readiness check did not exercise.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Chart",
+                "detail": "Templates + package version",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Values",
+                "detail": "Defaults plus explicit overrides",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Rendered resources",
+                "detail": "Concrete Kubernetes objects",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Helm release api",
+                "detail": "Revision history in namespace",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Cluster workload",
+                "detail": "Readiness and customer behavior",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "External database",
+                "detail": "Migration side effects",
+                "type": "storage",
+                "state": "failed"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "5",
+                "label": "wrong configuration",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Use flow-specific verification",
+            "narration": "Run a safe customer-path smoke test, compare effective values and choose a compatible correction or rollback.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Chart",
+                "detail": "Templates + package version",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Values",
+                "detail": "Defaults plus explicit overrides",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "2",
+                "label": "Rendered resources",
+                "detail": "Concrete Kubernetes objects",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Helm release api",
+                "detail": "Revision history in namespace",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Cluster workload",
+                "detail": "Readiness and customer behavior",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "External database",
+                "detail": "Migration side effects",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "4",
+                "label": "review effective config",
+                "state": "active"
+              }
+            ],
+            "code": "helm get values api -n learning --all"
+          }
+        ]
+      }
+    ],
+    "id": "m13-l01-chart-release"
+  }
+]

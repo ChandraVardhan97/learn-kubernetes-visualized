@@ -1,0 +1,734 @@
+[
+  {
+    "title": "List, resume, and rebuild a watch",
+    "kind": "flow",
+    "description": "A worker reads the cache and compares current observations with desired state. Cache visibility can lag an API write.",
+    "assumption": "A traditional list-then-watch client is shown; optional streaming-list optimizations are omitted. Documented same-resource version ordering does not make the cursor a clock or event count.",
+    "frames": [
+      {
+        "title": "Establish the baseline",
+        "narration": "A list supplies collection state and a resourceVersion cursor. Preserve the string unchanged and follow the documented same-resource ordering contract.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Collection and watch history",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "list",
+            "label": "List baseline",
+            "type": "object",
+            "detail": "Objects + resumable cursor",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "watch",
+            "label": "Watch stream",
+            "type": "control",
+            "detail": "Changes after cursor",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cache",
+            "label": "Client cache",
+            "type": "storage",
+            "detail": "Eventually updated local state",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "list",
+            "label": "list response",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "watch",
+            "label": "resume cursor",
+            "state": "active",
+            "from": "list"
+          }
+        ]
+      },
+      {
+        "title": "Observe changes",
+        "narration": "The client watches from the cursor and updates local state as events arrive; this is not a durable audit log.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Collection and watch history",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "list",
+            "label": "List baseline",
+            "type": "object",
+            "detail": "Objects + resumable cursor",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "watch",
+            "label": "Watch stream",
+            "type": "control",
+            "detail": "Changes after cursor",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "cache",
+            "label": "Client cache",
+            "type": "storage",
+            "detail": "Eventually updated local state",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "watch",
+            "label": "watch events",
+            "state": "active",
+            "from": "api"
+          },
+          {
+            "to": "cache",
+            "label": "update snapshot",
+            "state": "active",
+            "from": "watch"
+          }
+        ]
+      },
+      {
+        "title": "Reconcile cached state",
+        "narration": "A worker reads the cache and compares current observations with desired state. Cache visibility can lag an API write.",
+        "nodes": [
+          {
+            "id": "api",
+            "label": "API server",
+            "type": "control",
+            "detail": "Collection and watch history",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "list",
+            "label": "List baseline",
+            "type": "object",
+            "detail": "Objects + resumable cursor",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "watch",
+            "label": "Watch stream",
+            "type": "control",
+            "detail": "Changes after cursor",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cache",
+            "label": "Client cache",
+            "type": "storage",
+            "detail": "Eventually updated local state",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cache",
+            "label": "update snapshot",
+            "state": "active",
+            "from": "watch"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "History expired",
+        "description": "A disconnected client cannot assume old watch history is retained forever.",
+        "frames": [
+          {
+            "title": "Reconnect from old cursor",
+            "narration": "The client resumes with its last accepted token after a long interruption.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Collection and watch history",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "list",
+                "label": "List baseline",
+                "type": "object",
+                "detail": "Objects + resumable cursor",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "watch",
+                "label": "Watch stream",
+                "type": "control",
+                "detail": "Changes after cursor",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "cache",
+                "label": "Client cache",
+                "type": "storage",
+                "detail": "Eventually updated local state",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "watch",
+                "label": "resume cursor",
+                "state": "active",
+                "from": "list"
+              }
+            ]
+          },
+          {
+            "title": "410 Gone",
+            "narration": "The server cannot provide that retained history; the client discards its incomplete baseline.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Collection and watch history",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "list",
+                "label": "List baseline",
+                "type": "object",
+                "detail": "Objects + resumable cursor",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "watch",
+                "label": "Watch stream",
+                "type": "control",
+                "detail": "Expired history: HTTP 410",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "cache",
+                "label": "Client cache",
+                "type": "storage",
+                "detail": "Eventually updated local state",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "watch",
+                "label": "410 Gone",
+                "state": "blocked",
+                "from": "api"
+              }
+            ]
+          },
+          {
+            "title": "Relist and resume",
+            "narration": "A new list rebuilds current state and supplies a fresh cursor before the watch resumes.",
+            "nodes": [
+              {
+                "id": "api",
+                "label": "API server",
+                "type": "control",
+                "detail": "Collection and watch history",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "list",
+                "label": "List baseline",
+                "type": "object",
+                "detail": "Objects + resumable cursor",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "watch",
+                "label": "Watch stream",
+                "type": "control",
+                "detail": "Changes after cursor",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "cache",
+                "label": "Client cache",
+                "type": "storage",
+                "detail": "Rebuilt from fresh list and watch",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              }
+            ],
+            "edges": [
+              {
+                "to": "list",
+                "label": "list response",
+                "state": "active",
+                "from": "api"
+              },
+              {
+                "to": "watch",
+                "label": "resume cursor",
+                "state": "active",
+                "from": "list"
+              },
+              {
+                "to": "watch",
+                "label": "watch events",
+                "state": "active",
+                "from": "api"
+              },
+              {
+                "to": "cache",
+                "label": "update snapshot",
+                "state": "active",
+                "from": "watch"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m14-l02-watch-cursor"
+  },
+  {
+    "title": "Two managers and one declared field",
+    "kind": "ownership",
+    "description": "A second manager can declare a separate field, or share ownership by applying the same value.",
+    "assumption": "One scalar field illustrates ownership; map and list ownership depend on the API schema.",
+    "frames": [
+      {
+        "title": "First declaration",
+        "narration": "kv-gitops applies data.release and becomes an owner of that declared field.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops",
+            "type": "actor",
+            "detail": "Declares data.release",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "human",
+            "label": "kv-human",
+            "type": "actor",
+            "detail": "Attempts another value",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Server-side apply",
+            "type": "control",
+            "detail": "Computes field ownership",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "release: git-declared",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "fields",
+            "label": "managedFields",
+            "type": "object",
+            "detail": "Records field managers",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "apply intention",
+            "state": "active",
+            "from": "git"
+          },
+          {
+            "to": "cm",
+            "label": "accepted fields",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Record the contract",
+        "narration": "The stored value and managedFields describe the result; unrelated fields can belong to other managers.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops",
+            "type": "actor",
+            "detail": "Declares data.release",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "human",
+            "label": "kv-human",
+            "type": "actor",
+            "detail": "Attempts another value",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Server-side apply",
+            "type": "control",
+            "detail": "Computes field ownership",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "release: git-declared",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "fields",
+            "label": "managedFields",
+            "type": "object",
+            "detail": "Records field managers",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "fields",
+            "label": "ownership metadata",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      },
+      {
+        "title": "Agree or separate fields",
+        "narration": "A second manager can declare a separate field, or share ownership by applying the same value.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops",
+            "type": "actor",
+            "detail": "Declares data.release",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "human",
+            "label": "kv-human",
+            "type": "actor",
+            "detail": "Attempts another value",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "api",
+            "label": "Server-side apply",
+            "type": "control",
+            "detail": "Computes field ownership",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "release: git-declared",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "fields",
+            "label": "managedFields",
+            "type": "object",
+            "detail": "Records field managers",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "api",
+            "label": "second intention",
+            "state": "active",
+            "from": "human"
+          },
+          {
+            "to": "fields",
+            "label": "ownership metadata",
+            "state": "active",
+            "from": "api"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Conflicting declaration",
+        "description": "A second manager changes an owned field to a different value.",
+        "frames": [
+          {
+            "title": "Another intention",
+            "narration": "kv-human applies data.release with a value different from the git-managed value.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "kv-gitops",
+                "type": "actor",
+                "detail": "Declares data.release",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "kv-human",
+                "type": "actor",
+                "detail": "Attempts another value",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "api",
+                "label": "Server-side apply",
+                "type": "control",
+                "detail": "Computes field ownership",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "release: git-declared",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "fields",
+                "label": "managedFields",
+                "type": "object",
+                "detail": "Records field managers",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "second intention",
+                "state": "active",
+                "from": "human"
+              }
+            ]
+          },
+          {
+            "title": "Conflict is returned",
+            "narration": "The API rejects that apply field change; the conflict names the competing field manager.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "kv-gitops",
+                "type": "actor",
+                "detail": "Declares data.release",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "kv-human",
+                "type": "actor",
+                "detail": "Attempts another value",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "Server-side apply",
+                "type": "control",
+                "detail": "Field ownership conflict",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Original field value retained",
+                "x": 35,
+                "y": 230,
+                "state": "ready"
+              },
+              {
+                "id": "fields",
+                "label": "managedFields",
+                "type": "object",
+                "detail": "Records field managers",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "api",
+                "label": "conflicting declaration",
+                "state": "blocked",
+                "from": "human"
+              }
+            ]
+          },
+          {
+            "title": "Make an ownership decision",
+            "narration": "The original value remains until actors agree, relinquish the field, or an authorized takeover is explicit.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "kv-gitops",
+                "type": "actor",
+                "detail": "Declares data.release",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "kv-human",
+                "type": "actor",
+                "detail": "Attempts another value",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "api",
+                "label": "Server-side apply",
+                "type": "control",
+                "detail": "Computes field ownership",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "release: git-declared",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "fields",
+                "label": "managedFields",
+                "type": "object",
+                "detail": "Records field managers",
+                "x": 290,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "fields",
+                "label": "ownership metadata",
+                "state": "active",
+                "from": "api"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m14-l02-apply-owners"
+  }
+]

@@ -1,0 +1,787 @@
+[
+  {
+    "title": "A panel depends on collection, storage and a correct query",
+    "kind": "chart",
+    "description": "Trace application measurements through Prometheus into Grafana while explaining cardinality.",
+    "assumption": "Illustrative scrape-based metrics stack; installation is optional and metric names require instrumentation.",
+    "frames": [
+      {
+        "title": "Instrument a meaningful signal",
+        "narration": "The application exports a request counter or latency histogram. Installing a dashboard does not create this instrumentation.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Application",
+            "detail": "Exports bounded metric labels",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Metrics endpoint",
+            "detail": "Counters, gauges, histograms",
+            "type": "service",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Prometheus",
+            "detail": "Discovers, scrapes, stores time series",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Grafana",
+            "detail": "Queries configured data source",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Alert rule",
+            "detail": "Evaluates a useful symptom",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "measure behavior",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Scrape and retain",
+        "narration": "Prometheus reads the endpoint at configured intervals and stores series. Each distinct label set is a separate series with a cost.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Application",
+            "detail": "Exports bounded metric labels",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Metrics endpoint",
+            "detail": "Counters, gauges, histograms",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Prometheus",
+            "detail": "Discovers, scrapes, stores time series",
+            "type": "storage",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Grafana",
+            "detail": "Queries configured data source",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Alert rule",
+            "detail": "Evaluates a useful symptom",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "scrape",
+            "state": "active"
+          }
+        ],
+        "code": "scrape_interval: 15s"
+      },
+      {
+        "title": "Query the correct aggregate",
+        "narration": "Grafana queries its data source using the intended labels and time range. Raw counters normally need rate-style treatment for throughput.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Application",
+            "detail": "Exports bounded metric labels",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Metrics endpoint",
+            "detail": "Counters, gauges, histograms",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Prometheus",
+            "detail": "Discovers, scrapes, stores time series",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Grafana",
+            "detail": "Queries configured data source",
+            "type": "actor",
+            "state": "ready"
+          },
+          {
+            "id": "4",
+            "label": "Alert rule",
+            "detail": "Evaluates a useful symptom",
+            "type": "object",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "PromQL result",
+            "state": "active"
+          }
+        ],
+        "code": "sum by (service) (rate(http_requests_total[5m]))"
+      },
+      {
+        "title": "Alert on actionable change",
+        "narration": "An alert evaluates a sustained symptom and links to investigation. Keep request IDs and unbounded user labels out of metric dimensions.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Application",
+            "detail": "Exports bounded metric labels",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Metrics endpoint",
+            "detail": "Counters, gauges, histograms",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Prometheus",
+            "detail": "Discovers, scrapes, stores time series",
+            "type": "storage",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Grafana",
+            "detail": "Queries configured data source",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Alert rule",
+            "detail": "Evaluates a useful symptom",
+            "type": "object",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "4",
+            "label": "evaluate signal",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Dashboard is stale or empty",
+        "description": "The application serves traffic but the collection path fails.",
+        "frames": [
+          {
+            "title": "Requests still succeed",
+            "narration": "The application exports or logs recent work while its serving path remains available.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Application",
+                "detail": "Exports bounded metric labels",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "1",
+                "label": "Metrics endpoint",
+                "detail": "Counters, gauges, histograms",
+                "type": "service",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "Prometheus",
+                "detail": "Discovers, scrapes, stores time series",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Grafana",
+                "detail": "Queries configured data source",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Alert rule",
+                "detail": "Evaluates a useful symptom",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "fresh measurement",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Scrape fails",
+            "narration": "Prometheus cannot reach or read the target, so new samples are missing.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Application",
+                "detail": "Exports bounded metric labels",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Metrics endpoint",
+                "detail": "Counters, gauges, histograms",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Prometheus",
+                "detail": "Discovers, scrapes, stores time series",
+                "type": "storage",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Grafana",
+                "detail": "Queries configured data source",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Alert rule",
+                "detail": "Evaluates a useful symptom",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "target down",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Inspect freshness before trusting the panel",
+            "narration": "A chart can show old data or no data. Check target status, timestamps, query labels and time range before scaling based on it.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Application",
+                "detail": "Exports bounded metric labels",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Metrics endpoint",
+                "detail": "Counters, gauges, histograms",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Prometheus",
+                "detail": "Discovers, scrapes, stores time series",
+                "type": "storage",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Grafana",
+                "detail": "Queries configured data source",
+                "type": "actor",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Alert rule",
+                "detail": "Evaluates a useful symptom",
+                "type": "object",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "missing fresh samples",
+                "state": "blocked"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m12-l03-metrics-pipeline"
+  },
+  {
+    "title": "Carry context across calls, then correlate signals",
+    "kind": "flow",
+    "description": "Trace parent/child spans, structured log correlation and Collector processing with redaction.",
+    "assumption": "Instrumented services propagate compatible context; traces can be sampled.",
+    "frames": [
+      {
+        "title": "Start a request trace",
+        "narration": "Instrumentation creates a span with a service identity and operation. Useful attributes describe the operation without copying sensitive payloads.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client request",
+            "detail": "Starts trace context",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API span",
+            "detail": "Service name + operation",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "Worker span",
+            "detail": "Child context across call",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Structured log",
+            "detail": "Trace ID + useful event",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "OTel Collector",
+            "detail": "Receive, process, export",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Telemetry backend",
+            "detail": "Query traces and logs",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "parent context",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Propagate across the dependency",
+        "narration": "The API passes trace context so the worker span can be connected to the same request rather than appearing as an unrelated operation.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client request",
+            "detail": "Starts trace context",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API span",
+            "detail": "Service name + operation",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker span",
+            "detail": "Child context across call",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Structured log",
+            "detail": "Trace ID + useful event",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "OTel Collector",
+            "detail": "Receive, process, export",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Telemetry backend",
+            "detail": "Query traces and logs",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "propagated context",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Correlate a log event",
+        "narration": "A structured application event records trace/span IDs and relevant safe fields, allowing a trace investigation to find the corresponding log.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client request",
+            "detail": "Starts trace context",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API span",
+            "detail": "Service name + operation",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker span",
+            "detail": "Child context across call",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Structured log",
+            "detail": "Trace ID + useful event",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "OTel Collector",
+            "detail": "Receive, process, export",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Telemetry backend",
+            "detail": "Query traces and logs",
+            "type": "storage",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "3",
+            "label": "correlation IDs",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Process and export signals",
+        "narration": "The Collector can batch, filter and export telemetry. Sampling and queue limits affect coverage; a missing trace is not proof of no request.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client request",
+            "detail": "Starts trace context",
+            "type": "actor",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "API span",
+            "detail": "Service name + operation",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "Worker span",
+            "detail": "Child context across call",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Structured log",
+            "detail": "Trace ID + useful event",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "OTel Collector",
+            "detail": "Receive, process, export",
+            "type": "control",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Telemetry backend",
+            "detail": "Query traces and logs",
+            "type": "storage",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "4",
+            "label": "spans",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "4",
+            "label": "logs if configured",
+            "state": "active"
+          },
+          {
+            "from": "4",
+            "to": "5",
+            "label": "export",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Context propagation is missing",
+        "description": "The downstream service creates a new unrelated trace.",
+        "frames": [
+          {
+            "title": "API trace exists",
+            "narration": "The entry operation is instrumented correctly.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client request",
+                "detail": "Starts trace context",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API span",
+                "detail": "Service name + operation",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "Worker span",
+                "detail": "Child context across call",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Structured log",
+                "detail": "Trace ID + useful event",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "OTel Collector",
+                "detail": "Receive, process, export",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Telemetry backend",
+                "detail": "Query traces and logs",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "trace A",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "Dependency starts a separate trace",
+            "narration": "Without propagated context, the worker operation is recorded but cannot automatically be linked as the child of the API span.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client request",
+                "detail": "Starts trace context",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API span",
+                "detail": "Service name + operation",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker span",
+                "detail": "Separate trace; no API parent context",
+                "type": "pod",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Structured log",
+                "detail": "Trace ID + useful event",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "OTel Collector",
+                "detail": "Receive, process, export",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Telemetry backend",
+                "detail": "Query traces and logs",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "2",
+                "label": "context lost",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Repair the call boundary",
+            "narration": "Configure client/server instrumentation and async propagation, then send a known request and verify parent-child linkage.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client request",
+                "detail": "Starts trace context",
+                "type": "actor",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "API span",
+                "detail": "Service name + operation",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "Worker span",
+                "detail": "Child context across call",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Structured log",
+                "detail": "Trace ID + useful event",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "OTel Collector",
+                "detail": "Receive, process, export",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "5",
+                "label": "Telemetry backend",
+                "detail": "Query traces and logs",
+                "type": "storage",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "4",
+                "label": "verify related spans",
+                "state": "active"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m12-l03-request-context"
+  }
+]

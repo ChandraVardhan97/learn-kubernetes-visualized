@@ -1,0 +1,710 @@
+[
+  {
+    "title": "Persistence preserves deletion as well as data",
+    "kind": "storage",
+    "description": "The script removes the file from the mounted PVC and verifies absence; a Pod restart cannot undo this deletion.",
+    "assumption": "The CSV is quiescent during copy; this does not model concurrent database transaction consistency.",
+    "frames": [
+      {
+        "title": "Write then quiesce",
+        "narration": "The single writer finishes the CSV record before a backup is captured.",
+        "nodes": [
+          {
+            "id": "writer",
+            "label": "m20-data Pod",
+            "type": "pod",
+            "detail": "Single quiescent writer",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pvc",
+            "label": "PVC m20",
+            "type": "storage",
+            "detail": "Mounted /data",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "backup",
+            "label": "Private host backup",
+            "type": "storage",
+            "detail": "Outside cluster",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "delete",
+            "label": "Logical deletion",
+            "type": "actor",
+            "detail": "Removes orders.csv",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pvc",
+            "label": "write complete record",
+            "state": "active",
+            "from": "writer"
+          }
+        ]
+      },
+      {
+        "title": "Keep an external copy",
+        "narration": "The script captures the bounded file in a private host directory and verifies its exact bytes before deleting the live file.",
+        "nodes": [
+          {
+            "id": "writer",
+            "label": "m20-data Pod",
+            "type": "pod",
+            "detail": "Single quiescent writer",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pvc",
+            "label": "PVC m20",
+            "type": "storage",
+            "detail": "Mounted /data",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "backup",
+            "label": "Private host backup",
+            "type": "storage",
+            "detail": "Outside cluster",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "delete",
+            "label": "Logical deletion",
+            "type": "actor",
+            "detail": "Removes orders.csv",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "backup",
+            "label": "stream quiescent file",
+            "state": "active",
+            "from": "pvc"
+          }
+        ]
+      },
+      {
+        "title": "Delete the actual record",
+        "narration": "The script removes the file from the mounted PVC and verifies absence; a Pod restart cannot undo this deletion.",
+        "nodes": [
+          {
+            "id": "writer",
+            "label": "m20-data Pod",
+            "type": "pod",
+            "detail": "Single quiescent writer",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pvc",
+            "label": "PVC m20",
+            "type": "storage",
+            "detail": "Mounted /data",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "backup",
+            "label": "Private host backup",
+            "type": "storage",
+            "detail": "Outside cluster",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "delete",
+            "label": "Logical deletion",
+            "type": "actor",
+            "detail": "Removes orders.csv",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pvc",
+            "label": "remove current file",
+            "state": "active",
+            "from": "delete"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No retained copy",
+        "description": "Restarting a consumer cannot recover bytes no longer present in its volume.",
+        "frames": [
+          {
+            "title": "File is removed",
+            "narration": "The current persistent filesystem no longer contains orders.csv.",
+            "nodes": [
+              {
+                "id": "writer",
+                "label": "m20-data Pod",
+                "type": "pod",
+                "detail": "Single quiescent writer",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pvc",
+                "label": "PVC m20",
+                "type": "storage",
+                "detail": "File is missing from retained volume",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "backup",
+                "label": "Prior backup",
+                "type": "storage",
+                "detail": "No retained copy in this scenario",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "delete",
+                "label": "Logical deletion",
+                "type": "actor",
+                "detail": "Removes orders.csv",
+                "x": 35,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "pvc",
+                "label": "remove current file",
+                "state": "active",
+                "from": "delete"
+              }
+            ]
+          },
+          {
+            "title": "Pod is recreated",
+            "narration": "The new Pod mounts the same claim and sees the same missing file.",
+            "nodes": [
+              {
+                "id": "writer",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "Mounts the same claim",
+                "x": 35,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "pvc",
+                "label": "PVC m20",
+                "type": "storage",
+                "detail": "File is missing from retained volume",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "backup",
+                "label": "Prior backup",
+                "type": "storage",
+                "detail": "No retained copy in this scenario",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "delete",
+                "label": "Logical deletion",
+                "type": "actor",
+                "detail": "Removes orders.csv",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "writer",
+                "label": "same volume, still missing file",
+                "state": "active",
+                "from": "pvc"
+              }
+            ]
+          },
+          {
+            "title": "Recovery source is absent",
+            "narration": "Without a retained backup or application recovery history, persistence alone provides no earlier record.",
+            "nodes": [
+              {
+                "id": "writer",
+                "label": "m20-data Pod",
+                "type": "pod",
+                "detail": "Single quiescent writer",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pvc",
+                "label": "PVC m20",
+                "type": "storage",
+                "detail": "Mounted /data",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "backup",
+                "label": "Prior backup",
+                "type": "storage",
+                "detail": "No retained copy in this scenario",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "delete",
+                "label": "Logical deletion",
+                "type": "actor",
+                "detail": "Removes orders.csv",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "backup",
+                "label": "no earlier copy available",
+                "state": "blocked",
+                "from": "pvc"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m20-l02-stateful-loss"
+  },
+  {
+    "title": "Restore bytes, then prove a new Pod sees them",
+    "kind": "lifecycle",
+    "description": "A new Pod UID mounts the same PVC and reads the restored content, demonstrating persistence after recovery.",
+    "assumption": "The actual lab has one completed CSV write and tests file restoration, not database recovery or node-loss resilience.",
+    "frames": [
+      {
+        "title": "Restore the record",
+        "narration": "kubectl cp restores /data/orders.csv in the existing volume; byte counts and SHA-256 digests must match the private host backup.",
+        "nodes": [
+          {
+            "id": "backup",
+            "label": "Host CSV backup",
+            "type": "storage",
+            "detail": "Retained original record",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "restore",
+            "label": "Restore file copy",
+            "type": "actor",
+            "detail": "kubectl cp; tar in image",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pvc",
+            "label": "Existing PVC",
+            "type": "storage",
+            "detail": "Same bound storage",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "newpod",
+            "label": "Replacement Pod",
+            "type": "pod",
+            "detail": "New UID, same claim",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Content assertion",
+            "type": "object",
+            "detail": "order-42,confirmed",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "restore",
+            "label": "read retained copy",
+            "state": "active",
+            "from": "backup"
+          },
+          {
+            "to": "pvc",
+            "label": "write recovered bytes",
+            "state": "active",
+            "from": "restore"
+          }
+        ]
+      },
+      {
+        "title": "Verify before replacement",
+        "narration": "The script checks exact expected content so a successful write command alone is insufficient.",
+        "nodes": [
+          {
+            "id": "backup",
+            "label": "Host CSV backup",
+            "type": "storage",
+            "detail": "Retained original record",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "restore",
+            "label": "Restore file copy",
+            "type": "actor",
+            "detail": "kubectl cp; tar in image",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pvc",
+            "label": "Existing PVC",
+            "type": "storage",
+            "detail": "Same bound storage",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "newpod",
+            "label": "Replacement Pod",
+            "type": "pod",
+            "detail": "New UID, same claim",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "verify",
+            "label": "Content assertion",
+            "type": "object",
+            "detail": "order-42,confirmed",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "verify",
+            "label": "read exact record",
+            "state": "active",
+            "from": "newpod"
+          }
+        ]
+      },
+      {
+        "title": "Verify after replacement",
+        "narration": "A new Pod UID mounts the same PVC and reads the restored content, demonstrating persistence after recovery.",
+        "nodes": [
+          {
+            "id": "backup",
+            "label": "Host CSV backup",
+            "type": "storage",
+            "detail": "Retained original record",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "restore",
+            "label": "Restore file copy",
+            "type": "actor",
+            "detail": "kubectl cp; tar in image",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pvc",
+            "label": "Existing PVC",
+            "type": "storage",
+            "detail": "Same bound storage",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "newpod",
+            "label": "Replacement Pod",
+            "type": "pod",
+            "detail": "New UID, same claim",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "verify",
+            "label": "Content assertion",
+            "type": "object",
+            "detail": "order-42,confirmed",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "newpod",
+            "label": "mount same claim",
+            "state": "active",
+            "from": "pvc"
+          },
+          {
+            "to": "verify",
+            "label": "read exact record",
+            "state": "active",
+            "from": "newpod"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Backup captured during database writes",
+        "description": "A byte copy can be nonempty yet fail application consistency requirements.",
+        "frames": [
+          {
+            "title": "Concurrent writers remain active",
+            "narration": "A hypothetical database changes related files while capture is in progress.",
+            "nodes": [
+              {
+                "id": "backup",
+                "label": "Unquiesced database copy",
+                "type": "storage",
+                "detail": "Hypothetical multi-file database capture",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "restore",
+                "label": "Restore file copy",
+                "type": "actor",
+                "detail": "kubectl cp; tar in image",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pvc",
+                "label": "Existing PVC",
+                "type": "storage",
+                "detail": "Same bound storage",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "newpod",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "New UID, same claim",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "verify",
+                "label": "Content assertion",
+                "type": "object",
+                "detail": "order-42,confirmed",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "restore",
+                "label": "read retained copy",
+                "state": "active",
+                "from": "backup"
+              }
+            ]
+          },
+          {
+            "title": "Restore returns bytes",
+            "narration": "The files copy successfully, but their relationships may reflect different transaction points.",
+            "nodes": [
+              {
+                "id": "backup",
+                "label": "Unquiesced database copy",
+                "type": "storage",
+                "detail": "Hypothetical multi-file database capture",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "restore",
+                "label": "Restore file copy",
+                "type": "actor",
+                "detail": "Bytes copied successfully",
+                "x": 290,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "pvc",
+                "label": "Existing PVC",
+                "type": "storage",
+                "detail": "Same bound storage",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "newpod",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "New UID, same claim",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "verify",
+                "label": "Content assertion",
+                "type": "object",
+                "detail": "order-42,confirmed",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "restore",
+                "label": "read retained copy",
+                "state": "active",
+                "from": "backup"
+              },
+              {
+                "to": "pvc",
+                "label": "write recovered bytes",
+                "state": "active",
+                "from": "restore"
+              }
+            ]
+          },
+          {
+            "title": "Integrity is unproven",
+            "narration": "Use application-native backup or validated quiescing and verify transaction-level invariants.",
+            "nodes": [
+              {
+                "id": "backup",
+                "label": "Unquiesced database copy",
+                "type": "storage",
+                "detail": "Hypothetical multi-file database capture",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "restore",
+                "label": "Restore file copy",
+                "type": "actor",
+                "detail": "kubectl cp; tar in image",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pvc",
+                "label": "Existing PVC",
+                "type": "storage",
+                "detail": "Same bound storage",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "newpod",
+                "label": "Replacement Pod",
+                "type": "pod",
+                "detail": "New UID, same claim",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "verify",
+                "label": "Content assertion",
+                "type": "object",
+                "detail": "Transaction consistency unverified",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "verify",
+                "label": "bytes alone cannot prove consistency",
+                "state": "blocked",
+                "from": "newpod"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m20-l02-stateful-restore"
+  }
+]

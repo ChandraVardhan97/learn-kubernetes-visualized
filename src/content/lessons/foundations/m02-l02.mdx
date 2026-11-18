@@ -1,0 +1,141 @@
+---
+{
+  "lessonId": "m02-l02",
+  "title": "Desired state and reconciliation",
+  "description": "See how repeated observation and repair turn intent into eventual convergence.",
+  "level": "foundations",
+  "module": "m02",
+  "order": 2,
+  "minutes": 14,
+  "prerequisites": [
+    "m02-l01"
+  ],
+  "objectives": [
+    "Read desired and observed replica counts separately",
+    "Explain idempotent repeated reconciliation",
+    "Predict recovery while keeping component ownership precise"
+  ],
+  "concepts": [
+    {
+      "id": "m02-l02-reconciliation",
+      "title": "Reconciliation",
+      "scene": "m02-l02-reconcile"
+    },
+    {
+      "id": "m02-l02-desired-state",
+      "title": "Desired and observed state",
+      "scene": "m02-l02-reconcile"
+    },
+    {
+      "id": "m02-l02-eventual-convergence",
+      "title": "Eventual convergence and limits",
+      "scene": "m02-l02-repair"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Kubernetes controllers",
+      "url": "https://kubernetes.io/docs/concepts/architecture/controller/"
+    },
+    {
+      "title": "ReplicaSet controller",
+      "url": "https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/"
+    },
+    {
+      "title": "Kubernetes self-healing",
+      "url": "https://kubernetes.io/docs/concepts/architecture/self-healing/"
+    }
+  ],
+  "lab": "m02",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: compare, act, observe again
+
+A reconciliation loop repeatedly compares a requested state with observed state and takes bounded actions to reduce the difference. You request three replicas, not a one-time instruction to “start three processes immediately.” If one managed Pod disappears later, the requested count still exists. A controller can notice the difference and create a replacement object without another command from you.
+
+Desired state and observed state are separate records with separate timing. `spec.replicas` expresses an intention. Status fields report observations such as how many replicas exist, are ready, or are available. A watch notification is a signal to reconsider the latest state; it is not permission to blindly repeat every previous action. Kubernetes controllers must tolerate repeated work, missed intermediate changes, and delays. An idempotent action has the same intended effect when repeated against the same relevant state.
+
+For replica-count repair, a ReplicaSet counts active managed Pods. An unready or image-pull-blocked Pod can still count as active; a terminal `Failed` or `Succeeded` Pod, or a Pod already marked for deletion, does not fill that target. Retained terminal objects can therefore appear alongside replacements in a listing. Count the relevant lifecycle state, not every row returned by `get pods`.
+
+“Eventually consistent” does not mean “will certainly become healthy.” Convergence requires a feasible request and functioning dependencies. A controller can create the requested active Pods while every container fails to pull the same nonexistent image. The kubelets retry image preparation; the ReplicaSet does not replace a still-active Pod merely because it is waiting for an image. The loops can be working as designed while the workload remains unavailable. Always ask which difference is being repaired and whether the environment permits that repair.
+
+<Scene id="m02-l02-reconcile" />
+
+## Walkthrough: write an enduring intention
+
+This example creates a Deployment so its controller manages a ReplicaSet, whose controller creates Pods. Deployment details come later; here the ownership chain makes repeated repair observable. Save it as `reconcile-demo.yaml` and use a disposable lab namespace.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reconcile-demo
+spec:
+  replicas: 3 # Enduring desired Pod count.
+  selector:
+    matchLabels:
+      app: reconcile-demo
+  template:
+    metadata:
+      labels:
+        app: reconcile-demo # Must match the selector.
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27.5
+```
+
+```bash
+kubectl apply -f reconcile-demo.yaml
+kubectl get deployment reconcile-demo
+kubectl get rs -l app=reconcile-demo
+kubectl get pods -l app=reconcile-demo -w
+```
+
+Wait for three healthy Pods if your lab has enough resources and registry access. In another terminal, list their names and delete exactly one named Pod from this disposable workload. Do not delete a node or a system Pod to imitate a failure.
+
+```bash
+kubectl get pods -l app=reconcile-demo
+# Replace the example name with one actual Pod name from that listing.
+kubectl delete pod ACTUAL_POD_NAME
+kubectl get pods -l app=reconcile-demo -o wide
+```
+
+The ReplicaSet controller creates a replacement Pod because the desired count remains three. The scheduler binds that new Pod to an eligible node. The node's kubelet and runtime start it. The original Pod is not revived with its original UID or migrated to a new node. Names and IPs can change, and local ephemeral state follows its own lifecycle.
+
+<Scene id="m02-l02-repair" />
+
+## Practice: repair intention versus fight it
+
+Scale the Deployment to two replicas with `kubectl scale deployment reconcile-demo --replicas=2`. The observed count should converge toward two. Now reapply the original file, which still declares three. The file again requests three, and the controller works toward that count. This is configuration drift in a small form: multiple writers disagree about the same desired field. Keep an authoritative manifest or a deliberate field-ownership workflow instead of treating every manual edit as a permanent new truth.
+
+Observe the workload while it converges. A new Pod can exist before it is ready, and an old terminating Pod can remain visible briefly. Exact names, event ordering, and timings vary. Focus on enduring invariants: the requested count, owner relationships, whether new Pods are created, whether they bind, and whether they become usable. Reconciliation is asynchronous, so one instantaneous listing is not proof of a stable final state.
+
+## Pitfalls
+
+Deleting a naked Pod removes its intention as well as its execution object; without a controller, no ReplicaSet is obligated to replace it. Editing a managed Pod directly is also a weak release strategy: changes to a replacement come from the controller's template. Change the owning workload's desired configuration.
+
+Do not confuse process restart with replica replacement. A kubelet can restart a failed container in an existing Pod. A ReplicaSet controller repairs a missing Pod by creating another Pod object. Those repairs occur at different layers and preserve different identities.
+
+## Check your understanding
+
+<details>
+
+<summary>Three Pods exist, but none are ready. Has reconciliation achieved the user's goal?</summary>
+
+The replica-count portion may be satisfied while application availability remains unsatisfied. Readiness, image failures, configuration, resource constraints, and dependencies determine whether those replicas serve useful work. Inspect both count and health. Increasing the requested count can create more failing replicas without solving the cause.
+
+</details>
+
+Next, trace one Pod request through every responsible component. Practice deletion and scaling in the [module lab](/labs/#m02), then remove the demo Deployment to release lab resources.
+
+## Primary documentation
+
+- [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+- [ReplicaSet controller](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/)
+- [Kubernetes self-healing](https://kubernetes.io/docs/concepts/architecture/self-healing/)

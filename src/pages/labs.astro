@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+import Icon from '../components/Icon.astro';
+import ClusterSketch from '../components/ClusterSketch.astro';
+import {modules,levelNames,levels} from '../data/modules';
+import {labs} from '../data/labs';
+---
+<Base title="Local laboratories"><div class="page-pad labs-page">
+ <header class="lab-hero"><div class="page-header"><h1>Make the<br/>model real.</h1><p>Break a workload. Trace a request. Recover the data. Take each idea into a real cluster you can explore, reset, and understand.</p><div class="hero-actions"><a class="button primary" href="/labs/kv-labs.zip" download><Icon name="download"/>Download the labs</a><a class="text-link" href="#setup" data-open-setup>Set up your cluster <Icon name="arrow" size={16}/></a></div></div><ClusterSketch/></header>
+ <div class="lab-environment"><span><strong>20</strong> guided investigations</span><span><strong>kind</strong> 0.33.0</span><span><strong>Kubernetes</strong> 1.37</span></div>
+ <details class="lab-setup" id="setup"><summary><div><h2>Your local workbench</h2><small>One control plane, two workers, and room to experiment.</small></div><Icon name="chevron" size={20}/></summary><div class="lab-setup-body"><p>Install Docker, kubectl, and kind. Use the pinned kind version and node image in the downloaded configuration. Keep every command scoped to its explicit context and namespace.</p><pre><code>{`kind create cluster --name kv-lab --config kind.yaml
+kubectl --context kind-kv-lab get nodes
+kubectl --context kind-kv-lab create namespace kv-lab
+# Run one downloaded exercise at a time, inspect the result, then clean up.
+# When you are finished with the complete environment:
+kind delete cluster --name kv-lab`}</code></pre><p>Allow several GiB of memory and disk space for the cluster and images. Extra controllers and storage/network features have additional requirements, identified per exercise.</p><div class="lab-links"><a class="text-link" href="/labs/kind.yaml" download><Icon name="download" size={16}/>kind.yaml</a><a class="text-link" href="/labs/kv-labs.zip" download><Icon name="download" size={16}/>All exercise files</a></div></div></details>
+ <section aria-labelledby="investigations-title"><div class="section-heading"><h2 id="investigations-title">Choose an investigation.</h2><span class="muted" id="lab-results" role="status">{labs.length} exercises</span></div>
+ <div class="lab-toolbar"><nav class="lab-filters" aria-label="Lab levels"><button type="button" data-level="all" aria-pressed="true">All <small>{labs.length}</small></button>{levels.map(level=><button type="button" data-level={level} aria-pressed="false">{levelNames[level]} <small>{modules.filter(m=>m.level===level).length}</small></button>)}</nav><label class="lab-search"><Icon name="search" size={17}/><span class="sr-only">Find an exercise</span><input id="lab-filter" type="search" placeholder="Find an exercise…" autocomplete="off"/></label></div>
+ <p class="lab-empty" id="lab-empty" hidden>No matching exercises. Try a workload, resource, or another level.</p>
+ <div class="lab-catalogue">{labs.map(lab=>{const module=modules.find(m=>m.id===lab.id)!;return <section class="lab-section" id={lab.id} data-level={module.level} data-search={`${module.title} ${lab.goal} ${module.level}`.toLowerCase()}><header><div><span class="lab-id">{lab.id} · {levelNames[module.level]}</span><h3>{module.title}</h3></div><a class="text-link" href={`/curriculum/#${lab.id}`}>Lessons <Icon name="arrow" size={15}/></a></header><p>{lab.goal}</p><details class="lab-details"><summary>Requirements &amp; expected result</summary><p><strong>Requires:</strong> {lab.requirements}</p><p><strong>Expected:</strong> {lab.expected}</p><p>{lab.notes}</p></details><details class="lab-details"><summary>Run, inspect &amp; clean up</summary><h4>Commands</h4><pre><code>{lab.commands}</code></pre><h4>Diagnose</h4><pre><code>{lab.diagnostics}</code></pre><h4>Clean up</h4><pre><code>{lab.cleanup}</code></pre></details><details class="lab-details"><summary>Exercise files <span class="muted">{lab.files.length} files</span></summary><ul>{lab.files.map(file=><li><a class="text-link" href={`/labs/${lab.id}/${file.name}`} download>{file.name}<Icon name="download" size={13}/></a></li>)}</ul></details></section>})}</div></section>
+ </div>
+ <script>
+  const setup=document.querySelector<HTMLDetailsElement>('#setup')!;
+  document.querySelectorAll('[data-open-setup]').forEach(link=>link.addEventListener('click',()=>setup.open=true));
+  if(location.hash==='#setup')setup.open=true;
+  const input=document.querySelector<HTMLInputElement>('#lab-filter')!;
+  const filters=[...document.querySelectorAll<HTMLButtonElement>('.lab-filters button')];
+  const entries=[...document.querySelectorAll<HTMLElement>('.lab-section')];
+  let level='all';
+  function filterLabs(){const query=input.value.trim().toLowerCase();let count=0;for(const entry of entries){entry.hidden=!(level==='all'||entry.dataset.level===level)||!entry.dataset.search!.includes(query);if(!entry.hidden)count++;}for(const button of filters)button.setAttribute('aria-pressed',String(button.dataset.level===level));document.querySelector('#lab-results')!.textContent=`${count} ${count===1?'exercise':'exercises'}`;document.querySelector<HTMLElement>('#lab-empty')!.hidden=count>0;}
+  input.addEventListener('input',filterLabs);
+  for(const button of filters)button.addEventListener('click',()=>{level=button.dataset.level!;filterLabs();});
+  window.addEventListener('hashchange',()=>{const entry=entries.find(e=>`#${e.id}`===location.hash);if(entry?.hidden){level='all';input.value='';filterLabs();entry.scrollIntoView();}});
+ </script>
+</Base>

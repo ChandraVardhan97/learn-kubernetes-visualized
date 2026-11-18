@@ -1,0 +1,793 @@
+[
+  {
+    "title": "Build a cross-node Pod path",
+    "kind": "flow",
+    "description": "Follow sandbox network setup and a packet between Pods on different workers.",
+    "assumption": "CNI providers implement this contract differently; arrows do not prescribe an overlay or particular kernel hook.",
+    "frames": [
+      {
+        "title": "Prepare the network namespace",
+        "narration": "Before application traffic, the runtime arranges the Pod sandbox and asks the configured network integration to connect it.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "10.10.1.5 on Worker A",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Runtime invokes configured network integration",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "CNI implementation",
+            "detail": "IP allocation, interfaces, routes",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Worker B",
+            "detail": "Underlay or overlay path",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod B",
+            "detail": "10.10.2.7 listens on 8080",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "2",
+            "label": "network setup",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Assign a Pod address",
+        "narration": "The implementation configures an address and forwarding path. The CNI interface alone does not require a specific routing technology.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "10.10.1.5 on Worker A",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Runtime invokes configured network integration",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "CNI implementation",
+            "detail": "IP allocation, interfaces, routes",
+            "type": "control",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Worker B",
+            "detail": "Underlay or overlay path",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod B",
+            "detail": "10.10.2.7 listens on 8080",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "2",
+            "to": "0",
+            "label": "address + interface",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Cross the worker boundary",
+        "narration": "A packet for Pod B follows the implementation path across workers; this could be native routing or an encapsulated overlay.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "10.10.1.5 on Worker A",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Runtime invokes configured network integration",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "2",
+            "label": "CNI implementation",
+            "detail": "IP allocation, interfaces, routes",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Worker B",
+            "detail": "Underlay or overlay path",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Pod B",
+            "detail": "10.10.2.7 listens on 8080",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "1",
+            "label": "packet",
+            "state": "active"
+          },
+          {
+            "from": "1",
+            "to": "3",
+            "label": "provider path",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Reach the listening port",
+        "narration": "Worker B delivers traffic to Pod B if routing, policy and its application listener all permit the request.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Pod A",
+            "detail": "10.10.1.5 on Worker A",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Worker A",
+            "detail": "Runtime invokes configured network integration",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "CNI implementation",
+            "detail": "IP allocation, interfaces, routes",
+            "type": "control",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Worker B",
+            "detail": "Underlay or overlay path",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod B",
+            "detail": "10.10.2.7 listens on 8080",
+            "type": "pod",
+            "state": "ready"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "TCP 8080",
+            "state": "active"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Cross-node path broken",
+        "description": "The application listens, but the route between workers is missing or blocked.",
+        "frames": [
+          {
+            "title": "Local listener is healthy",
+            "narration": "Pod B can answer on its own network interface, so the application is not the first failing boundary.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod A",
+                "detail": "10.10.1.5 on Worker A",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "Runtime invokes configured network integration",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "CNI implementation",
+                "detail": "IP allocation, interfaces, routes",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Worker B",
+                "detail": "Underlay or overlay path",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod B",
+                "detail": "10.10.2.7 listens on 8080",
+                "type": "pod",
+                "state": "ready"
+              }
+            ],
+            "edges": []
+          },
+          {
+            "title": "Cross-node packet stops",
+            "narration": "The worker-to-worker path fails before delivery to Pod B. Service DNS cannot repair this route.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod A",
+                "detail": "10.10.1.5 on Worker A",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "Runtime invokes configured network integration",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "2",
+                "label": "CNI implementation",
+                "detail": "IP allocation, interfaces, routes",
+                "type": "control",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Worker B",
+                "detail": "Underlay or overlay path",
+                "type": "node",
+                "state": "failed"
+              },
+              {
+                "id": "4",
+                "label": "Pod B",
+                "detail": "10.10.2.7 listens on 8080",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "1",
+                "to": "3",
+                "label": "route unavailable",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Compare source locations",
+            "narration": "Compare same-node and cross-node clients and inspect the provider implementation; a missing overlay port or route can explain the difference.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Pod A",
+                "detail": "10.10.1.5 on Worker A",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Worker A",
+                "detail": "Runtime invokes configured network integration",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "CNI implementation",
+                "detail": "IP allocation, interfaces, routes",
+                "type": "control",
+                "state": "active"
+              },
+              {
+                "id": "3",
+                "label": "Worker B",
+                "detail": "Underlay or overlay path",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod B",
+                "detail": "10.10.2.7 listens on 8080",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "3",
+                "to": "2",
+                "label": "inspect provider",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl get pods -n kube-system -o wide"
+          }
+        ]
+      }
+    ],
+    "id": "m08-l01-pod-path"
+  },
+  {
+    "title": "A virtual IP forwards only to usable backends",
+    "kind": "flow",
+    "description": "Trace controller-produced EndpointSlices and Service data-plane programming through a readiness change.",
+    "assumption": "Ordinary selector Service without publishNotReadyAddresses; all-unready variant is non-terminating; existing connections are not modeled.",
+    "frames": [
+      {
+        "title": "Select matching Pods",
+        "narration": "The controller observes Pods matching app=api and publishes backend addresses and conditions in EndpointSlices.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Connect to api:80",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Service api",
+            "detail": "ClusterIP; targetPort 8080",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "EndpointSlice",
+            "detail": "Pod addresses + readiness",
+            "type": "object",
+            "state": "active"
+          },
+          {
+            "id": "3",
+            "label": "Node data plane",
+            "detail": "kube-proxy or provider replacement",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod ready",
+            "detail": "app=api; port 8080",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Pod unready",
+            "detail": "app=api; readiness false",
+            "type": "pod",
+            "state": "warning"
+          }
+        ],
+        "edges": [
+          {
+            "from": "4",
+            "to": "2",
+            "label": "ready=true",
+            "state": "active"
+          },
+          {
+            "from": "5",
+            "to": "2",
+            "label": "ready=false",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Program the forwarding path",
+        "narration": "The node implementation watches Service and endpoint state. Kube-proxy can program kernel rules such as iptables or nftables; a provider replacement can program eBPF hooks and backend maps. Neither requires a central userspace Service relay for every packet.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Connect to api:80",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Service api",
+            "detail": "ClusterIP; targetPort 8080",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "EndpointSlice",
+            "detail": "Pod addresses + readiness",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node data plane",
+            "detail": "kube-proxy or provider replacement",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Pod ready",
+            "detail": "app=api; port 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Pod unready",
+            "detail": "app=api; readiness false",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "1",
+            "to": "3",
+            "label": "virtual IP + port",
+            "state": "active"
+          },
+          {
+            "from": "2",
+            "to": "3",
+            "label": "usable endpoints",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Client connects",
+        "narration": "DNS returned the ClusterIP. The packet meets the configured kernel forwarding path, whether rule-based or an eBPF provider path. API semantics are shared, while hook placement and address translation vary by implementation.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Connect to api:80",
+            "type": "pod",
+            "state": "active"
+          },
+          {
+            "id": "1",
+            "label": "Service api",
+            "detail": "ClusterIP; targetPort 8080",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "EndpointSlice",
+            "detail": "Pod addresses + readiness",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node data plane",
+            "detail": "kube-proxy or provider replacement",
+            "type": "node",
+            "state": "active"
+          },
+          {
+            "id": "4",
+            "label": "Pod ready",
+            "detail": "app=api; port 8080",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "5",
+            "label": "Pod unready",
+            "detail": "app=api; readiness false",
+            "type": "pod",
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "from": "0",
+            "to": "3",
+            "label": "ClusterIP:80",
+            "state": "active"
+          }
+        ]
+      },
+      {
+        "title": "Choose a ready backend",
+        "narration": "The ordinary forwarding path selects a ready endpoint and sends the request to its target port; the unready backend is excluded from new normal traffic.",
+        "nodes": [
+          {
+            "id": "0",
+            "label": "Client",
+            "detail": "Connect to api:80",
+            "type": "pod",
+            "state": "idle"
+          },
+          {
+            "id": "1",
+            "label": "Service api",
+            "detail": "ClusterIP; targetPort 8080",
+            "type": "service",
+            "state": "idle"
+          },
+          {
+            "id": "2",
+            "label": "EndpointSlice",
+            "detail": "Pod addresses + readiness",
+            "type": "object",
+            "state": "idle"
+          },
+          {
+            "id": "3",
+            "label": "Node data plane",
+            "detail": "kube-proxy or provider replacement",
+            "type": "node",
+            "state": "idle"
+          },
+          {
+            "id": "4",
+            "label": "Pod ready",
+            "detail": "app=api; port 8080",
+            "type": "pod",
+            "state": "ready"
+          },
+          {
+            "id": "5",
+            "label": "Pod unready",
+            "detail": "app=api; readiness false",
+            "type": "pod",
+            "state": "warning"
+          }
+        ],
+        "edges": [
+          {
+            "from": "3",
+            "to": "4",
+            "label": "PodIP:8080",
+            "state": "active"
+          },
+          {
+            "from": "3",
+            "to": "5",
+            "label": "not ready",
+            "state": "blocked"
+          }
+        ],
+        "code": "kubectl get endpointslices -l kubernetes.io/service-name=api -o yaml"
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Readiness removes every backend",
+        "description": "All selected Pods become unready while DNS still resolves.",
+        "frames": [
+          {
+            "title": "Names still resolve",
+            "narration": "The Service remains in the API and DNS still returns its ClusterIP.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client",
+                "detail": "Connect to api:80",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Service api",
+                "detail": "ClusterIP; targetPort 8080",
+                "type": "service",
+                "state": "ready"
+              },
+              {
+                "id": "2",
+                "label": "EndpointSlice",
+                "detail": "Pod addresses + readiness",
+                "type": "object",
+                "state": "idle"
+              },
+              {
+                "id": "3",
+                "label": "Node data plane",
+                "detail": "kube-proxy or provider replacement",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod now unready",
+                "detail": "app=api; readiness false",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Pod unready",
+                "detail": "app=api; readiness false",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "0",
+                "to": "1",
+                "label": "DNS result",
+                "state": "active"
+              }
+            ]
+          },
+          {
+            "title": "No usable endpoint",
+            "narration": "EndpointSlice conditions show no ready backends. The data plane cannot deliver ordinary Service traffic to a healthy choice.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client",
+                "detail": "Connect to api:80",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Service api",
+                "detail": "ClusterIP; targetPort 8080",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "EndpointSlice",
+                "detail": "Pod addresses + readiness",
+                "type": "object",
+                "state": "warning"
+              },
+              {
+                "id": "3",
+                "label": "Node data plane",
+                "detail": "kube-proxy or provider replacement",
+                "type": "node",
+                "state": "warning"
+              },
+              {
+                "id": "4",
+                "label": "Pod now unready",
+                "detail": "app=api; readiness false",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "5",
+                "label": "Pod unready",
+                "detail": "app=api; readiness false",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "2",
+                "to": "3",
+                "label": "empty usable set",
+                "state": "blocked"
+              }
+            ]
+          },
+          {
+            "title": "Repair readiness or application",
+            "narration": "Inspect probe errors and the listening port. Rewriting DNS would change the wrong layer.",
+            "nodes": [
+              {
+                "id": "0",
+                "label": "Client",
+                "detail": "Connect to api:80",
+                "type": "pod",
+                "state": "idle"
+              },
+              {
+                "id": "1",
+                "label": "Service api",
+                "detail": "ClusterIP; targetPort 8080",
+                "type": "service",
+                "state": "idle"
+              },
+              {
+                "id": "2",
+                "label": "EndpointSlice",
+                "detail": "Pod addresses + readiness",
+                "type": "object",
+                "state": "active"
+              },
+              {
+                "id": "3",
+                "label": "Node data plane",
+                "detail": "kube-proxy or provider replacement",
+                "type": "node",
+                "state": "idle"
+              },
+              {
+                "id": "4",
+                "label": "Pod ready",
+                "detail": "app=api; port 8080",
+                "type": "pod",
+                "state": "ready"
+              },
+              {
+                "id": "5",
+                "label": "Pod unready",
+                "detail": "app=api; readiness false",
+                "type": "pod",
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "from": "4",
+                "to": "2",
+                "label": "readiness recovers",
+                "state": "active"
+              }
+            ],
+            "code": "kubectl describe pod -l app=api"
+          }
+        ]
+      }
+    ],
+    "id": "m08-l01-service-path"
+  }
+]

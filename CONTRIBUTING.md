@@ -1,0 +1,32 @@
+# Contributing
+
+Public contribution intake begins when the owner publishes the source and chooses its license. These guidelines keep the source ready for that step.
+
+## Improve one idea at a time
+
+Start with a specific learning problem: a misconception, an inaccurate transition, a missing failure case, an inaccessible control, or a lab that fails on the pinned environment. Describe the observed result, expected result, environment and primary source.
+
+Read `docs/CONTENT-CONTRACT.md` before adding content. Prose lives in MDX; scene definitions live in JSON; renderers and stateful UI live in components. Keep the smallest meaningful change in one contribution.
+
+## Content review
+
+- Explain the responsible component, state transition, ownership boundary and operational consequence.
+- Keep documented upstream behavior distinct from a specific CNI/CSI/provider implementation.
+- Link primary documentation and record reviewed Kubernetes/tool versions.
+- Teach every declared concept with substantive explanation and a relevant scene.
+- Include a prediction question, explained answer, failure case and practical exercise.
+- Never invent metrics, successful lab execution or universal production behavior.
+
+## Visual review
+
+Use the established tokens, type, node grammar and scene controls. Keep visible labels, keyboard access and a textual equivalent. Verify 1440px, 768px and 390px, plus dark and reduced-motion modes. Prefer a purposeful explanation over decorative animation.
+
+## Verification
+
+Run `npm run check`, `npm test`, `npm run verify:labs` and `npm run build`. Run relevant browser journeys against the production preview when interaction changes. Test meaningful behavior; avoid snapshots or tests that merely repeat labels, CSS declarations or implementation details.
+
+For lab changes, use a named disposable cluster and explicit context/namespace. Record commands and actual results. A dry run is not evidence of successful runtime behavior. Keep credentials and user kubeconfig out of the repository.
+
+## Reviewable contributions
+
+Explain the learning problem, resulting behavior, primary sources and verification. Include a screenshot or short recording when the visible explanation changes. Preserve stable lesson/concept IDs; if a route moves, provide a redirect and maintain progress compatibility.

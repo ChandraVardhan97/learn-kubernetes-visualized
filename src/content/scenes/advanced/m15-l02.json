@@ -1,0 +1,781 @@
+[
+  {
+    "title": "Feasibility precedes preference",
+    "kind": "scheduling",
+    "description": "Preferences rank Node B among feasible nodes. A rejected node cannot win through a high score.",
+    "assumption": "Two nodes and one label rule isolate the ordering; actual scheduler profiles include additional plugins.",
+    "frames": [
+      {
+        "title": "Read hard requirements",
+        "narration": "The Pod requires a particular node label and requests CPU and memory.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Pending Pod",
+            "type": "pod",
+            "detail": "Requires accelerator label",
+            "x": 35,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "filter",
+            "label": "Filter plugins",
+            "type": "control",
+            "detail": "Check hard constraints",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "Node A",
+            "type": "node",
+            "detail": "No matching label",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Node B",
+            "type": "node",
+            "detail": "Label and free requests",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "score",
+            "label": "Score plugins",
+            "type": "control",
+            "detail": "Rank feasible candidates",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "filter",
+            "label": "scheduling attempt",
+            "state": "active",
+            "from": "pod"
+          }
+        ]
+      },
+      {
+        "title": "Filter each candidate",
+        "narration": "Node A lacks the required label; Node B satisfies hard constraints and remains feasible.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Pending Pod",
+            "type": "pod",
+            "detail": "Requires accelerator label",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "filter",
+            "label": "Filter plugins",
+            "type": "control",
+            "detail": "Check hard constraints",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "a",
+            "label": "Node A",
+            "type": "node",
+            "detail": "No matching label",
+            "x": 545,
+            "y": 45,
+            "state": "warning"
+          },
+          {
+            "id": "b",
+            "label": "Node B",
+            "type": "node",
+            "detail": "Label and free requests",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "score",
+            "label": "Score plugins",
+            "type": "control",
+            "detail": "Rank feasible candidates",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "reject mismatch",
+            "state": "blocked",
+            "from": "filter"
+          },
+          {
+            "to": "b",
+            "label": "feasible",
+            "state": "active",
+            "from": "filter"
+          }
+        ]
+      },
+      {
+        "title": "Score only survivors",
+        "narration": "Preferences rank Node B among feasible nodes. A rejected node cannot win through a high score.",
+        "nodes": [
+          {
+            "id": "pod",
+            "label": "Pending Pod",
+            "type": "pod",
+            "detail": "Requires accelerator label",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "filter",
+            "label": "Filter plugins",
+            "type": "control",
+            "detail": "Check hard constraints",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "a",
+            "label": "Node A",
+            "type": "node",
+            "detail": "No matching label",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "b",
+            "label": "Node B",
+            "type": "node",
+            "detail": "Label and free requests",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "score",
+            "label": "Score plugins",
+            "type": "control",
+            "detail": "Rank feasible candidates",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "score",
+            "label": "candidate",
+            "state": "active",
+            "from": "b"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No feasible nodes",
+        "description": "Every node fails the required label even if it has spare CPU.",
+        "frames": [
+          {
+            "title": "All candidates mismatch",
+            "narration": "The only available nodes do not carry the required accelerator label.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pending Pod",
+                "type": "pod",
+                "detail": "Requires accelerator label",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "filter",
+                "label": "Filter plugins",
+                "type": "control",
+                "detail": "Check hard constraints",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "a",
+                "label": "Node A",
+                "type": "node",
+                "detail": "No matching label",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "b",
+                "label": "Node B",
+                "type": "node",
+                "detail": "Required label missing",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "score",
+                "label": "Score plugins",
+                "type": "control",
+                "detail": "Rank feasible candidates",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "filter",
+                "label": "scheduling attempt",
+                "state": "active",
+                "from": "pod"
+              },
+              {
+                "to": "a",
+                "label": "reject mismatch",
+                "state": "blocked",
+                "from": "filter"
+              },
+              {
+                "to": "b",
+                "label": "reject mismatch",
+                "state": "blocked",
+                "from": "filter"
+              }
+            ]
+          },
+          {
+            "title": "No useful score stage",
+            "narration": "The Pod remains Pending because there is no feasible candidate set to rank.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pending Pod",
+                "type": "pod",
+                "detail": "Requires accelerator label",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "filter",
+                "label": "Filter plugins",
+                "type": "control",
+                "detail": "Check hard constraints",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "Node A",
+                "type": "node",
+                "detail": "No matching label",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "b",
+                "label": "Node B",
+                "type": "node",
+                "detail": "Required label missing",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "score",
+                "label": "Score plugins",
+                "type": "control",
+                "detail": "Nothing to score",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "score",
+                "label": "no feasible candidates",
+                "state": "blocked",
+                "from": "b"
+              }
+            ]
+          },
+          {
+            "title": "Preemption cannot add labels",
+            "narration": "Removing lower-priority Pods does not repair the required selector mismatch.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Pending Pod",
+                "type": "pod",
+                "detail": "Requires accelerator label",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "filter",
+                "label": "Filter plugins",
+                "type": "control",
+                "detail": "Check hard constraints",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "a",
+                "label": "Node A",
+                "type": "node",
+                "detail": "No matching label",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "b",
+                "label": "Node B",
+                "type": "node",
+                "detail": "Required label missing",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "score",
+                "label": "Score plugins",
+                "type": "control",
+                "detail": "Rank feasible candidates",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "a",
+                "label": "reject mismatch",
+                "state": "blocked",
+                "from": "filter"
+              },
+              {
+                "to": "b",
+                "label": "reject mismatch",
+                "state": "blocked",
+                "from": "filter"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m15-l02-filter-score"
+  },
+  {
+    "title": "A chosen node still needs binding",
+    "kind": "scheduling",
+    "description": "The API assignment lets the kubelet act, but image pull, mounts and application readiness are later boundaries.",
+    "assumption": "Plugin extension points are grouped; scheduling and binding work may overlap for different Pods.",
+    "frames": [
+      {
+        "title": "Hold provisional state",
+        "narration": "Reserve and Permit plugins coordinate work before a final API binding.",
+        "nodes": [
+          {
+            "id": "select",
+            "label": "Selected node",
+            "type": "node",
+            "detail": "Feasible, highest total score",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "reserve",
+            "label": "Reserve / Permit",
+            "type": "control",
+            "detail": "Provisional coordination",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "volume",
+            "label": "PreBind work",
+            "type": "storage",
+            "detail": "Volume-related preparation",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "bind",
+            "label": "Bind through API",
+            "type": "control",
+            "detail": "Assign Pod nodeName",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "detail": "Start and monitor containers",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "reserve",
+            "label": "candidate",
+            "state": "active",
+            "from": "select"
+          }
+        ]
+      },
+      {
+        "title": "Complete prerequisites",
+        "narration": "PreBind work such as volume coordination must succeed before the assignment is committed.",
+        "nodes": [
+          {
+            "id": "select",
+            "label": "Selected node",
+            "type": "node",
+            "detail": "Feasible, highest total score",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "reserve",
+            "label": "Reserve / Permit",
+            "type": "control",
+            "detail": "Provisional coordination",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "volume",
+            "label": "PreBind work",
+            "type": "storage",
+            "detail": "Volume-related preparation",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "bind",
+            "label": "Bind through API",
+            "type": "control",
+            "detail": "Assign Pod nodeName",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "detail": "Start and monitor containers",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "volume",
+            "label": "permitted",
+            "state": "active",
+            "from": "reserve"
+          },
+          {
+            "to": "bind",
+            "label": "ready to bind",
+            "state": "active",
+            "from": "volume"
+          }
+        ]
+      },
+      {
+        "title": "Bind is not readiness",
+        "narration": "The API assignment lets the kubelet act, but image pull, mounts and application readiness are later boundaries.",
+        "nodes": [
+          {
+            "id": "select",
+            "label": "Selected node",
+            "type": "node",
+            "detail": "Feasible, highest total score",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "reserve",
+            "label": "Reserve / Permit",
+            "type": "control",
+            "detail": "Provisional coordination",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "volume",
+            "label": "PreBind work",
+            "type": "storage",
+            "detail": "Volume-related preparation",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "bind",
+            "label": "Bind through API",
+            "type": "control",
+            "detail": "Assign Pod nodeName",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "kubelet",
+            "label": "Kubelet",
+            "type": "control",
+            "detail": "Start and monitor containers",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "bind",
+            "label": "ready to bind",
+            "state": "active",
+            "from": "volume"
+          },
+          {
+            "to": "kubelet",
+            "label": "assigned Pod",
+            "state": "active",
+            "from": "bind"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "PreBind failure",
+        "description": "A provisional choice can be abandoned before a Pod is assigned.",
+        "frames": [
+          {
+            "title": "Candidate selected",
+            "narration": "The node passes filters and scoring, but placement is not yet final.",
+            "nodes": [
+              {
+                "id": "select",
+                "label": "Selected node",
+                "type": "node",
+                "detail": "Feasible, highest total score",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "reserve",
+                "label": "Reserve / Permit",
+                "type": "control",
+                "detail": "Provisional coordination",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "volume",
+                "label": "PreBind work",
+                "type": "storage",
+                "detail": "Volume-related preparation",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "bind",
+                "label": "Bind through API",
+                "type": "control",
+                "detail": "Assign Pod nodeName",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "kubelet",
+                "label": "Kubelet",
+                "type": "control",
+                "detail": "Start and monitor containers",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "reserve",
+                "label": "candidate",
+                "state": "active",
+                "from": "select"
+              },
+              {
+                "to": "volume",
+                "label": "permitted",
+                "state": "active",
+                "from": "reserve"
+              }
+            ]
+          },
+          {
+            "title": "Preparation fails",
+            "narration": "A volume prerequisite fails during PreBind, so the attempt cannot commit a binding.",
+            "nodes": [
+              {
+                "id": "select",
+                "label": "Selected node",
+                "type": "node",
+                "detail": "Feasible, highest total score",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "reserve",
+                "label": "Reserve / Permit",
+                "type": "control",
+                "detail": "Provisional coordination",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "volume",
+                "label": "PreBind work",
+                "type": "storage",
+                "detail": "Volume prerequisite failed",
+                "x": 545,
+                "y": 45,
+                "state": "failed"
+              },
+              {
+                "id": "bind",
+                "label": "Bind through API",
+                "type": "control",
+                "detail": "No binding committed",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "kubelet",
+                "label": "Kubelet",
+                "type": "control",
+                "detail": "Start and monitor containers",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "bind",
+                "label": "PreBind failed",
+                "state": "blocked",
+                "from": "volume"
+              }
+            ]
+          },
+          {
+            "title": "Release and retry",
+            "narration": "Unreserve releases provisional state; the Pod can return for another scheduling attempt.",
+            "nodes": [
+              {
+                "id": "select",
+                "label": "Selected node",
+                "type": "node",
+                "detail": "Feasible, highest total score",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "reserve",
+                "label": "Reserve / Permit",
+                "type": "control",
+                "detail": "Unreserve releases provisional state",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "volume",
+                "label": "PreBind work",
+                "type": "storage",
+                "detail": "Volume-related preparation",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "bind",
+                "label": "Bind through API",
+                "type": "control",
+                "detail": "Assign Pod nodeName",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "kubelet",
+                "label": "Kubelet",
+                "type": "control",
+                "detail": "Start and monitor containers",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": []
+          }
+        ]
+      }
+    ],
+    "id": "m15-l02-bind-cycle"
+  }
+]

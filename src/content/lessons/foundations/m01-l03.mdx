@@ -1,0 +1,127 @@
+---
+{
+  "lessonId": "m01-l03",
+  "title": "Networking before Kubernetes",
+  "description": "Follow DNS, TCP ports, and HTTP across a container network boundary.",
+  "level": "foundations",
+  "module": "m01",
+  "order": 3,
+  "minutes": 14,
+  "prerequisites": [
+    "m01-l02"
+  ],
+  "objectives": [
+    "Distinguish port declarations from actual listeners",
+    "Trace DNS resolution before an HTTP request",
+    "Explain loopback and host port publishing"
+  ],
+  "concepts": [
+    {
+      "id": "m01-l03-ports",
+      "title": "Ports and interfaces",
+      "scene": "m01-l03-port-path"
+    },
+    {
+      "id": "m01-l03-http",
+      "title": "HTTP request and response",
+      "scene": "m01-l03-port-path"
+    },
+    {
+      "id": "m01-l03-dns-basics",
+      "title": "DNS resolution",
+      "scene": "m01-l03-dns"
+    }
+  ],
+  "sources": [
+    {
+      "title": "Docker published ports",
+      "url": "https://docs.docker.com/engine/network/port-publishing/"
+    },
+    {
+      "title": "HTTP semantics: RFC 9110",
+      "url": "https://www.rfc-editor.org/rfc/rfc9110.html"
+    },
+    {
+      "title": "DNS concepts: RFC 1034",
+      "url": "https://www.rfc-editor.org/rfc/rfc1034.html"
+    }
+  ],
+  "lab": "m01",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: name, address, connection, message
+
+A web request crosses several boundaries. DNS turns a hostname into address information. Routing determines how packets reach an address. In the TCP-based HTTP examples used here, TCP establishes a connection between address-and-port pairs, and HTTP carries application messages over it; HTTPS adds TLS. HTTP/3 instead uses QUIC over UDP, so TCP is not a universal HTTP requirement. These steps can fail independently. A correct DNS answer does not prove that a server is listening, and a successful connection does not prove that the requested HTTP path exists.
+
+A port identifies a transport endpoint within a network namespace, not a physical opening in a container. A server must bind an address and port. Binding `127.0.0.1:8080` normally accepts connections only over that network namespace's loopback interface. Binding `0.0.0.0:8080` accepts connections on all local IPv4 interfaces, subject to networking and policy. IPv6 listeners and dual-stack behavior need deliberate configuration; do not infer them from an IPv4 example.
+
+Two containers with separate network namespaces can each listen on port 80 without conflict. Two processes sharing one network namespace cannot usually bind the same address, port, and protocol simultaneously. This becomes important when multiple containers share a Pod's network namespace: they reach each other through `localhost`, and their listening ports must coexist.
+
+<Scene id="m01-l03-port-path" />
+
+## Walkthrough: publish a local training port
+
+This optional exercise uses Docker, not a Kubernetes Service. It makes the network boundary visible before the cluster adds more layers. Docker must already be installed; the nginx image is a training dependency. Use Docker Engine 28.0.0 or later for the documented loopback-only exposure behavior: older releases can allow hosts on the same layer-2 network to reach ports published to localhost.
+
+```bash
+# Bind only the laptop's IPv4 loopback address for this local exercise.
+# Host TCP 8080 forwards to the container's TCP 80.
+docker run --rm -d --name network-demo \
+  -p 127.0.0.1:8080:80 nginx:1.27.5
+# Show HTTP response headers plus the response body.
+curl -i http://127.0.0.1:8080/
+# Ask for a path nginx does not serve.
+curl -i http://127.0.0.1:8080/does-not-exist
+# Release the published host port.
+docker stop network-demo
+```
+
+The first request should receive an HTTP success response if the container starts and the port is available. The second typically receives HTTP 404. Both responses prove that a server answered the connection. “Connection refused” is different: the requested transport endpoint rejected the connection before an HTTP response existed. A timeout indicates that an expected response did not arrive; filtering, routing problems, an unresponsive server, and other causes require further evidence.
+
+An image's `EXPOSE` instruction or Kubernetes `containerPort` field does not publish a host port or create a listener. A manifest can document port 80 while the process actually listens on 8080. Follow the process configuration and the forwarding configuration separately. Kubernetes later replaces manual Pod-address tracking with Services, without changing this basic requirement.
+
+## DNS happens before the request
+
+For a URL such as `http://shop.example.test:8080/catalog`, the client extracts the hostname, resolves it using its resolver configuration, connects to an address on port 8080, and sends an HTTP request for `/catalog`. The hostname can also matter at the application layer through HTTP authority or Host information and, for HTTPS, TLS server name selection. Replacing a hostname with an IP can therefore change more than just DNS.
+
+<Scene id="m01-l03-dns" />
+
+```bash
+# This requires nslookup on your machine; any legitimate DNS answer may change.
+nslookup kubernetes.io
+# Verbose output separates connection setup from the HTTP response.
+curl -v https://kubernetes.io/ -o /dev/null
+```
+
+DNS answers can be cached according to their TTL and resolver behavior. An application may keep using an existing TCP connection after a DNS record changes, so a DNS update does not forcibly migrate every active request. A records carry IPv4 addresses, AAAA records carry IPv6 addresses, and CNAME records refer to another DNS name. No DNS record makes a backend healthy by itself.
+
+## Practice: predict the first broken boundary
+
+Draw a four-step path for a request: resolve, connect, negotiate TLS if applicable, exchange HTTP. For each symptom, identify the earliest step that must have succeeded. An HTTP 500 means an HTTP-speaking component answered; it does not identify whether the fault originated in that server or an upstream dependency. A certificate-name error usually means name resolution and some connection establishment already happened. A DNS “name does not exist” result prevents ordinary connection setup to that name.
+
+## Pitfalls
+
+`localhost` always refers to the caller's own network namespace. From a laptop it is the laptop, from a Pod it is that Pod. A port-forward or host publishing rule deliberately bridges a boundary. Do not assume those bridges exist merely because two tools use the same port number.
+
+## Check your understanding
+
+<details>
+
+<summary>A DNS lookup succeeds but curl reports connection refused. Should you change the DNS name first?</summary>
+
+First inspect the address, destination port, server listener, and forwarding path. The successful lookup supplied address information; refusal occurs at a later boundary. DNS may still have supplied the wrong address, but changing names without checking the listener discards useful evidence. Test the exact address and port, then compare them with the server's bind configuration.
+
+</details>
+
+Use the [module lab](/labs/#m01) to compare a successful HTTP response, an HTTP error response, and a transport failure before moving into cluster components.
+
+## Primary documentation
+
+- [Docker published ports](https://docs.docker.com/engine/network/port-publishing/)
+- [HTTP semantics: RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [DNS concepts: RFC 1034](https://www.rfc-editor.org/rfc/rfc1034.html)

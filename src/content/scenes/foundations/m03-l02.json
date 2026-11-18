@@ -1,0 +1,465 @@
+[
+  {
+    "id": "m03-l02-selection",
+    "title": "Selectors evaluate the actual Pod labels",
+    "kind": "policy",
+    "description": "Evaluate an AND selector and distinguish annotations from labels.",
+    "assumption": "All shown Pods are in one namespace; label syntax constraints are omitted from the diagram.",
+    "frames": [
+      {
+        "title": "Attach grouping labels",
+        "narration": "Pod A has app=catalog and tier=api. Pod B shares the app but has tier=worker. Their names need not resemble their labels.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "A: catalog / api",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "B: catalog / worker",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "selector",
+            "label": "app=catalog,tier=api",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "both requirements match",
+            "state": "active",
+            "from": "selector"
+          },
+          {
+            "to": "b",
+            "label": "tier mismatch",
+            "state": "blocked",
+            "from": "selector"
+          }
+        ]
+      },
+      {
+        "title": "Select a set, not a name",
+        "narration": "The selector includes A and excludes B. Commas mean AND across requirements; matching one requirement is insufficient.",
+        "nodes": [
+          {
+            "id": "selector",
+            "label": "AND of two requirements",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "a",
+            "label": "A selected",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "B excluded",
+            "type": "pod",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "included",
+            "state": "active",
+            "from": "selector"
+          },
+          {
+            "to": "b",
+            "label": "excluded",
+            "state": "blocked",
+            "from": "selector"
+          }
+        ]
+      },
+      {
+        "title": "Keep descriptive metadata separate",
+        "narration": "An annotation can hold a purpose or URL. It does not become an ordinary label selector dimension.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Pod A",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "labels",
+            "label": "Labels: grouping keys",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "annotation",
+            "label": "Annotation: purpose text",
+            "type": "object",
+            "state": "idle",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "selection metadata",
+            "state": "active",
+            "from": "labels"
+          },
+          {
+            "to": "a",
+            "label": "descriptive metadata",
+            "state": "active",
+            "from": "annotation"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m03-l02-selection-failure",
+        "label": "Failure: label placed only on the parent",
+        "description": "Failure: label placed only on the parent",
+        "frames": [
+          {
+            "title": "The Deployment has the label",
+            "narration": "Parent metadata says app=catalog, but its Pod template labels are different.",
+            "nodes": [
+              {
+                "id": "deploy",
+                "label": "Deployment: app=catalog",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Pod: app=other",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "Service: app=catalog",
+                "type": "service",
+                "state": "active",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "template creates",
+                "state": "active",
+                "from": "deploy"
+              },
+              {
+                "to": "pod",
+                "label": "no label match",
+                "state": "blocked",
+                "from": "svc"
+              }
+            ]
+          },
+          {
+            "title": "No intended backend matches",
+            "narration": "The Service selector cannot infer labels from the parent Deployment. The Pod must satisfy the selection itself.",
+            "nodes": [
+              {
+                "id": "svc",
+                "label": "Service selects no backend",
+                "type": "service",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Healthy but unselected",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "mismatch",
+                "state": "blocked",
+                "from": "svc"
+              }
+            ]
+          },
+          {
+            "title": "Correct the template labels",
+            "narration": "Align intended workload and Service selectors. A Deployment\u2019s selector must remain valid for its Pod template.",
+            "nodes": [
+              {
+                "id": "template",
+                "label": "Correct Pod template",
+                "type": "object",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "pod",
+                "label": "Pod: app=catalog",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "svc",
+                "label": "Service matches",
+                "type": "service",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "pod",
+                "label": "create correct labels",
+                "state": "active",
+                "from": "template"
+              },
+              {
+                "to": "pod",
+                "label": "select",
+                "state": "active",
+                "from": "svc"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "m03-l02-scope",
+    "title": "Scope and ownership answer different questions",
+    "kind": "ownership",
+    "description": "Show namespaced identity and UID-based owner relationships.",
+    "assumption": "A Deployment-to-ReplicaSet-to-Pod chain is shown in one namespace; Nodes are cluster scoped.",
+    "frames": [
+      {
+        "title": "Names are scoped",
+        "narration": "A Pod named web can exist in team-a and team-b. Namespace is part of the address for this resource type.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "team-a / Pod web",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "team-b / Pod web",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "node",
+            "label": "Node: cluster scoped",
+            "type": "node",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": []
+      },
+      {
+        "title": "Ownership uses a particular UID",
+        "narration": "The Deployment owns a ReplicaSet, and the ReplicaSet owns a Pod through owner references. Shared labels do not create this chain.",
+        "nodes": [
+          {
+            "id": "deploy",
+            "label": "Deployment UID D",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "rs",
+            "label": "ReplicaSet UID R",
+            "type": "object",
+            "state": "ready",
+            "detail": ""
+          },
+          {
+            "id": "pod",
+            "label": "Pod UID P",
+            "type": "pod",
+            "state": "ready",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "rs",
+            "label": "owns ReplicaSet",
+            "state": "active",
+            "from": "deploy"
+          },
+          {
+            "to": "pod",
+            "label": "owns Pod",
+            "state": "active",
+            "from": "rs"
+          }
+        ]
+      },
+      {
+        "title": "Policy still needs configuration",
+        "narration": "Namespace scope helps organize names and attach policy. Network and authorization isolation require their own configured mechanisms.",
+        "nodes": [
+          {
+            "id": "a",
+            "label": "Namespace team-a",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "b",
+            "label": "Namespace team-b",
+            "type": "object",
+            "state": "active",
+            "detail": ""
+          },
+          {
+            "id": "policy",
+            "label": "RBAC / NetworkPolicy",
+            "type": "control",
+            "state": "active",
+            "detail": ""
+          }
+        ],
+        "edges": [
+          {
+            "to": "a",
+            "label": "explicit controls",
+            "state": "active",
+            "from": "policy"
+          },
+          {
+            "to": "b",
+            "label": "explicit controls",
+            "state": "active",
+            "from": "policy"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "m03-l02-scope-failure",
+        "label": "Failure: a reference names the wrong namespace",
+        "description": "Failure: a reference names the wrong namespace",
+        "frames": [
+          {
+            "title": "Pod expects local configuration",
+            "narration": "A Pod in team-a references ConfigMap settings. Ordinary volume and environment references use its own namespace.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "team-a / Pod web",
+                "type": "pod",
+                "state": "active",
+                "detail": ""
+              },
+              {
+                "id": "cm",
+                "label": "team-b / settings",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "cm",
+                "label": "wrong scope",
+                "state": "blocked",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Matching name is insufficient",
+            "narration": "A ConfigMap with that name in team-b does not satisfy the Pod\u2019s namespaced reference. Preparation can fail before execution.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "Missing local ConfigMap",
+                "type": "pod",
+                "state": "warning",
+                "detail": ""
+              },
+              {
+                "id": "cm",
+                "label": "Exists only in team-b",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "cm",
+                "label": "not the addressed object",
+                "state": "blocked",
+                "from": "pod"
+              }
+            ]
+          },
+          {
+            "title": "Create configuration in the intended scope",
+            "narration": "Provide the correctly named object in team-a and preserve deliberate policy boundaries rather than copying credentials indiscriminately.",
+            "nodes": [
+              {
+                "id": "pod",
+                "label": "team-a / Pod web",
+                "type": "pod",
+                "state": "ready",
+                "detail": ""
+              },
+              {
+                "id": "cm",
+                "label": "team-a / settings",
+                "type": "object",
+                "state": "ready",
+                "detail": ""
+              }
+            ],
+            "edges": [
+              {
+                "to": "cm",
+                "label": "same-namespace reference",
+                "state": "active",
+                "from": "pod"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

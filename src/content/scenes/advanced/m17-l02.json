@@ -1,0 +1,764 @@
+[
+  {
+    "title": "Utilization divides usage by requests",
+    "kind": "chart",
+    "description": "The basic formula yields five replicas before tolerance, missing metrics, stabilization and bounds.",
+    "assumption": "The arithmetic assumes identical complete ready-Pod observations; real HPA processing adds conservative adjustments and policies.",
+    "frames": [
+      {
+        "title": "Compute utilization",
+        "narration": "Eighty millicores usage divided by one hundred millicores request gives eighty-percent utilization.",
+        "nodes": [
+          {
+            "id": "usage",
+            "label": "Average usage 80m",
+            "type": "pod",
+            "detail": "Measured CPU per Pod",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "request",
+            "label": "Request 100m",
+            "type": "object",
+            "detail": "Utilization denominator",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "metric",
+            "label": "Current 80%",
+            "type": "object",
+            "detail": "Target 50%",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "hpa",
+            "label": "HPA recommendation",
+            "type": "control",
+            "detail": "ceil(3 × 80 / 50) = 5",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "scale",
+            "label": "Scale subresource",
+            "type": "object",
+            "detail": "Desired replicas before limits",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "metric",
+            "label": "usage / request",
+            "state": "active",
+            "from": "usage"
+          },
+          {
+            "to": "metric",
+            "label": "denominator",
+            "state": "active",
+            "from": "request"
+          }
+        ]
+      },
+      {
+        "title": "Compare with target",
+        "narration": "The desired utilization is fifty percent and current replica count is three.",
+        "nodes": [
+          {
+            "id": "usage",
+            "label": "Average usage 80m",
+            "type": "pod",
+            "detail": "Measured CPU per Pod",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "request",
+            "label": "Request 100m",
+            "type": "object",
+            "detail": "Utilization denominator",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "metric",
+            "label": "Current 80%",
+            "type": "object",
+            "detail": "Target 50%",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "hpa",
+            "label": "HPA recommendation",
+            "type": "control",
+            "detail": "ceil(3 × 80 / 50) = 5",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "scale",
+            "label": "Scale subresource",
+            "type": "object",
+            "detail": "Desired replicas before limits",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "hpa",
+            "label": "ratio to target",
+            "state": "active",
+            "from": "metric"
+          }
+        ]
+      },
+      {
+        "title": "Round the simple result",
+        "narration": "The basic formula yields five replicas before tolerance, missing metrics, stabilization and bounds.",
+        "nodes": [
+          {
+            "id": "usage",
+            "label": "Average usage 80m",
+            "type": "pod",
+            "detail": "Measured CPU per Pod",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "request",
+            "label": "Request 100m",
+            "type": "object",
+            "detail": "Utilization denominator",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "metric",
+            "label": "Current 80%",
+            "type": "object",
+            "detail": "Target 50%",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "hpa",
+            "label": "HPA recommendation",
+            "type": "control",
+            "detail": "ceil(3 × 80 / 50) = 5",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "scale",
+            "label": "Scale subresource",
+            "type": "object",
+            "detail": "Desired replicas before limits",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "scale",
+            "label": "replica recommendation",
+            "state": "active",
+            "from": "hpa"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Request missing",
+        "description": "CPU utilization cannot be inferred from usage alone.",
+        "frames": [
+          {
+            "title": "Metrics arrive",
+            "narration": "The resource metrics pipeline reports CPU usage.",
+            "nodes": [
+              {
+                "id": "usage",
+                "label": "Average usage 80m",
+                "type": "pod",
+                "detail": "Measured CPU per Pod",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "request",
+                "label": "Missing CPU request",
+                "type": "object",
+                "detail": "No denominator for the affected metric",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "metric",
+                "label": "CPU utilization",
+                "type": "object",
+                "detail": "Undefined for the affected Pod",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "hpa",
+                "label": "HPA recommendation",
+                "type": "control",
+                "detail": "ceil(3 × 80 / 50) = 5",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "scale",
+                "label": "Scale subresource",
+                "type": "object",
+                "detail": "Desired replicas before limits",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "metric",
+                "label": "usage / request",
+                "state": "active",
+                "from": "usage"
+              }
+            ]
+          },
+          {
+            "title": "Denominator unavailable",
+            "narration": "A relevant container has no CPU request, making utilization undefined for that Pod.",
+            "nodes": [
+              {
+                "id": "usage",
+                "label": "Average usage 80m",
+                "type": "pod",
+                "detail": "Measured CPU per Pod",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "request",
+                "label": "Missing CPU request",
+                "type": "object",
+                "detail": "No denominator for the affected metric",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "metric",
+                "label": "CPU utilization",
+                "type": "object",
+                "detail": "Undefined for the affected Pod",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "hpa",
+                "label": "HPA recommendation",
+                "type": "control",
+                "detail": "ceil(3 × 80 / 50) = 5",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "scale",
+                "label": "Scale subresource",
+                "type": "object",
+                "detail": "Desired replicas before limits",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "metric",
+                "label": "denominator missing",
+                "state": "blocked",
+                "from": "request"
+              }
+            ]
+          },
+          {
+            "title": "Inspect conditions",
+            "narration": "Do not substitute zero; investigate HPA metric conditions and configure meaningful requests.",
+            "nodes": [
+              {
+                "id": "usage",
+                "label": "Average usage 80m",
+                "type": "pod",
+                "detail": "Measured CPU per Pod",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "request",
+                "label": "Missing CPU request",
+                "type": "object",
+                "detail": "No denominator for the affected metric",
+                "x": 290,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "metric",
+                "label": "CPU utilization",
+                "type": "object",
+                "detail": "Undefined for the affected Pod",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "hpa",
+                "label": "HPA recommendation",
+                "type": "control",
+                "detail": "ceil(3 × 80 / 50) = 5",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "scale",
+                "label": "Scale subresource",
+                "type": "object",
+                "detail": "Desired replicas before limits",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "hpa",
+                "label": "utilization calculation unavailable",
+                "state": "blocked",
+                "from": "metric"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m17-l02-hpa-formula"
+  },
+  {
+    "title": "Demand becomes useful capacity after delays",
+    "kind": "flow",
+    "description": "Image startup and readiness complete before the extra replicas become usable endpoints.",
+    "assumption": "Node autoscaling is a separate optional mechanism; its timing and supported capacity depend on the provider.",
+    "frames": [
+      {
+        "title": "Constrain the recommendation",
+        "narration": "HPA bounds recommendations and applies configured behavior. During downscale stabilization it can retain the highest recent recommendation, reducing oscillation while delaying scale-in. Scaling policies separately limit the permitted rate of change.",
+        "nodes": [
+          {
+            "id": "metric",
+            "label": "Metrics sample",
+            "type": "object",
+            "detail": "Periodic observation",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "hpa",
+            "label": "HPA behavior",
+            "type": "control",
+            "detail": "Bounds + stabilization",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "pods",
+            "label": "New Pods",
+            "type": "pod",
+            "detail": "Desired replica count",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "nodes",
+            "label": "Node capacity",
+            "type": "node",
+            "detail": "Requests must fit",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "ready",
+            "label": "Ready endpoints",
+            "type": "service",
+            "detail": "Useful traffic capacity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "hpa",
+            "label": "recommendation",
+            "state": "active",
+            "from": "metric"
+          }
+        ]
+      },
+      {
+        "title": "Create intended replicas",
+        "narration": "The workload controller creates Pods; those Pods still need feasible nodes.",
+        "nodes": [
+          {
+            "id": "metric",
+            "label": "Metrics sample",
+            "type": "object",
+            "detail": "Periodic observation",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "hpa",
+            "label": "HPA behavior",
+            "type": "control",
+            "detail": "Bounds + stabilization",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "New Pods",
+            "type": "pod",
+            "detail": "Desired replica count",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "nodes",
+            "label": "Node capacity",
+            "type": "node",
+            "detail": "Requests must fit",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "ready",
+            "label": "Ready endpoints",
+            "type": "service",
+            "detail": "Useful traffic capacity",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "pods",
+            "label": "scale target",
+            "state": "active",
+            "from": "hpa"
+          }
+        ]
+      },
+      {
+        "title": "Wait for useful capacity",
+        "narration": "Image startup and readiness complete before the extra replicas become usable endpoints.",
+        "nodes": [
+          {
+            "id": "metric",
+            "label": "Metrics sample",
+            "type": "object",
+            "detail": "Periodic observation",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "hpa",
+            "label": "HPA behavior",
+            "type": "control",
+            "detail": "Bounds + stabilization",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "pods",
+            "label": "New Pods",
+            "type": "pod",
+            "detail": "Desired replica count",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "nodes",
+            "label": "Node capacity",
+            "type": "node",
+            "detail": "Requests must fit",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "ready",
+            "label": "Ready endpoints",
+            "type": "service",
+            "detail": "Useful traffic capacity",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "nodes",
+            "label": "schedule",
+            "state": "active",
+            "from": "pods"
+          },
+          {
+            "to": "ready",
+            "label": "startup + readiness",
+            "state": "active",
+            "from": "nodes"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "No schedulable headroom",
+        "description": "A higher desired replica count can leave useful capacity unchanged.",
+        "frames": [
+          {
+            "title": "HPA asks for more",
+            "narration": "Metrics justify a larger target within maxReplicas.",
+            "nodes": [
+              {
+                "id": "metric",
+                "label": "Metrics sample",
+                "type": "object",
+                "detail": "Periodic observation",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "hpa",
+                "label": "HPA behavior",
+                "type": "control",
+                "detail": "Bounds + stabilization",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "pods",
+                "label": "New Pods",
+                "type": "pod",
+                "detail": "Desired replica count",
+                "x": 545,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "nodes",
+                "label": "Node capacity",
+                "type": "node",
+                "detail": "Requests must fit",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "ready",
+                "label": "Ready endpoints",
+                "type": "service",
+                "detail": "Useful traffic capacity",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "hpa",
+                "label": "recommendation",
+                "state": "active",
+                "from": "metric"
+              },
+              {
+                "to": "pods",
+                "label": "scale target",
+                "state": "active",
+                "from": "hpa"
+              }
+            ]
+          },
+          {
+            "title": "Pods remain Pending",
+            "narration": "Nodes cannot fit the additional requests or required placement constraints.",
+            "nodes": [
+              {
+                "id": "metric",
+                "label": "Metrics sample",
+                "type": "object",
+                "detail": "Periodic observation",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "hpa",
+                "label": "HPA behavior",
+                "type": "control",
+                "detail": "Bounds + stabilization",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pods",
+                "label": "New Pods",
+                "type": "pod",
+                "detail": "Desired replica count",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "nodes",
+                "label": "Node capacity",
+                "type": "node",
+                "detail": "No node fits incoming Pods",
+                "x": 35,
+                "y": 230,
+                "state": "warning"
+              },
+              {
+                "id": "ready",
+                "label": "Ready endpoints",
+                "type": "service",
+                "detail": "Useful traffic capacity",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "nodes",
+                "label": "schedule",
+                "state": "blocked",
+                "from": "pods"
+              }
+            ]
+          },
+          {
+            "title": "Demand stays queued",
+            "narration": "The intended extra Pods provide no ready endpoints yet; scaling nodes or changing constraints is a separate concern.",
+            "nodes": [
+              {
+                "id": "metric",
+                "label": "Metrics sample",
+                "type": "object",
+                "detail": "Periodic observation",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "hpa",
+                "label": "HPA behavior",
+                "type": "control",
+                "detail": "Bounds + stabilization",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "pods",
+                "label": "New Pods",
+                "type": "pod",
+                "detail": "Desired replica count",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "nodes",
+                "label": "Node capacity",
+                "type": "node",
+                "detail": "Requests must fit",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "ready",
+                "label": "Ready endpoints",
+                "type": "service",
+                "detail": "No new Ready endpoints",
+                "x": 290,
+                "y": 230,
+                "state": "warning"
+              }
+            ],
+            "edges": [
+              {
+                "to": "ready",
+                "label": "startup + readiness",
+                "state": "blocked",
+                "from": "nodes"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m17-l02-hpa-feedback"
+  }
+]

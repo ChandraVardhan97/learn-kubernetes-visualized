@@ -1,0 +1,860 @@
+[
+  {
+    "title": "GitOps owns intention; operator owns implementation",
+    "kind": "ownership",
+    "description": "Status describes processed generation and observed ready count; GitOps acceptance is not synchronous application readiness.",
+    "assumption": "The local GitOps role is modeled by kubectl SSA; a real Argo CD installation is optional.",
+    "frames": [
+      {
+        "title": "Declare the parent",
+        "narration": "kv-gitops applies the WebApp spec, establishing the intended page message and replica count.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops",
+            "type": "actor",
+            "detail": "Owns WebApp spec",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp m20-platform",
+            "type": "object",
+            "detail": "replicas + message",
+            "x": 290,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "op",
+            "label": "kv-webapp-operator",
+            "type": "control",
+            "detail": "Owns child fields",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "children",
+            "label": "Deployment + ConfigMap",
+            "type": "object",
+            "detail": "Owner reference to WebApp UID",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "WebApp status",
+            "type": "object",
+            "detail": "Operator observations",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "human",
+            "label": "kv-human",
+            "type": "actor",
+            "detail": "Conflicting parent declaration",
+            "x": 545,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cr",
+            "label": "SSA parent fields",
+            "state": "active",
+            "from": "git"
+          }
+        ]
+      },
+      {
+        "title": "Derive the children",
+        "narration": "The operator applies stable child names with its own field manager and the parent UID owner reference.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops",
+            "type": "actor",
+            "detail": "Owns WebApp spec",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp m20-platform",
+            "type": "object",
+            "detail": "replicas + message",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "kv-webapp-operator",
+            "type": "control",
+            "detail": "Owns child fields",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "children",
+            "label": "Deployment + ConfigMap",
+            "type": "object",
+            "detail": "Owner reference to WebApp UID",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "status",
+            "label": "WebApp status",
+            "type": "object",
+            "detail": "Operator observations",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "human",
+            "label": "kv-human",
+            "type": "actor",
+            "detail": "Conflicting parent declaration",
+            "x": 545,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "read desired intention",
+            "state": "active",
+            "from": "cr"
+          },
+          {
+            "to": "children",
+            "label": "SSA generated fields",
+            "state": "active",
+            "from": "op"
+          },
+          {
+            "to": "children",
+            "label": "lifecycle owner UID",
+            "state": "active",
+            "from": "cr"
+          }
+        ]
+      },
+      {
+        "title": "Report a separate observation",
+        "narration": "Status describes processed generation and observed ready count; GitOps acceptance is not synchronous application readiness.",
+        "nodes": [
+          {
+            "id": "git",
+            "label": "kv-gitops",
+            "type": "actor",
+            "detail": "Owns WebApp spec",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cr",
+            "label": "WebApp m20-platform",
+            "type": "object",
+            "detail": "replicas + message",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "kv-webapp-operator",
+            "type": "control",
+            "detail": "Owns child fields",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "children",
+            "label": "Deployment + ConfigMap",
+            "type": "object",
+            "detail": "Owner reference to WebApp UID",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "status",
+            "label": "WebApp status",
+            "type": "object",
+            "detail": "Operator observations",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "human",
+            "label": "kv-human",
+            "type": "actor",
+            "detail": "Conflicting parent declaration",
+            "x": 545,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "status",
+            "label": "patch observed state",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "Human conflicts on parent spec",
+        "description": "A different SSA manager attempts a different message value.",
+        "frames": [
+          {
+            "title": "New declaration arrives",
+            "narration": "kv-human applies platform-conflict.yaml against the same WebApp identity.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "kv-gitops",
+                "type": "actor",
+                "detail": "Owns WebApp spec",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cr",
+                "label": "WebApp m20-platform",
+                "type": "object",
+                "detail": "replicas + message",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "op",
+                "label": "kv-webapp-operator",
+                "type": "control",
+                "detail": "Owns child fields",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "children",
+                "label": "Deployment + ConfigMap",
+                "type": "object",
+                "detail": "Owner reference to WebApp UID",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "WebApp status",
+                "type": "object",
+                "detail": "Operator observations",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "kv-human",
+                "type": "actor",
+                "detail": "Conflicting parent declaration",
+                "x": 545,
+                "y": 230,
+                "state": "active"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cr",
+                "label": "different message",
+                "state": "active",
+                "from": "human"
+              }
+            ]
+          },
+          {
+            "title": "Owned field differs",
+            "narration": "The requested spec.message conflicts with kv-gitops ownership.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "kv-gitops",
+                "type": "actor",
+                "detail": "Owns WebApp spec",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cr",
+                "label": "WebApp m20-platform",
+                "type": "object",
+                "detail": "Original WebApp fields retained",
+                "x": 290,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "op",
+                "label": "kv-webapp-operator",
+                "type": "control",
+                "detail": "Owns child fields",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "children",
+                "label": "Deployment + ConfigMap",
+                "type": "object",
+                "detail": "Owner reference to WebApp UID",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "WebApp status",
+                "type": "object",
+                "detail": "Operator observations",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "kv-human",
+                "type": "actor",
+                "detail": "Conflicting parent declaration",
+                "x": 545,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cr",
+                "label": "conflict: spec.message belongs to kv-gitops",
+                "state": "blocked",
+                "from": "human"
+              }
+            ]
+          },
+          {
+            "title": "Conflict preserves the contract",
+            "narration": "The script expects rejection; forcing would intentionally change the ownership decision being tested.",
+            "nodes": [
+              {
+                "id": "git",
+                "label": "kv-gitops",
+                "type": "actor",
+                "detail": "Owns WebApp spec",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cr",
+                "label": "WebApp m20-platform",
+                "type": "object",
+                "detail": "Original WebApp fields retained",
+                "x": 290,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "op",
+                "label": "kv-webapp-operator",
+                "type": "control",
+                "detail": "Owns child fields",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "children",
+                "label": "Deployment + ConfigMap",
+                "type": "object",
+                "detail": "Owner reference to WebApp UID",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "status",
+                "label": "WebApp status",
+                "type": "object",
+                "detail": "Operator observations",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "human",
+                "label": "kv-human",
+                "type": "actor",
+                "detail": "Conflicting parent declaration",
+                "x": 545,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "cr",
+                "label": "conflict: spec.message belongs to kv-gitops",
+                "state": "blocked",
+                "from": "human"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m20-l03-platform-ownership"
+  },
+  {
+    "title": "Repeat, repair, then collect owned children",
+    "kind": "lifecycle",
+    "description": "Removing the WebApp lets garbage collection remove its owned children; the operator does not recreate the absent parent.",
+    "assumption": "The teaching controller manages only Kubernetes resources and supplies no external cleanup finalizer or production HA machinery.",
+    "frames": [
+      {
+        "title": "Repeat without replacement",
+        "narration": "Multiple passes preserve Deployment UID when the desired child identity remains valid.",
+        "nodes": [
+          {
+            "id": "cr",
+            "label": "WebApp parent",
+            "type": "object",
+            "detail": "Current UID and intent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Reconcile passes",
+            "type": "control",
+            "detail": "Stable naming + ownership checks",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment",
+            "type": "object",
+            "detail": "UID stable on repeat",
+            "x": 545,
+            "y": 45,
+            "state": "active"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "Recreated after deletion",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Deletes dependents after parent",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "op",
+            "label": "desired state",
+            "state": "active",
+            "from": "cr"
+          },
+          {
+            "to": "dep",
+            "label": "repeat apply",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      },
+      {
+        "title": "Repair deleted configuration",
+        "narration": "Deleting the ConfigMap creates drift; another pass recreates current desired page content with a new child UID.",
+        "nodes": [
+          {
+            "id": "cr",
+            "label": "WebApp parent",
+            "type": "object",
+            "detail": "Current UID and intent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Reconcile passes",
+            "type": "control",
+            "detail": "Stable naming + ownership checks",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment",
+            "type": "object",
+            "detail": "UID stable on repeat",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "Recreated after deletion",
+            "x": 35,
+            "y": 230,
+            "state": "active"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Deletes dependents after parent",
+            "x": 290,
+            "y": 230,
+            "state": "idle"
+          }
+        ],
+        "edges": [
+          {
+            "to": "cm",
+            "label": "repair missing child",
+            "state": "active",
+            "from": "op"
+          }
+        ]
+      },
+      {
+        "title": "Delete the parent intention",
+        "narration": "Removing the WebApp lets garbage collection remove its owned children; the operator does not recreate the absent parent.",
+        "nodes": [
+          {
+            "id": "cr",
+            "label": "WebApp parent",
+            "type": "object",
+            "detail": "Current UID and intent",
+            "x": 35,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "op",
+            "label": "Reconcile passes",
+            "type": "control",
+            "detail": "Stable naming + ownership checks",
+            "x": 290,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "dep",
+            "label": "Deployment",
+            "type": "object",
+            "detail": "UID stable on repeat",
+            "x": 545,
+            "y": 45,
+            "state": "idle"
+          },
+          {
+            "id": "cm",
+            "label": "ConfigMap",
+            "type": "object",
+            "detail": "Recreated after deletion",
+            "x": 35,
+            "y": 230,
+            "state": "idle"
+          },
+          {
+            "id": "gc",
+            "label": "Garbage collector",
+            "type": "control",
+            "detail": "Deletes dependents after parent",
+            "x": 290,
+            "y": 230,
+            "state": "active"
+          }
+        ],
+        "edges": [
+          {
+            "to": "gc",
+            "label": "owner deletion",
+            "state": "active",
+            "from": "cr"
+          },
+          {
+            "to": "dep",
+            "label": "collect",
+            "state": "active",
+            "from": "gc"
+          },
+          {
+            "to": "cm",
+            "label": "collect",
+            "state": "active",
+            "from": "gc"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "id": "failure",
+        "label": "GitOps also owns child fields",
+        "description": "Overlapping declarations undermine the parent-to-implementation boundary.",
+        "frames": [
+          {
+            "title": "Two sources declare the child",
+            "narration": "GitOps applies generated Deployment fields independently from the operator.",
+            "nodes": [
+              {
+                "id": "cr",
+                "label": "WebApp parent",
+                "type": "object",
+                "detail": "Current UID and intent",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Reconcile passes",
+                "type": "control",
+                "detail": "Stable naming + ownership checks",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment",
+                "type": "object",
+                "detail": "UID stable on repeat",
+                "x": 545,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Recreated after deletion",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Deletes dependents after parent",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "gitops",
+                "label": "GitOps controller",
+                "detail": "Also declares generated fields",
+                "type": "control",
+                "state": "active",
+                "x": 545,
+                "y": 230
+              }
+            ],
+            "edges": [
+              {
+                "to": "dep",
+                "label": "competing child declaration",
+                "state": "active",
+                "from": "gitops"
+              }
+            ]
+          },
+          {
+            "title": "Reconciliation conflicts or oscillates",
+            "narration": "The managers disagree or repeatedly take fields from each other.",
+            "nodes": [
+              {
+                "id": "cr",
+                "label": "WebApp parent",
+                "type": "object",
+                "detail": "Current UID and intent",
+                "x": 35,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "op",
+                "label": "Reconcile passes",
+                "type": "control",
+                "detail": "Stable naming + ownership checks",
+                "x": 290,
+                "y": 45,
+                "state": "idle"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment",
+                "type": "object",
+                "detail": "UID stable on repeat",
+                "x": 545,
+                "y": 45,
+                "state": "warning"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Recreated after deletion",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Deletes dependents after parent",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "gitops",
+                "label": "GitOps controller",
+                "detail": "Also declares generated fields",
+                "type": "control",
+                "state": "active",
+                "x": 545,
+                "y": 230
+              }
+            ],
+            "edges": [
+              {
+                "to": "dep",
+                "label": "competing write or field conflict",
+                "state": "blocked",
+                "from": "op"
+              },
+              {
+                "to": "dep",
+                "label": "competing child declaration",
+                "state": "active",
+                "from": "gitops"
+              }
+            ]
+          },
+          {
+            "title": "Restore the boundary",
+            "narration": "Remove redundant child declarations and keep the parent API as the shared intention contract.",
+            "nodes": [
+              {
+                "id": "cr",
+                "label": "WebApp parent",
+                "type": "object",
+                "detail": "Current UID and intent",
+                "x": 35,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "op",
+                "label": "Reconcile passes",
+                "type": "control",
+                "detail": "Stable naming + ownership checks",
+                "x": 290,
+                "y": 45,
+                "state": "active"
+              },
+              {
+                "id": "dep",
+                "label": "Deployment",
+                "type": "object",
+                "detail": "Operator owns generated fields",
+                "x": 545,
+                "y": 45,
+                "state": "ready"
+              },
+              {
+                "id": "cm",
+                "label": "ConfigMap",
+                "type": "object",
+                "detail": "Recreated after deletion",
+                "x": 35,
+                "y": 230,
+                "state": "idle"
+              },
+              {
+                "id": "gc",
+                "label": "Garbage collector",
+                "type": "control",
+                "detail": "Deletes dependents after parent",
+                "x": 290,
+                "y": 230,
+                "state": "idle"
+              }
+            ],
+            "edges": [
+              {
+                "to": "op",
+                "label": "desired state",
+                "state": "active",
+                "from": "cr"
+              },
+              {
+                "to": "dep",
+                "label": "apply derived fields",
+                "state": "active",
+                "from": "op"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "id": "m20-l03-platform-recovery"
+  }
+]

@@ -1,0 +1,166 @@
+---
+{
+  "lessonId": "m04-l03",
+  "title": "Configuration and Secrets",
+  "description": "Inject configuration with explicit update semantics and protect secret material beyond base64.",
+  "level": "foundations",
+  "module": "m04",
+  "order": 3,
+  "minutes": 14,
+  "prerequisites": [
+    "m04-l02"
+  ],
+  "objectives": [
+    "Use ConfigMaps and Secrets through explicit Pod references",
+    "Predict environment and mounted-file updates",
+    "Explain why base64 does not provide confidentiality"
+  ],
+  "concepts": [
+    {
+      "id": "m04-l03-configmaps",
+      "title": "ConfigMaps",
+      "scene": "m04-l03-config"
+    },
+    {
+      "id": "m04-l03-configuration-updates",
+      "title": "Configuration update semantics",
+      "scene": "m04-l03-config"
+    },
+    {
+      "id": "m04-l03-secrets",
+      "title": "Secrets and confidentiality",
+      "scene": "m04-l03-secret"
+    }
+  ],
+  "sources": [
+    {
+      "title": "ConfigMaps",
+      "url": "https://kubernetes.io/docs/concepts/configuration/configmap/"
+    },
+    {
+      "title": "Secrets",
+      "url": "https://kubernetes.io/docs/concepts/configuration/secret/"
+    },
+    {
+      "title": "Good practices for Kubernetes Secrets",
+      "url": "https://kubernetes.io/docs/concepts/security/secrets-good-practices/"
+    },
+    {
+      "title": "Distribute credentials securely",
+      "url": "https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/"
+    }
+  ],
+  "lab": "m04",
+  "reviewed": "2026-10-27",
+  "kubernetesVersion": "1.37"
+}
+---
+
+import Scene from '../../../components/Scene.astro';
+
+## Mental model: configuration is a separate input
+
+An image packages executable code and defaults. A ConfigMap supplies non-confidential deployment configuration without rebuilding that image. A Secret supplies sensitive values through a resource type designed for secret handling. Separating these inputs lets the same executable run in different environments, but it also creates dependencies: the referenced object and key must exist in the correct namespace before an ordinary required reference can be prepared successfully.
+
+A ConfigMap stores string data under `data` and binary content under `binaryData`. It is not an encrypted credential store. A Secret commonly uses `data` containing base64-encoded bytes, with `stringData` available as a write-time convenience for plain strings. Base64 is reversible encoding, not encryption. Anyone permitted to read a Secret's data can decode it. Putting a password into a YAML file under `stringData` leaves plaintext in that file and any repository or terminal history that records it.
+
+Security depends on the full access path: least-privilege API authorization, restricted workload creation, protection of node access, encryption at rest where configured, and careful application handling. Permission to create a Pod in a namespace can indirectly expose that namespace's Secrets by mounting them. Do not assess Secret safety solely by whether a user can run `get secret`.
+
+<Scene id="m04-l03-secret" />
+
+## Walkthrough: project ordinary settings and a dummy credential
+
+This complete training manifest uses an intentionally fake token. Never replace it with a real credential in a committed example. The Pod prints only the non-sensitive setting and checks that the Secret file exists; it does not print Secret content.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: application-settings
+data:
+  MODE: "training"
+  settings.ini: |
+    color=blue
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: application-token
+type: Opaque
+stringData:
+  token: "dummy-training-value"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: configuration-demo
+spec:
+  containers:
+    - name: app
+      image: busybox:1.36.1
+      command: ["sh", "-c", "echo mode=$MODE; test -s /run/token/token && sleep 3600"]
+      env:
+        - name: MODE
+          valueFrom:
+            configMapKeyRef:
+              name: application-settings
+              key: MODE
+      volumeMounts:
+        - name: settings
+          mountPath: /etc/application
+          readOnly: true
+        - name: token
+          mountPath: /run/token
+          readOnly: true
+  volumes:
+    - name: settings
+      configMap:
+        name: application-settings
+    - name: token
+      secret:
+        secretName: application-token
+        defaultMode: 0444 # Training default; choose access for the actual app user.
+```
+
+Apply the three documents together in one dedicated lab namespace. Because object processing is asynchronous, a Pod may temporarily report missing configuration while the other documents are being created. Required references are retried as preparation proceeds. Inspect the concrete key and namespace if the condition persists.
+
+```bash
+kubectl apply -f configuration-demo.yaml
+kubectl describe pod configuration-demo
+kubectl logs configuration-demo -c app
+# Inspect non-secret projected configuration only.
+kubectl exec configuration-demo -c app -- cat /etc/application/settings.ini
+```
+
+Expect `mode=training` in logs and `color=blue` in the non-secret file. The test command checks the dummy token file without echoing it. The `&&` chain keeps the application waiting only after that file check succeeds; if the check fails, this shell exits instead. This makes the required input explicit without placing its sensitive content in logs. Validate failure behavior as well as the successful startup path.
+
+<Scene id="m04-l03-config" />
+
+## Practice: predict configuration refresh
+
+Environment variables are established when a container starts. Updating the ConfigMap does not rewrite the environment of an already running process. A projected ConfigMap or Secret volume can refresh eventually, with propagation delay governed by node update behavior. A `subPath` mount does not receive these automatic updates. Even when the file changes, an application that read it once at startup will retain its old in-memory settings until it reloads or restarts.
+
+Change only `settings.ini` to `color=green`, apply, and inspect the mounted file after allowing for propagation. Then change `MODE` to another value and observe that the existing process environment does not automatically update. A deliberate workload rollout can create containers with the new environment. Versioned configuration names can make release identity clearer, provided you manage references and cleanup consciously.
+
+## Pitfalls
+
+Updating a Secret is not a complete credential rotation. Consumers must reload it, old credentials may need revocation, and dependent systems must accept the new value during the transition. Logs, crash dumps, shell history, and debug output can disclose values after successful injection. Minimize what each container mounts, and use fake credentials during demonstrations.
+
+## Check your understanding
+
+<details>
+
+<summary>The Secret object changed, but the application still uses its old password. Did base64 prevent the update?</summary>
+
+No. Encoding does not control refresh. Determine whether the value was injected as an environment variable, mounted as a normal projected volume, or mounted with subPath. Then determine whether the application rereads files or caches credentials in memory. Rotation requires both delivery of new bytes and consumer adoption, plus revocation policy outside this Pod.
+
+</details>
+
+Practice both update paths with dummy values in the [module lab](/labs/#m04), then delete the dedicated training resources.
+
+## Primary documentation
+
+- [ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/)
+- [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+- [Good practices for Kubernetes Secrets](https://kubernetes.io/docs/concepts/security/secrets-good-practices/)
+- [Distribute credentials securely](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/)
