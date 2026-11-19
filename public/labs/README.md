@@ -2,16 +2,24 @@
 
 This bundle contains 20 module labs, three cumulative capstone procedures in m20, and kind.yaml. All resources target the disposable kind-kv-lab context and kv-lab namespace. Use Docker, kind v0.33.0, kubectl v1.37.x and Python 3. Scripts fail closed if the named cluster/context identity does not match. Read each module's README before running it.
 
+## Prepare your machine
+
+- **macOS:** Start [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and open Terminal. Use the Darwin builds of kind and kubectl for your Apple Silicon (ARM64) or Intel (AMD64) Mac. Install Python 3 if needed.
+- **Windows:** Set up [Ubuntu on WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) and [enable Docker Desktop's WSL integration](https://docs.docker.com/desktop/features/wsl/) for Ubuntu in Linux containers mode. Install Python 3 and the Linux builds of kind and kubectl inside Ubuntu. Extract this bundle in your Ubuntu home directory and run the lab commands from Ubuntu's Bash shell. An end-to-end run on Windows WSL 2 is pending.
+
+Use the version-pinned tools above. Confirm Docker is running with `docker version` and check the CLI versions with `kind version`, `kubectl version --client`, and `python3 --version`. See the [website setup guide](https://kubernetes-visualized.chandravardhanb.workers.dev/labs/#setup) for installation links and expected results.
+
 ## Setup
 
 ```bash
 # From this extracted bundle directory. Keep this shell's KUBECONFIG set for the labs.
 export KUBECONFIG="$PWD/kv-lab.kubeconfig"
 kind create cluster --name kv-lab --config kind.yaml --wait 180s
+kubectl --context kind-kv-lab wait --for=condition=Ready nodes --all --timeout=180s
 kubectl --context kind-kv-lab get nodes
-cd m02
-bash run.sh
-bash cleanup.sh
+(
+  cd m02 && bash run.sh && bash cleanup.sh
+)
 ```
 
 Every module requires all files in its directory. Run scripts with Bash; executable permission is not required. The runner never changes your active context. Cluster creation writes only the kubeconfig selected above.
