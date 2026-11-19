@@ -250,8 +250,16 @@ kbd { background: var(--frame); border-radius: 4px; padding: 1px 5px; font-size:
 .lab-setup > summary > svg { transition: transform .2s; flex: 0 0 auto; }
 .lab-setup[open] > summary > svg { transform: rotate(180deg); }
 .lab-setup-body { padding: 0 26px 24px; }
-.lab-setup-body p { font-size: 15px; line-height: 1.75; max-width: 75ch; }
-.lab-setup-body pre { background: var(--surface) !important; margin: 20px 0; }
+.lab-setup-body :is(p, li) { font-size: 15px; line-height: 1.75; max-width: 75ch; }
+.lab-setup-body a:not(.text-link) { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.lab-setup-body :not(pre) > code { font-family: 'IBM Plex Mono', monospace; font-size: .85em; overflow-wrap: anywhere; }
+.lab-platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 24px; margin: 24px 0; }
+.lab-platforms section { border-top: 1px solid var(--control); padding-top: 16px; }
+.lab-platforms ol { margin: 0; padding-left: 22px; }
+.lab-platforms li + li { margin-top: 10px; }
+.lab-setup-step { border-top: 1px solid var(--border); padding-top: 22px; margin-top: 24px; }
+.lab-setup-step h3, .lab-platforms h3 { margin-bottom: 10px; }
+.lab-setup-body pre { background: var(--surface) !important; margin: 20px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .lab-setup-body .lab-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: 14px; }
 .lab-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 0 0 25px; }
 .lab-filters { display: flex; gap: 5px; flex-wrap: wrap; }

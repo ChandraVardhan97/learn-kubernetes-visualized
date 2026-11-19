@@ -6,21 +6,22 @@ The 20 module labs and three cumulative capstones run on a named, disposable kin
 
 Install Docker, kind **v0.33.0**, kubectl **v1.37.x**, and Python 3. Docker must be running and able to pull public images. Use the official [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/) and check release checksums when installing binaries. Start Docker Desktop with enough memory for a control plane and workers; 6–8 GiB available to Docker is a useful starting allocation, not a measured minimum. Optional Argo CD and recovery add workloads or another control plane.
 
+Use Terminal on macOS and Ubuntu's Bash shell on Windows. The website's [platform setup instructions](https://kubernetes-visualized.chandravardhanb.workers.dev/labs/#setup) cover Docker Desktop, WSL 2 integration, and which binaries to install. The full suite was verified on Apple Silicon macOS. Windows via WSL 2 still needs an end-to-end run.
+
 The node image is pinned to the multiarchitecture digest published by the [kind v0.33.0 release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0):
 
 ```
 kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
 ```
 
-After downloading `/labs/kind.yaml`:
+From the extracted bundle directory containing `kind.yaml`:
 
 ```bash
 # A separate kubeconfig file prevents kind creation from changing your usual current context.
 export KUBECONFIG="$PWD/kv-lab.kubeconfig"
 kind create cluster --name kv-lab --config kind.yaml --wait 180s
+kubectl --context kind-kv-lab wait --for=condition=Ready nodes --all --timeout=180s
 kubectl --context kind-kv-lab get nodes
-kubectl --context kind-kv-lab create namespace kv-lab --dry-run=client -o yaml |
-  kubectl --context kind-kv-lab apply -f -
 ```
 
 Leave that `KUBECONFIG` set while running downloaded labs, or merge it yourself after reviewing contexts. All lab scripts verify `kind-kv-lab` maps to the expected cluster and that its API node names match `kind get nodes --name kv-lab`. Every Kubernetes operation explicitly selects the context; namespaced operations select `kv-lab`. Scripts do not call `use-context` or `set-context`. A missing dependency, absent cluster or identity mismatch fails before the exercise changes resources.
