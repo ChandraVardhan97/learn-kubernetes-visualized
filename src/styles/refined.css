@@ -272,7 +272,7 @@ kbd { background: var(--frame); border-radius: 4px; padding: 1px 5px; font-size:
 .lab-platforms li + li { margin-top: 10px; }
 .lab-setup-step { border-top: 1px solid var(--border); padding-top: 22px; margin-top: 24px; }
 .lab-setup-step h3, .lab-platforms h3 { margin-bottom: 10px; }
-.lab-setup-body pre { background: var(--surface) !important; margin: 20px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lab-setup-body pre { background: var(--surface) !important; white-space: pre-wrap; overflow-wrap: anywhere; }
 .lab-setup-body .lab-links { display: flex; flex-wrap: wrap; gap: 20px; font-size: 14px; }
 .lab-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 0 0 25px; }
 .lab-filters { display: flex; gap: 5px; flex-wrap: wrap; }

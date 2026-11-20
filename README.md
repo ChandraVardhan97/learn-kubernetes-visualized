@@ -2,7 +2,7 @@
 
 An interactive visual textbook for building a practical, accurate mental model of Kubernetes, from containers through control-plane internals and platform operations.
 
-[Open Kubernetes, Visualized](https://kubernetes-visualized.chandravardhanb.workers.dev/)
+[Open Kubernetes, Visualized](https://k8s-visualized.pages.dev/)
 
 ## Run locally
 
@@ -56,7 +56,7 @@ See [the content contract](docs/CONTENT-CONTRACT.md), [contribution guide](CONTR
 
 ## Publishing and rights
 
-Cloudflare Workers Static Assets is the chosen free host. Build and learning functionality do not need an account. Hosting requires your own Cloudflare sign-in and a free project hostname. Set `SITE_URL` to the actual deployed URL for canonical links and sitemap generation.
+Cloudflare Pages is the public address. Cloudflare Workers Static Assets also builds from `main`. Build and learning functionality do not need an account. To host your own copy, sign in to Cloudflare and set `SITE_URL` to its public address for canonical links and sitemap generation.
 
 The owner has not yet chosen an open-source license or published the repository. Do not infer a license from a public website. Third-party software and font licenses remain with their authors; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 

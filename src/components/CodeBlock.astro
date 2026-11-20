@@ -1,0 +1,7 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+
+type Props = HTMLAttributes<'pre'>;
+---
+
+<code-snippet><pre {...Astro.props}><slot /></pre></code-snippet>

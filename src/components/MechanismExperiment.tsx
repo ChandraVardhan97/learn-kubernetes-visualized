@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {authorize,bindVolume,endpoints,operatorPlan,schedule} from '../lib/simulations';
 import type {Frame} from '../lib/scene-types';
 import {Diagram} from './Diagram';
+import CodeBlock from './CodeBlock';
 export type ExperimentKind='scheduling'|'endpoints'|'storage'|'authorization'|'operator';
 export default function MechanismExperiment({kind}:{kind:ExperimentKind}){
  const [value,setValue]=useState(1),[flag,setFlag]=useState(false),[second,setSecond]=useState(false);
@@ -44,5 +45,5 @@ ${flag?'  nodeSelector:\n    accelerator: gpu\n':''}  containers:
   controls=<><label>Desired replicas: {value}<input aria-label="Operator desired replicas" type="range" min="1" max="5" value={value} onChange={e=>setValue(+e.target.value)}/></label><label className="check-control"><input type="checkbox" checked={flag} onChange={e=>setFlag(e.target.checked)}/>Introduce drift: observed replicas stay at 2</label></>;
   code=`apiVersion: labs.kv.example/v1alpha1\nkind: WebApp\nmetadata:\n  name: example\n  namespace: kv-lab\nspec:\n  replicas: ${value}\n  message: Hello from the control loop\n# Child Deployment.spec.replicas target: ${value}`;
  }
- return <details className="mechanism-experiment"><summary>Try the mechanism with your own inputs</summary><div className="experiment-controls">{controls}</div><Diagram frame={frame} kind={kind==='authorization'?'policy':kind==='operator'?'ownership':kind==='endpoints'?'flow':kind}/><div className="scene-narration" aria-live="polite"><strong>{frame.title}</strong><p>{frame.narration}</p></div><pre><code>{code}</code></pre></details>;
+ return <details className="mechanism-experiment"><summary>Try the mechanism with your own inputs</summary><div className="experiment-controls">{controls}</div><Diagram frame={frame} kind={kind==='authorization'?'policy':kind==='operator'?'ownership':kind==='endpoints'?'flow':kind}/><div className="scene-narration" aria-live="polite"><strong>{frame.title}</strong><p>{frame.narration}</p></div><CodeBlock code={code}/></details>;
 }

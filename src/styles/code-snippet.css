@@ -1,0 +1,61 @@
+code-snippet {
+  display: block;
+  min-inline-size: 0;
+  margin-block: 1em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code);
+}
+
+code-snippet > pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0 0 7px 7px;
+}
+
+.lab-setup-body code-snippet { margin-block: 20px; }
+
+code-snippet::part(toolbar) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 8px;
+  border-block-end: 1px solid var(--border);
+  font: 500 12px/1.4 'IBM Plex Sans', sans-serif;
+}
+
+code-snippet::part(status) { color: var(--muted); }
+
+code-snippet::part(button) {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-block-size: 36px;
+  padding-inline: 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+code-snippet::part(button):hover {
+  border-color: var(--control);
+  background: var(--surface);
+}
+
+code-snippet::part(button):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (pointer: coarse) {
+  code-snippet::part(button) { min-block-size: 44px; }
+}
+
+@media print {
+  code-snippet::part(toolbar) { display: none; }
+}
