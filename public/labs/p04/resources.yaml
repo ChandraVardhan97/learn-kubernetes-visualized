@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: p04-reader
+  namespace: kv-lab
+  labels:
+    lab: p04
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: p04-reader
+  namespace: kv-lab
+  labels:
+    lab: p04
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: p04-reader
+  namespace: kv-lab
+  labels:
+    lab: p04
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: p04-reader
+subjects:
+  - kind: ServiceAccount
+    name: p04-reader
+    namespace: kv-lab

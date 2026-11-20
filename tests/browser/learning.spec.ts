@@ -125,6 +125,36 @@ test('search finds rendered lesson text and direct anchors resolve',async({page}
  await expect(page.locator('#setup')).toHaveAttribute('open','');
 });
 
+test('lab deep link keeps the solution closed until requested and copies the repair', async ({page, context}) => {
+ await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+ await page.setViewportSize({width: 390, height: 900});
+ await page.goto('/labs/#m06');
+ const lab = page.locator('#m06');
+ await expect(lab.getByRole('heading', {name: 'Objective', exact: true})).toBeVisible();
+ await lab.getByText('Requirements & expected results', {exact: true}).click();
+ await expect(lab.getByRole('heading', {name: 'Initial state'})).toBeVisible();
+ await lab.getByText('Run, inspect & clean up', {exact: true}).click();
+ await expect(lab.getByRole('heading', {name: 'Diagnose'})).toBeVisible();
+ await expect(lab.locator('pre code').filter({hasText:'kubernetes.io/service-name=m06'})).toBeVisible();
+
+ const solution = lab.locator('details').filter({has:page.getByText('Solution', {exact: true})});
+ const code = solution.locator('pre code');
+ await expect(code).toBeHidden();
+ await solution.locator('summary').press('Enter');
+ await expect(code).toBeVisible();
+ await solution.getByRole('button', {name:'Copy code', exact:true}).press('Enter');
+ await expect(solution.getByRole('status')).toHaveText('Copied');
+ expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await code.textContent());
+ expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+ const download = page.waitForEvent('download');
+ await page.getByRole('link', {name:'Download the labs', exact:true}).click();
+ expect((await download).suggestedFilename()).toBe('kv-labs.zip');
+ await page.goto('/labs/#m20-stateful');
+ await expect(page.getByRole('heading', {name:'Restore a deleted file and replace its Pod'})).toBeVisible();
+ await expect(page.locator('#m18')).toHaveCount(1);
+});
+
 test('copy preserves static commands and current interactive YAML', async ({page, context}) => {
  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
 

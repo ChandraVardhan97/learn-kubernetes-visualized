@@ -1,34 +1,92 @@
-# m11: Prove a ServiceAccount can read Pods but cannot read Secrets
+# Demonstrate a least-privilege ServiceAccount
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Read the Role and its binding, prove the allowed and denied actions, and inspect security settings on the Pod.
 
-## Expected observations
-RBAC impersonation permits list pods and denies get secrets in kv-lab. A non-root Pod uses a read-only filesystem, dropped capabilities and no automatic ServiceAccount token.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m11 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m11
-```
+**Requirements**
 
-## Scope and prerequisites
-Impersonation requires the current kind administrator permission. It tests authorization, not login or token verification. Pod securityContext is not an admission policy. Enable Pod Security Admission labels on a separate disposable namespace to explore rejection; do not relabel this shared lab namespace mid-course.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- The disposable kind administrator must be able to impersonate the exercise ServiceAccount.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+Setup makes a reader Role and a RoleBinding for m11-reader, then starts a restricted Pod that uses the ServiceAccount without an automatic token mount.
+
+**Expected results**
+
+- The account can list Pods in kv-lab and is denied a Secret read.
+- The process runs as UID 1000 and the Pod has automatic token mounting disabled.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Create the ServiceAccount, Role, RoleBinding and Pod.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/m11 --timeout=180s
+   )
+   ```
+
+## Diagnose
+
+1. Inspect the binding subject and the actions allowed by the referenced Role.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get role m11-reader -o yaml
+     kubectl --context kind-kv-lab -n kv-lab get rolebinding m11-reader -o yaml
+     kubectl --context kind-kv-lab -n kv-lab get pod m11 -o yaml
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. The binding grants the account listed in its subject the namespaced verbs from the Role. Kubernetes authorizes the API action independently from the UID and capabilities inside the container.
+
+</details>
+
+## Verify
+
+1. Impersonate the account for allow and deny checks. Then inspect the running container UID and token-mount setting.
+
+   ```bash
+   (
+     set -euo pipefail
+     identity=system:serviceaccount:kv-lab:m11-reader
+     test "$(kubectl --context kind-kv-lab -n kv-lab auth can-i list pods --as="$identity")" = yes
+     test "$(kubectl --context kind-kv-lab -n kv-lab auth can-i get secrets --as="$identity")" = no
+     test "$(kubectl --context kind-kv-lab -n kv-lab exec m11 -- id -u)" = 1000
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod m11 -o jsonpath='{.spec.automountServiceAccountToken}')" = false
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [RBAC authorization](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [Security contexts](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)

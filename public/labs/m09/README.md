@@ -1,34 +1,105 @@
-# m09: Verify a PVC survives replacement of its consuming Pod
+# Keep a PVC file across Pod replacement
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Follow the PVC to its bound volume and verify that replacing its consumer leaves stored content intact.
 
-## Expected observations
-The default StorageClass provisions and binds a volume after the consumer is scheduled. A file written into /data remains after deleting and recreating the Pod.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m09 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m09
-```
+**Requirements**
 
-## Scope and prerequisites
-kind local-path storage is tied to the node container and is not distributed or replicated. ReadWriteOnce means one node, not one Pod. Snapshot APIs require VolumeSnapshot CRDs, a snapshot controller and a CSI driver that supports snapshots; the default local-path provisioner is not a CSI snapshot backend. This lab proves Pod-level persistence, not snapshot recovery or node-loss durability.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Use the default local-path provisioner. This lab demonstrates a Pod replacement on local storage.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+The fixture creates PVC m09 and its consumer Pod. The default StorageClass provisions a local volume once the consumer is placed.
+
+**Expected results**
+
+- The claim becomes Bound.
+- A new Pod reads the original marker from /data/proof.txt and uses the same PV.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Create the claim and its first consumer.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/m09 --timeout=180s
+   )
+   ```
+
+## Diagnose
+
+1. Inspect the claim, StorageClass binding mode, mount and backing PV.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get pvc m09
+     kubectl --context kind-kv-lab get storageclass
+     volume=$(kubectl --context kind-kv-lab -n kv-lab get pvc m09 -o jsonpath='{.spec.volumeName}')
+     kubectl --context kind-kv-lab get pv "$volume"
+     kubectl --context kind-kv-lab -n kv-lab describe pod m09
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Write the marker, replace only the Pod, and compare the old and new UIDs and volume bindings.
+
+   ```bash
+   (
+     set -euo pipefail
+     old=$(kubectl --context kind-kv-lab -n kv-lab get pod m09 -o jsonpath='{.metadata.uid}')
+     volume=$(kubectl --context kind-kv-lab -n kv-lab get pvc m09 -o jsonpath='{.spec.volumeName}')
+     kubectl --context kind-kv-lab -n kv-lab exec m09 -- sh -c 'echo survives-pod-replacement > /data/proof.txt'
+     kubectl --context kind-kv-lab -n kv-lab delete pod m09 --wait=true
+     kubectl --context kind-kv-lab -n kv-lab apply -f consumer.yaml
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/m09 --timeout=180s
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod m09 -o jsonpath='{.metadata.uid}')" != "$old"
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pvc m09 -o jsonpath='{.spec.volumeName}')" = "$volume"
+   )
+   ```
+
+</details>
+
+## Verify
+
+1. Read the existing marker from the replacement Pod.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pvc m09 -o jsonpath='{.status.phase}')" = Bound
+     test "$(kubectl --context kind-kv-lab -n kv-lab exec m09 -- cat /data/proof.txt)" = survives-pod-replacement
+   )
+   ```
+
+## Clean up
+
+1. Remove the Pod and claim. The lab provisioner will reclaim the volume and delete the teaching file.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
+- [StorageClasses](https://kubernetes.io/docs/concepts/storage/storage-classes/)

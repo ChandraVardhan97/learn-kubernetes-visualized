@@ -1,34 +1,80 @@
-# m07: Explain a Pending Pod from its impossible placement constraint
+# Explain why a Pod is Pending
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Use scheduling conditions and node labels to trace an impossible placement constraint.
 
-## Expected observations
-m07-allowed runs. m07-pending remains Pending with PodScheduled=False and an Unschedulable reason because no node has the requested label.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m07 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m07
-```
+**Requirements**
 
-## Scope and prerequisites
-The failure is deterministic placement, not artificial node exhaustion. Burstable QoS follows unequal request/limit values. Affinity, topology spread, quotas and taints need separate constraints; this does not claim their behavior is identical.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Use the default lab nodes. Leave their labels unchanged for this exercise.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+m07-allowed can schedule, while m07-pending requests a node label absent from the cluster. The runner waits for the expected status of both.
+
+**Expected results**
+
+- m07-pending is Pending with PodScheduled=False and reason Unschedulable.
+- m07-allowed is Ready and reports Burstable QoS.
+
+## Setup
+
+1. Create the two Pod fixtures.
+
+   ```bash
+   bash run.sh
+   ```
+
+## Diagnose
+
+1. Read the scheduling condition and compare the requested selector to actual node labels.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab describe pod m07-pending
+     kubectl --context kind-kv-lab -n kv-lab get pod m07-pending -o jsonpath='{.spec.nodeSelector}{"\n"}'
+     kubectl --context kind-kv-lab get nodes --show-labels
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. The selector is a hard scheduling requirement, so the scheduler rejects every node. Burstable QoS is a separate consequence of the allowed Pod resource configuration. Leave the two fixtures as they are to preserve the comparison.
+
+</details>
+
+## Verify
+
+1. Confirm the two distinct outcomes.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod m07-pending -o 'jsonpath={.status.conditions[?(@.type=="PodScheduled")].reason}')" = Unschedulable
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod m07-allowed -o jsonpath='{.status.qosClass}')" = Burstable
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/m07-allowed --timeout=60s
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/)
+- [Pod QoS](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/)

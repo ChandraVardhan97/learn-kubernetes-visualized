@@ -22,6 +22,7 @@ export KUBECONFIG="$backup_dir/recovery.kubeconfig"
 kind create cluster --name kv-recovery --config recovery-kind.yaml --wait 180s
 node=kv-recovery-control-plane
 [ "$(kind get nodes --name kv-recovery)" = "$node" ] || exit 2
+docker inspect --format '{{.Id}}' "$node" > "$backup_dir/recovery-node-id"
 etcd_image=$(kubectl --context kind-kv-recovery -n kube-system get pod etcd-kv-recovery-control-plane -o jsonpath='{.spec.containers[0].image}')
 # The tool image comes from the recovery static Pod and matches its etcd version.
 docker create --name kv-recovery-etcd-tool "$etcd_image" >/dev/null
@@ -54,4 +55,4 @@ for attempt in $(seq 1 90); do
 done
 [ "$(kubectl --context kind-kv-recovery -n kv-lab get configmap m18 -o jsonpath='{.data.marker}')" = captured-before-disaster ]
 echo 'Recovered marker visible through separate kind-kv-recovery API. Original kv-lab was never stopped or restored.'
-printf 'Cleanup: KUBECONFIG=%q kind delete cluster --name kv-recovery\n' "$backup_dir/recovery.kubeconfig"
+echo 'Cleanup: bash cleanup-recovery.sh from this lab directory.'

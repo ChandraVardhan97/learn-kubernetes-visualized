@@ -1,34 +1,98 @@
-# m03: Address objects with explicit contexts, labels, annotations and apply
+# Update a ConfigMap without replacing it
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Use an explicit context and label selector, then distinguish object identity from resource version.
 
-## Expected observations
-A namespaced ConfigMap is selected by its lab label. Its UID remains stable after a unique annotation update. The script asserts that resourceVersion changes; it does not subtract versions or infer an event count.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m03 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m03
-```
+**Requirements**
 
-## Scope and prerequisites
-kubectl config current-context is read-only. The displayed active context may differ; every lab command explicitly selects kind-kv-lab. Apply updates declared fields, while unowned annotations can remain.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Leave your current kubectl context alone. The commands explicitly target the local lab.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+ConfigMap m03 has the lab=m03 label and data.message=hello. No application Pods are needed.
+
+**Expected results**
+
+- The selector finds the ConfigMap in kv-lab.
+- A new annotation appears, resourceVersion changes, and the UID stays the same.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Create the ConfigMap.
+
+   ```bash
+   kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+   ```
+
+## Diagnose
+
+1. Read the ConfigMap by its lab label. Compare the selected context with the default one shown by current-context.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl config current-context
+     kubectl --context kind-kv-lab -n kv-lab get configmaps -l lab=m03 -o yaml
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Capture the UID and version, write a unique annotation, then re-read both values. Treat resourceVersion as an opaque value.
+
+   ```bash
+   (
+     set -euo pipefail
+     uid=$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.metadata.uid}')
+     before=$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.metadata.resourceVersion}')
+     value=$(python3 -c 'import uuid; print("metadata-" + uuid.uuid4().hex)')
+     kubectl --context kind-kv-lab -n kv-lab annotate cm m03 "experiment=$value" --overwrite
+     kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+     test "$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.metadata.uid}')" = "$uid"
+     test "$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.metadata.resourceVersion}')" != "$before"
+     test "$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.metadata.annotations.experiment}')" = "$value"
+   )
+   ```
+
+</details>
+
+## Verify
+
+1. Confirm the declared data is intact and the annotation is set.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.data.message}')" = hello
+     test -n "$(kubectl --context kind-kv-lab -n kv-lab get cm m03 -o jsonpath='{.metadata.annotations.experiment}')"
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Kubernetes API concepts](https://kubernetes.io/docs/reference/using-api/api-concepts/)
+- [Labels and selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/)

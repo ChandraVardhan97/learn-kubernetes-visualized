@@ -9,7 +9,7 @@ import tempfile
 
 def main():
     module = sys.argv[1] if len(sys.argv) == 2 else ''
-    artifacts = {'m18': ('kv-lab.db', 'recovery.kubeconfig', 'etcdutl'),
+    artifacts = {'m18': ('kv-lab.db', 'recovery.kubeconfig', 'recovery-node-id', 'etcdutl'),
                  'm20': ('orders.csv', 'orders.restored-before-replacement.bin', 'orders.restored-after-replacement.bin')}
     if module not in artifacts:
         raise ValueError('Usage: python3 backup-path.py m18|m20')

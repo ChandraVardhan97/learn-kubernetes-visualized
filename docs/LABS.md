@@ -1,10 +1,10 @@
 # Local labs
 
-The 20 module labs and three cumulative capstones run on a named, disposable kind cluster. Their canonical download contents live in `src/data/labs.ts`; `public/labs/<module>/<filename>` must match byte for byte. Each lab includes its own README, guarded runner, manifest(s), inspection commands and cleanup. Download every file for one lab into the same directory. The website's individual links are actual static downloads, not a hosted Kubernetes service.
+The catalog includes 20 module labs, three cumulative capstones within m20, offline restore within m18, and four optional practice challenges. The lab data under src/data supplies both the website and the generated README for each download. Manifests and helpers live under public/labs. Use the complete ZIP to keep each exercise’s files together.
 
 ## Create the disposable environment
 
-Install Docker, kind **v0.33.0**, kubectl **v1.37.x**, and Python 3. Docker must be running and able to pull public images. Use the official [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/) and check release checksums when installing binaries. Start Docker Desktop with enough memory for a control plane and workers; 6–8 GiB available to Docker is a useful starting allocation, not a measured minimum. Optional Argo CD and recovery add workloads or another control plane.
+Install Docker, kind **v0.33.0**, kubectl **v1.37.x**, and Python 3. Docker must be running and able to pull public images. Use the official [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/) and check release checksums when installing binaries. Start Docker Desktop with enough memory for a control plane and workers; 6–8 GiB available to Docker is a useful starting allocation, not a measured minimum. The offline restore needs resources for another control plane.
 
 Use Terminal on macOS and Ubuntu's Bash shell on Windows. The website's [platform setup instructions](https://k8s-visualized.pages.dev/labs/#setup) cover Docker Desktop, WSL 2 integration, and which binaries to install. The full suite was verified on Apple Silicon macOS. Windows via WSL 2 still needs an end-to-end run.
 
@@ -30,23 +30,20 @@ Application images use explicit version tags (`nginx:1.28.0-alpine`, `busybox:1.
 
 ## Execute and verify
 
-```bash
-# Inside a downloaded lab directory containing all its files:
-bash run.sh
-bash cleanup.sh
+Follow the README in the downloaded exercise directory. Run Setup, inspect the diagnostic evidence, and attempt the task before opening Solution. Use Verify to check the result, then follow Clean up. Some guided demonstrations also use a convenience runner called run.sh.
 
-# In the repository, after installing package dependencies:
+Contributors can regenerate and test the downloads with:
+
+```bash
+npm run build:lab-downloads
 npm run verify:labs
-bash scripts/run-labs.sh smoke
-# Broader run, including bounded OOM and etcd snapshot capture:
+bash scripts/run-labs.sh m06
 bash scripts/run-labs.sh all
 ```
 
-The default integration run performs real assertions for replica replacement, readiness, Service/DNS, Pending scheduling, persistent data, RBAC and a real polling operator. It also runs all three capstone procedures. The broader run adds every module; no runner creates a cluster. The optional offline restoration creates **only** `kv-recovery` when explicitly invoked from m18. The optional Argo CD guide requires compatibility research and a separately verified supported pair; it supplies no install recipe for the unverified Kubernetes 1.37 combination.
+The integration runner extracts the ZIP and runs the published command blocks against a fresh three-node kind cluster with a private kubeconfig. It requires that the kv-lab and kv-recovery names are free. It runs cleanup after each exercise and checks that its resources are gone. The full run also checks interrupted finalizer cleanup and validates manifests with Kubernetes server dry-run. See [the run report](labs-report.md) for execution evidence.
 
-`npm run verify:labs` checks coverage, file equality, YAML parsing, resource namespaces, guards, Bash syntax and Python syntax. If kubeconform is on PATH, it also validates standard manifests against Kubernetes 1.37 schemas. Custom resources need their CRD established, then server-side dry-run or execution for validation; successful YAML parsing alone is not API validation. `docs/labs-report.md` records which checks actually ran.
-
-For optional server schema validation, first run m16 (establishes the CRD) and keep the m11 ServiceAccount present. Server-side dry-run does not persist a dry-run-created ServiceAccount for a later Pod. With those prerequisites present, run `node --import tsx scripts/validate-labs.ts --server`, then clean m11 resources. This checks the actual private WebApp schema too.
+Use smoke for a representative subset, all for the complete catalog, or pass an exercise ID such as m20-stateful or p02. Running m18 selects snapshot capture. Selecting m18-offline-restore also captures its prerequisite snapshot. The static validator checks the instructions, ZIP parity, namespaces, and Bash, Python and YAML syntax. With kubeconform on PATH, it checks compatible standard manifests against Kubernetes 1.37 schemas.
 
 ## Lab coverage
 
@@ -72,6 +69,15 @@ For optional server schema validation, first run m16 (establishes the CRD) and k
 | m18 | etcd snapshot and optional offline restoration | No HA/quorum or production DR proof |
 | m19 | Declarative drift replay and Argo CD compatibility research | Replay is not a running GitOps controller |
 | m20 | Three complete cumulative procedures | File backup is not database backup |
+
+## Four optional practice challenges
+
+| ID | Task | Verification |
+| --- | --- | --- |
+| p01 | Correct a Service backend port | The original client reaches the same Service. |
+| p02 | Tolerate a teaching taint | The Pod lands on the designated worker, then cleanup restores its metadata. |
+| p03 | Recover an unbound claim with the correct class | The replacement claim binds and the mounted marker is readable. |
+| p04 | Grant one cross-namespace read | The named ConfigMap is accessible while other reads and writes remain denied. |
 
 ## Three cumulative capstones
 
@@ -101,8 +107,7 @@ Every module runner creates labeled resources and its cleanup script removes the
 # Only after all lab work is finished:
 kind delete cluster --name kv-lab
 # If the optional recovery exercise was run, from its m18 directory:
-backup_dir=$(python3 backup-path.py m18)
-KUBECONFIG="$backup_dir/recovery.kubeconfig" kind delete cluster --name kv-recovery
+bash cleanup-recovery.sh
 ```
 
 Do not substitute a production cluster name into these destructive commands. The scripts' fixed names are an intentional scope boundary.

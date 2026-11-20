@@ -1,34 +1,101 @@
-# m04: Watch init ordering and share configuration inside a Pod
+# Trace init ordering and a shared volume
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Read init-container status and logs, then prove that two app containers can see the same emptyDir file.
 
-## Expected observations
-The init container completes before app containers start. App logs contain prepared and the ConfigMap greeting. Both app and companion see the same emptyDir file.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m04 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m04
-```
+**Requirements**
 
-## Scope and prerequisites
-The companion is a regular second container, not a native restartable init sidecar. emptyDir survives a container restart but disappears with its Pod. The disposable Secret is plaintext in this download and is not a credential. Environment values do not refresh when a ConfigMap changes.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- The accompanying container is a regular second container. The Secret contains teaching data.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+Pod m04 uses a ConfigMap and a Secret. Its init container prepares a file, then its app and companion containers start.
+
+**Expected results**
+
+- The init container finishes successfully before startup of the app.
+- The app logs prepared and the greeting. The companion can read the shared file.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Apply the Pod and config objects and wait for readiness.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/m04 --timeout=180s
+   )
+   ```
+
+## Diagnose
+
+1. Read the init status and inspect logs from the three named containers separately.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get pod m04 -o jsonpath='{.status.initContainerStatuses[0].state.terminated.reason}{"\n"}'
+     kubectl --context kind-kv-lab -n kv-lab logs m04 -c prepare
+     kubectl --context kind-kv-lab -n kv-lab logs m04 -c app
+     kubectl --context kind-kv-lab -n kv-lab logs m04 -c companion --tail=2
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Read the same path from each running container. Both mounts refer to the Pod-scoped emptyDir.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab exec m04 -c app -- cat /work/ready
+     kubectl --context kind-kv-lab -n kv-lab exec m04 -c companion -- cat /work/ready
+   )
+   ```
+
+</details>
+
+## Verify
+
+1. Check successful init completion and matching volume contents.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod m04 -o jsonpath='{.status.initContainerStatuses[0].state.terminated.exitCode}')" = 0
+     app=$(kubectl --context kind-kv-lab -n kv-lab exec m04 -c app -- cat /work/ready)
+     companion=$(kubectl --context kind-kv-lab -n kv-lab exec m04 -c companion -- cat /work/ready)
+     test "$app" = prepared
+     test "$companion" = "$app"
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Init containers](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/)
+- [Volumes and emptyDir](https://kubernetes.io/docs/concepts/storage/volumes/)

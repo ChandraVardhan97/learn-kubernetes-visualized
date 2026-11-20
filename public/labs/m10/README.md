@@ -1,34 +1,84 @@
-# m10: Compare stable identity, per-node placement, and completion
+# Compare identity, node coverage, and completion
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Read the status of a StatefulSet, DaemonSet, Job, suspended CronJob, and disruption budget.
 
-## Expected observations
-The StatefulSet creates m10-0, the DaemonSet places an agent on schedulable matching nodes, and the Job completes. The suspended CronJob records a schedule without launching periodic work.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m10 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m10
-```
+**Requirements**
 
-## Scope and prerequisites
-A one-replica PDB with minAvailable=1 blocks voluntary eviction; it cannot prevent machine failure. This script does not drain the shared lab node. StatefulSet identity alone does not create persistent storage; m09 covers claims.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Use the regular three-node topology. Leave the nodes schedulable and the CronJob suspended.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+The runner creates one StatefulSet replica, a DaemonSet, a short-lived Job, a suspended CronJob and a PodDisruptionBudget.
+
+**Expected results**
+
+- StatefulSet m10 has a Ready m10-0 Pod. DaemonSet m10-agent has a Ready agent on each eligible node.
+- Job m10-job completes and the suspended CronJob does not create a scheduled run.
+
+## Setup
+
+1. Create the workload controllers and wait for the StatefulSet and Job.
+
+   ```bash
+   bash run.sh
+   ```
+
+## Diagnose
+
+1. Inspect the stable ordinal and the DaemonSet node placement, then read the Job result and scheduled workload state.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get pod m10-0 -o wide
+     kubectl --context kind-kv-lab -n kv-lab get daemonset m10-agent
+     kubectl --context kind-kv-lab -n kv-lab get pods -l app=m10-agent -o wide
+     kubectl --context kind-kv-lab -n kv-lab logs job/m10-job
+     kubectl --context kind-kv-lab -n kv-lab get cronjob m10-schedule
+     kubectl --context kind-kv-lab -n kv-lab describe pdb m10
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Read identity from the StatefulSet ordinal, coverage from the DaemonSet desired count, and success from the Job Complete condition. The suspended CronJob holds a schedule for future Jobs. A disruption budget governs voluntary disruptions to matching Pods.
+
+</details>
+
+## Verify
+
+1. Check the distinct controller signals.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/m10-0 --timeout=90s
+     kubectl --context kind-kv-lab -n kv-lab rollout status daemonset/m10-agent --timeout=90s
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Complete job/m10-job --timeout=90s
+     test "$(kubectl --context kind-kv-lab -n kv-lab get cronjob m10-schedule -o jsonpath='{.spec.suspend}')" = true
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Workload management](https://kubernetes.io/docs/concepts/workloads/controllers/)
+- [Disruptions](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/)

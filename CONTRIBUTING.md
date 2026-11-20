@@ -25,7 +25,7 @@ Use the established tokens, type, node grammar and scene controls. Keep visible 
 
 Run `npm run check`, `npm test`, `npm run verify:labs` and `npm run build`. Run relevant browser journeys against the production preview when interaction changes. Test meaningful behavior; avoid snapshots or tests that merely repeat labels, CSS declarations or implementation details.
 
-For lab changes, use a named disposable cluster and explicit context/namespace. Record commands and actual results. A dry run is not evidence of successful runtime behavior. Keep credentials and user kubeconfig out of the repository.
+For lab changes, edit the exercise data under src/data and keep manifests and helpers under public/labs. Regenerate the guides and ZIP with npm run build:lab-downloads. Run the published steps on a disposable cluster with bash scripts/run-labs.sh <exercise-id>, then record the outcome and cleanup in docs/labs-report.md. See [the lab authoring and verification guide](docs/LABS.md). Keep credentials and user kubeconfig out of the repository.
 
 ## Reviewable contributions
 

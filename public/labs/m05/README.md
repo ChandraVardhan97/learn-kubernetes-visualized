@@ -1,34 +1,116 @@
-# m05: Remove and restore a ready endpoint without restarting the container
+# Remove a ready backend without restarting it
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Observe how a readiness failure updates EndpointSlices, then restore readiness and roll back a Pod template change.
 
-## Expected observations
-Selected Pods appear in EndpointSlices with readiness conditions. Removing /tmp/ready makes one Pod unready and sets its endpoint ready condition to false; its address can remain listed. Restoring the file makes that endpoint ready again; a template annotation creates a rollout and undo restores the previous revision.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m05 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m05
-```
+**Requirements**
 
-## Scope and prerequisites
-Readiness affects endpoint eligibility; it does not restart the container. Liveness failures can restart it. This healthy image plus a template annotation demonstrates a rollout without relying on a deliberately broken pull.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Give probe and EndpointSlice updates time to converge. The lab intentionally changes one of two web Pods.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+Deployment m05 is available, and both Pods initially satisfy the readiness probe because /tmp/ready exists.
+
+**Expected results**
+
+- One Pod becomes unready and its EndpointSlice entry reports ready=false while its restart count stays stable.
+- Restoring the sentinel returns the Pod to Ready. A separate template edit creates a rollout that you can undo.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Apply the Deployment and Service and wait for two available replicas.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+     kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m05 --timeout=180s
+   )
+   ```
+
+## Diagnose
+
+1. Read the readiness probe and see the backend conditions before making a change.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get deployment m05 -o yaml
+     kubectl --context kind-kv-lab -n kv-lab get endpointslices -l kubernetes.io/service-name=m05 -o yaml
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Remove the sentinel from one Pod, wait for Ready=false, and check that the restart count stays the same.
+
+   ```bash
+   (
+     set -euo pipefail
+     pod=$(kubectl --context kind-kv-lab -n kv-lab get pods -l app=m05 -o jsonpath='{.items[0].metadata.name}')
+     before=$(kubectl --context kind-kv-lab -n kv-lab get pod "$pod" -o jsonpath='{.status.containerStatuses[0].restartCount}')
+     kubectl --context kind-kv-lab -n kv-lab exec "$pod" -- rm /tmp/ready
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready=false "pod/$pod" --timeout=60s
+     kubectl --context kind-kv-lab -n kv-lab wait --for="jsonpath={.endpoints[?(@.targetRef.name==\"$pod\")].conditions.ready}=false" endpointslice -l kubernetes.io/service-name=m05 --timeout=60s
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod "$pod" -o jsonpath='{.status.containerStatuses[0].restartCount}')" = "$before"
+     kubectl --context kind-kv-lab -n kv-lab get endpointslices -l kubernetes.io/service-name=m05 -o yaml
+     kubectl --context kind-kv-lab -n kv-lab exec "$pod" -- touch /tmp/ready
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready "pod/$pod" --timeout=60s
+   )
+   ```
+
+2. Edit the Pod template, wait for the rollout, and then undo it. The template edit changes the revision.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab patch deployment m05 --type merge -p '{"spec":{"template":{"metadata":{"annotations":{"release":"two"}}}}}'
+     kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m05 --timeout=180s
+     kubectl --context kind-kv-lab -n kv-lab rollout history deployment/m05
+     kubectl --context kind-kv-lab -n kv-lab rollout undo deployment/m05
+   )
+   ```
+
+</details>
+
+## Verify
+
+1. Confirm the Deployment is available and undo removed the release annotation.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m05 --timeout=180s
+     test "$(kubectl --context kind-kv-lab -n kv-lab get deployment m05 -o jsonpath='{.status.readyReplicas}')" = 2
+     test -z "$(kubectl --context kind-kv-lab -n kv-lab get deployment m05 -o jsonpath='{.spec.template.metadata.annotations.release}')"
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Container probes](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)
+- [Deployment rollback](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)

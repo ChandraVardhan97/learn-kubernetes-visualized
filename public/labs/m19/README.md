@@ -1,34 +1,93 @@
-# m19: Reconcile declared configuration and identify delivery boundaries
+# Repair declarative drift and inspect ownership
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Troubleshooting challenge
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Detect divergence from a declared ConfigMap and restore it with the designated field manager.
 
-## Expected observations
-The declared ConfigMap is applied by a GitOps field manager. Manual drift changes the live value. Reapplying the declaration restores it; managedFields show ownership. No Argo CD runtime is implied by this local replay.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m19 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m19
-```
+**Requirements**
 
-## Scope and prerequisites
-This is an explicit manual reconciliation replay, not a continuously running GitOps controller. Argo CD is optional and adds a repo server, API server, application controller, Redis and other components; allocate additional Docker CPU/RAM. A digest identifies bytes but does not by itself verify signatures or attestations. Service mesh and multi-tenant policy enforcement need separately installed controllers and trust configuration.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Use the disposable ConfigMap only. The compatibility note is optional reading.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+kv-gitops applies release=git-declared. A manual patch changes the live value to manual-drift.
+
+**Expected results**
+
+- The diff identifies the drift.
+- The live value returns to git-declared, and managed fields show kv-gitops owning the declared field.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Apply the declaration, then introduce a manual edit.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f resources.yaml
+     kubectl --context kind-kv-lab -n kv-lab patch configmap m19 --type merge -p '{"data":{"release":"manual-drift"}}'
+   )
+   ```
+
+## Diagnose
+
+1. Read the field managers and compare declared versus live state. The kubectl diff exit code 1 means there is a difference.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get configmap m19 -o yaml --show-managed-fields
+     status=0
+     kubectl --context kind-kv-lab -n kv-lab diff -f resources.yaml || status=$?
+     test "$status" -eq 1
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. After confirming the declaration is authoritative for this lab, apply it as kv-gitops with an explicit ownership takeover. This local exercise models one reconciliation step.
+
+   ```bash
+   kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops --force-conflicts -f resources.yaml
+   ```
+
+</details>
+
+## Verify
+
+1. Check the restored field and inspect the resulting owner.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get configmap m19 -o jsonpath='{.data.release}')" = git-declared
+     kubectl --context kind-kv-lab -n kv-lab get configmap m19 -o yaml --show-managed-fields
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Server-Side Apply and conflicts](https://kubernetes.io/docs/reference/using-api/server-side-apply/)
