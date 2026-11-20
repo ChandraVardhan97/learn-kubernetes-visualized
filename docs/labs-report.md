@@ -1,5 +1,47 @@
 # Local lab verification report
 
+## 2026-11-20 — learner walkthrough verification
+
+Executed the 27 published procedures from a fresh extraction of the 148-file ZIP with `bash scripts/run-labs.sh all` on Apple Silicon macOS. The environment used Docker Desktop 28.3.2, kind 0.33.0, Kubernetes v1.37.0 from the digest-pinned node image, and kubectl v1.37.0. The verifier ran the same command blocks shown on the site and in the README. Windows and WSL 2 were outside this execution environment.
+
+| Procedure | Initial state, evidence, and outcome | Cleanup |
+| --- | --- | --- |
+| m01 | BusyBox process exited. A separate nginx Pod had an IP and served HTTP on its loopback port 80. | Passed |
+| m02 | Two ready Pods had ReplicaSet owners. Deleting one led to a new ready Pod, and the original UID disappeared. | Passed |
+| m03 | The selected ConfigMap started without the exercise annotation. The update changed resourceVersion and preserved the UID and data. | Passed |
+| m04 | The init container completed. Logs showed the declared greeting, and both app containers read the prepared sentinel. | Passed |
+| m05 | Both replicas began ready. Removing one sentinel set its EndpointSlice condition to false without a restart. Readiness recovered, and rollback removed the template annotation. | Passed |
+| m06 | DNS resolved with no ready backends and failed HTTP. Matching the selector restored ready backends and the nginx page. | Passed |
+| m07 | The impossible selector produced Unschedulable. The comparison Pod was Ready and reported Burstable QoS. | Passed |
+| m08 | Baseline HTTP succeeded. Deny blocked fresh connections, and the allow policy restored the client path while the deny policy remained. | Passed |
+| m09 | The claim bound. A replacement Pod with a different UID used the same PV and read the previous marker. | Passed |
+| m10 | The StatefulSet had its ordinal Pod, the DaemonSet rolled out, the Job completed, and the CronJob stayed suspended. | Passed |
+| m11 | The reader could list Pods, while the Secret read was denied. The workload ran as UID 1000 with automatic token mounting disabled. | Passed |
+| m12 | The independent crash produced its missing-config message. A selector repair restored HTTP to the healthy workload. | Passed |
+| m13 | Kustomize rendered its generated configuration. HPA reported FailedGetResourceMetric while the target Deployment was available. | Passed |
+| m14 | The second manager received an SSA conflict. A terminating ConfigMap disappeared after releasing its teaching finalizer. | Passed |
+| m15 | The teaching Lease identified its holder, the bounded watch showed the ConfigMap, and repeated apply preserved identity and data. | Passed |
+| m16 | After CRD establishment the reconciler created owned resources. Repeated apply preserved Deployment identity, recreated a deleted child, and reached two ready replicas. | Passed |
+| m17 | The bounded workload reported OOMKilled and the kind nodes were Ready. | Passed |
+| m18 | The API marker was captured in a private non-empty snapshot and source-node staging files were removed. | Passed |
+| m18-offline-restore | The separate recovery API returned the saved marker. The source API remained ready. Cleanup refused the same named cluster without the recorded identity. | Passed |
+| m19 | The diff showed manual drift. Applying as the declared manager restored git-declared and displayed the resulting field ownership. | Passed |
+| m20-stateless | Ready Pods were inaccessible through a broken selector. Repair restored HTTP from the same client. | Passed |
+| m20-stateful | The private 19-byte backup matched after restore and again after replacement of its consuming Pod. | Passed |
+| m20-platform | An ownership conflict was rejected. Reconciliation preserved identity and repaired a child. Parent deletion garbage-collected both children. | Passed |
+| p01 | Selected, ready Pods served their own port, but the Service target port was wrong. Correcting it restored client HTTP. | Passed |
+| p02 | The teaching taint kept the Pod Pending. Appending one toleration scheduled it on the designated worker and cleanup restored the worker’s teaching metadata. | Passed |
+| p03 | The claim was Pending and unbound. A new claim using the local StorageClass bound and its consumer read the marker. | Passed |
+| p04 | The account was initially denied in the target namespace. The scoped binding allowed the named ConfigMap read while other checks stayed denied. | Passed |
+
+The interrupted m14 check preserved a second finalizer, then removed a separate interrupted teaching object. The 64 Kubernetes documents passed strict server-side dry-run after creating the required admission prerequisites. Module cleanup was confirmed from the API, including the reclaimed PVC volumes, custom resources, restored node metadata, and deleted practice namespace. The integration runner removed both test clusters and private temporary outputs and preserved the original kubeconfig context.
+
+The previous clean-cluster pass exposed a race between namespace creation and its default ServiceAccount. The common script now waits for that account, and the fresh run verified m01 as the first exercise. The site build and its seven Playwright journeys passed. The Service lab was inspected at 1440, 768, and 390 pixels, and its expanded mobile content passed a focused axe check.
+
+Verified archive size is 105,260 bytes. SHA-256 is 8fcf612d82deb0d277a120e012d33a69cfb3b8d38137965bb2e02fe5a52bd99d.
+
+## Historical verification
+
 Verified on 2026-10-27. This report distinguishes executed mechanisms from optional or production-only behavior.
 
 **Final status:** all 20 module mechanisms and all three capstones have passed with kubectl/server v1.37.0. The supported-client integration run passed m01–m19 and exposed a short stdin transfer failure in m20. After replacing that bounded fixture transfer with `kubectl cp`, the complete m20 runner passed, including checksums before and after Pod replacement. Historical executions and their limitations are retained below; the final verification section supersedes their pending status.

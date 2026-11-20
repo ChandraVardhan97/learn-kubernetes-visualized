@@ -17,5 +17,7 @@ actual=$(kubectl --context "$CONTEXT" get nodes -o 'jsonpath={range .items[*]}{.
 expected=$(kind get nodes --name kv-lab | sort)
 [ "$actual" = "$expected" ] || { echo 'Refusing: API nodes differ from named kind cluster.' >&2; exit 2; }
 k create namespace "$NAMESPACE" --dry-run=client -o yaml | k apply -f - >/dev/null
+# The service-account controller creates this asynchronously after namespace creation.
+k wait --for=create serviceaccount/default --timeout=90s >/dev/null
 cd "$(dirname "$0")"
 wait_ready() { k wait --for=condition=Ready "pod/$1" --timeout=180s; }

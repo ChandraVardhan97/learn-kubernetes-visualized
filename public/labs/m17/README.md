@@ -1,34 +1,78 @@
-# m17: Distinguish a container memory limit from node pressure
+# Identify a container memory-limit termination
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Distinguish a container OOM termination from node pressure using the Pod state and node conditions.
 
-## Expected observations
-The bounded process writes to a memory-backed volume until its 16Mi container limit is exceeded; the container terminates with reason OOMKilled. Other Pods remain schedulable.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m17 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m17
-```
+**Requirements**
 
-## Scope and prerequisites
-This bounded test consumes at most a small container limit; it deliberately avoids exhausting Docker Desktop or a node. OOMKilled is not an eviction. CPU limits throttle; the presence of a CPU limit alone does not measure throttling. Metrics and a load experiment are required for capacity decisions.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- Use the provided 16 MiB limit. The fixture uses a bounded write to a memory-backed volume.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+The fixture starts m17-oom. Its process fills a small memory-backed volume and reaches the container memory limit.
+
+**Expected results**
+
+- The container terminates with reason OOMKilled.
+- The lab nodes remain Ready.
+
+## Setup
+
+1. Run the bounded fixture and wait for its terminal state.
+
+   ```bash
+   bash run.sh
+   ```
+
+## Diagnose
+
+1. Inspect the container state and memory settings and view the worker conditions.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab describe pod m17-oom
+     kubectl --context kind-kv-lab get nodes
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Use state.terminated.reason for the diagnosis. The container memory limit constrains this workload while the node continues operating. Kubernetes Pod eviction is a different mechanism with its own reason and events.
+
+</details>
+
+## Verify
+
+1. Assert the termination reason directly and confirm node readiness.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get pod m17-oom -o jsonpath='{.status.containerStatuses[0].state.terminated.reason}')" = OOMKilled
+     kubectl --context kind-kv-lab wait --for=condition=Ready nodes --all --timeout=90s
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Resource management](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
+- [Node-pressure eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/)

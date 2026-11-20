@@ -1,0 +1,63 @@
+---
+import CodeBlock from './CodeBlock.astro';
+import { labRequirements, type Exercise } from '../data/lab-format';
+
+const { exercise, nested = false } = Astro.props as { exercise: Exercise; nested?: boolean };
+const SectionTitle = nested ? 'h5' : 'h4';
+const DefinitionTitle = nested ? 'h6' : 'h5';
+const workflow = [
+  { title: 'Setup', steps: exercise.setup },
+  { title: 'Diagnose', steps: exercise.diagnose },
+  { title: 'Verify', steps: exercise.verify },
+  { title: 'Clean up', steps: exercise.cleanup },
+];
+---
+<div class="exercise" id={nested ? exercise.id : undefined}>
+  {nested && <h4 class="exercise-title">{exercise.title}</h4>}
+  <div class="objective">
+    <small>{exercise.kind === 'challenge' ? 'Troubleshooting challenge' : 'Guided exercise'}</small>
+    <SectionTitle>Objective</SectionTitle>
+    <p>{exercise.objective}</p>
+  </div>
+
+  <details class="lab-details">
+    <summary>Requirements &amp; expected results</summary>
+    <DefinitionTitle>Requirements</DefinitionTitle>
+    <ul>{[...labRequirements, ...exercise.requirements].map(requirement => <li>{requirement}</li>)}</ul>
+    <DefinitionTitle>Initial state</DefinitionTitle>
+    <p>{exercise.initial}</p>
+    <DefinitionTitle>Expected results</DefinitionTitle>
+    <ul>{exercise.expected.map(result => <li>{result}</li>)}</ul>
+  </details>
+
+  <details class="lab-details">
+    <summary>Run, inspect &amp; clean up</summary>
+    {workflow.map(({ title, steps }) => <div class="procedure">
+      <DefinitionTitle>{title}</DefinitionTitle>
+      {steps.map(step => <div><p>{step.text}</p>{step.command && <CodeBlock><code>{step.command}</code></CodeBlock>}</div>)}
+    </div>)}
+  </details>
+
+  <details class="lab-details">
+    <summary>Solution</summary>
+    <ol class="solution-steps">{exercise.solution.map(step => <li><p>{step.text}</p>{step.command && <CodeBlock><code>{step.command}</code></CodeBlock>}</li>)}</ol>
+  </details>
+
+  <details class="lab-details">
+    <summary>Official references</summary>
+    <ul>{exercise.sources.map(source => <li><a href={source.url}>{source.title}</a></li>)}</ul>
+  </details>
+</div>
+
+<style>
+  .exercise[id] { scroll-margin-top: 7rem; margin-block: 1.5rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+  .exercise-title { margin: 0 0 .65rem; font-size: 1.2rem; }
+  .objective { margin: .6rem 0 1.1rem; }
+  .objective small { color: var(--muted); }
+  .objective :is(h4, h5) { margin: .4rem 0 .2rem; font-size: 1rem; }
+  .objective p { margin: 0; }
+  .lab-details :is(h5, h6) { margin: 1rem 0 .35rem; font-size: 1rem; }
+  .procedure + .procedure { margin-top: 1.25rem; }
+  .solution-steps { padding-inline-start: 1.45rem; }
+  .solution-steps > li + li { margin-top: .75rem; }
+</style>

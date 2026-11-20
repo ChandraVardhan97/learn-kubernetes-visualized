@@ -1,6 +1,6 @@
 # Kubernetes, Visualized — local lab bundle
 
-This bundle contains 20 module labs, three cumulative capstone procedures in m20, and kind.yaml. All resources target the disposable kind-kv-lab context and kv-lab namespace. Use Docker, kind v0.33.0, kubectl v1.37.x and Python 3. Scripts fail closed if the named cluster/context identity does not match. Read each module's README before running it.
+This bundle contains 20 module labs, three capstones in m20, a separate offline restore exercise in m18, four optional practice challenges, and kind.yaml. All resources target the disposable kind-kv-lab context and kv-lab namespace. Use Docker, kind v0.33.0, kubectl v1.37.x and Python 3. Scripts fail closed if the named cluster/context identity does not match. Open each exercise README for the objective, starting state, commands, solution, verification and cleanup.
 
 ## Prepare your machine
 
@@ -36,13 +36,12 @@ m19's Argo CD extension is compatibility research, not a runnable install recipe
 
 ## Cleanup
 
-Run each module's cleanup.sh before moving on. Keep any wanted data backup outside the cluster. m16/m20 share a CRD; delete it only after both are done. When all labs are finished:
+Follow the Clean up steps in each exercise README before moving on. Keep any wanted data backup outside the cluster. m16/m20 share a CRD; delete it only after both are done. When all labs are finished:
 
 ```bash
 kind delete cluster --name kv-lab
 # If you ran the optional recovery procedure, from the m18 directory:
-backup_dir=$(python3 backup-path.py m18)
-KUBECONFIG="$backup_dir/recovery.kubeconfig" kind delete cluster --name kv-recovery
+bash cleanup-recovery.sh
 ```
 
 The node image digest is from the official v0.33.0 release: https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0 . Application image version tags can be republished; use resolved image digests for production delivery.

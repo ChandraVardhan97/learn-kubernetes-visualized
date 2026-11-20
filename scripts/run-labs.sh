@@ -1,28 +1,71 @@
 #!/usr/bin/env bash
-# Integration suite: never creates a cluster or changes the active context.
+# Execute exact published commands against a task-owned cluster and private kubeconfig.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export PATH="$PWD/.runtime/bin:$PATH"
-for tool in kubectl kind python3; do command -v "$tool" >/dev/null || { echo "Missing dependency: $tool" >&2; exit 2; }; done
-[ "${1:-smoke}" = smoke ] || [ "$1" = all ] || { echo 'Usage: bash scripts/run-labs.sh [smoke|all]' >&2; exit 2; }
-mode=${1:-smoke}
-# The smoke set covers actual control loops, readiness/endpoints, placement,
-# persistence, authorization, idempotent operator behavior and all capstones.
-selected='m02 m05 m06 m07 m09 m11 m16 m20'
-[ "$mode" = all ] && selected='m01 m02 m03 m04 m05 m06 m07 m08 m09 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20'
-failed=''
-backup_root=$(mktemp -d "${TMPDIR:-/tmp}/kv-lab-check.XXXXXX")
-echo "Runtime backups: $backup_root"
-for id in $selected; do
-  echo "=== $id: integration ==="
-  if KV_LAB_BACKUP_DIR="$backup_root/$id" bash "public/labs/$id/run.sh"; then
-    echo "PASS $id"
-  else
-    failed="$failed $id"
-    echo "FAIL $id" >&2
-  fi
-  # Keep the namespace; remove only resources owned by the selected module.
-  bash "public/labs/$id/cleanup.sh"
+export PATH="$PWD/.runtime/bin:$PWD/.runtime/node_modules/node/bin:$PATH"
+export KIND_EXPERIMENTAL_PROVIDER=docker
+for tool in kubectl kind python3 node docker unzip; do
+  command -v "$tool" >/dev/null || { echo "Missing dependency: $tool" >&2; exit 2; }
 done
-if [ -n "$failed" ]; then echo "Failed labs:$failed" >&2; exit 1; fi
-echo "PASS integration mode=$mode. Optional offline recovery and optional Argo CD were not executed by this script."
+
+mode=${1:-smoke}
+existing=$(kind get clusters 2>/dev/null)
+if printf '%s\n' "$existing" | grep -Eq '^kv-(lab|recovery)$'; then
+  echo 'The integration run needs the reserved kv-lab and kv-recovery names. Existing clusters will be preserved.' >&2
+  exit 2
+fi
+for container in kv-lab-m01-process kv-recovery-etcd-tool; do
+  if docker container inspect "$container" >/dev/null 2>&1; then
+    echo "The integration run needs the reserved container name $container." >&2
+    exit 2
+  fi
+done
+
+umask 077
+export KV_TEST_ROOT
+KV_TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/kv-lab-check.XXXXXX")
+export KV_TEST_BUNDLE="$KV_TEST_ROOT/downloads"
+before=$(kubectl config current-context 2>/dev/null || true)
+original_kubeconfig=${KUBECONFIG-}
+
+export KUBECONFIG="$KV_TEST_ROOT/lab.kubeconfig"
+owns_lab=0
+cleanup() {
+  local status=$? cleanup_failed=0 after
+  trap - EXIT
+  set +e
+  if [ -f "$KV_TEST_ROOT/backups/m18/recovery.kubeconfig" ]; then
+    KV_LAB_BACKUP_DIR="$KV_TEST_ROOT/backups/m18" bash "$KV_TEST_BUNDLE/m18/cleanup-recovery.sh" || cleanup_failed=1
+  fi
+  if [ "$owns_lab" = 1 ]; then kind delete cluster --name kv-lab || cleanup_failed=1; fi
+  after=$(kind get clusters 2>/dev/null) || cleanup_failed=1
+  [ "$after" = "$existing" ] || cleanup_failed=1
+  rm -rf -- "$KV_TEST_ROOT" || cleanup_failed=1
+  after=$(KUBECONFIG="$original_kubeconfig" kubectl config current-context 2>/dev/null || true)
+  [ "$after" = "$before" ] || cleanup_failed=1
+  if [ "$cleanup_failed" = 0 ]; then
+    echo 'PASS disposable cluster and private output cleanup; original kubectl context preserved'
+  else
+    echo 'FAIL disposable cluster or private output cleanup' >&2
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+unzip -q public/labs/kv-labs.zip -d "$KV_TEST_BUNDLE"
+mkdir "$KV_TEST_ROOT/backups"
+owns_lab=1
+kind create cluster --name kv-lab --config "$KV_TEST_BUNDLE/kind.yaml" --wait 180s
+k() { kubectl --context kind-kv-lab "$@"; }
+k wait --for=condition=Ready nodes --all --timeout=180s
+k -n kube-system rollout status deployment/coredns --timeout=180s
+node --import tsx scripts/run-lab-steps.ts "$mode"
+if [ "$mode" = all ]; then
+  # Server dry-run needs two admission prerequisites owned by this cluster.
+  k -n kv-lab create serviceaccount m11-reader
+  node --import tsx scripts/validate-labs.ts --server
+  k -n kv-lab delete serviceaccount m11-reader --timeout=60s
+  k delete crd webapps.labs.kv.example --timeout=120s
+fi

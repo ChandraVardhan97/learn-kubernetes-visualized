@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "verify:content": "node --import tsx scripts/validate-content.ts",
+    "build:lab-downloads": "node --import tsx scripts/build-lab-downloads.ts",
     "verify:labs": "node --import tsx scripts/validate-labs.ts",
     "audit:performance": "node scripts/audit-performance.mjs",
     "deploy": "node --import tsx scripts/check-public-assets.ts public dist && wrangler deploy"

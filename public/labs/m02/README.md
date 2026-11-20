@@ -1,34 +1,102 @@
-# m02: Follow Deployment reconciliation through a ReplicaSet to replacement Pods
+# Watch a ReplicaSet replace a deleted Pod
 
-## Requirements
-Docker Desktop or Docker Engine running; kind v0.33.0; kubectl v1.37.x; Python 3; named disposable cluster kv-lab and namespace kv-lab. Download every file into one directory, then run bash run.sh. See /labs/kind.yaml and the lab guide for cluster setup.
+Guided exercise
 
-This exercise changes only the disposable kind-kv-lab context. Each script verifies its cluster and uses an explicit namespace. Do not run with production credentials. No script changes your active context.
+## Objective
 
-## Run
-```bash
-bash run.sh
-```
+Trace Deployment ownership and verify that the controller replaces a Pod with a new identity.
 
-## Expected observations
-Two replicas become available. Deleting one Pod changes its UID; the ReplicaSet returns to two ready replicas while the Deployment UID stays the same.
+## Requirements & expected results
 
-## Inspect if results differ
-```bash
-kubectl --context kind-kv-lab -n kv-lab get pods -l lab=m02 -o wide
-kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
-kubectl --context kind-kv-lab -n kv-lab describe pods -l lab=m02
-```
+**Requirements**
 
-## Scope and prerequisites
-This is a local mechanism exercise. It does not establish production reliability, availability, security, or performance.
+- Use the dedicated kind-kv-lab context and the kv-lab namespace. Keep using the terminal where you set up the cluster.
+- Extract the lab bundle and change into the exercise directory. Keep its files together and run the snippets in Bash.
+- The Deployment needs enough capacity to schedule two small nginx Pods.
 
-Application images use explicit version tags (nginx 1.28.0-alpine and BusyBox 1.37.0), not latest. Tags can be republished; production delivery should resolve and record registry digests. The kind node image is digest pinned.
+**Initial state**
 
-## Cleanup
-```bash
-bash cleanup.sh
-# When ALL labs are finished, destroy only the named disposable cluster:
-kind delete cluster --name kv-lab
-```
-Cleanup removes this module's labeled resources. Some exercises create cluster-scoped CRDs or admission policy: their cleanup explicitly names those disposable resources. PVC cleanup deletes local data. Keep backups outside the cluster before cleanup.
+The setup applies Deployment m02 with two replicas and waits for both to become available.
+
+**Expected results**
+
+- A ReplicaSet owns the original Pod.
+- After you delete one Pod, its UID disappears and the same Deployment again has two ready replicas.
+
+## Setup
+
+1. Check that the shell targets the disposable lab cluster and create its namespace if needed.
+
+   ```bash
+   bash -c 'source ./_common.sh'
+   ```
+
+2. Apply the Deployment and wait for it to become available.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab apply -f resources.yaml
+     kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m02 --timeout=180s
+   )
+   ```
+
+## Diagnose
+
+1. Find the controllers and inspect the Pod owner. The owner is a ReplicaSet, which is itself owned by the Deployment.
+
+   ```bash
+   (
+     set -euo pipefail
+     kubectl --context kind-kv-lab -n kv-lab get deployment m02
+     kubectl --context kind-kv-lab -n kv-lab get replicasets -l app=m02
+     kubectl --context kind-kv-lab -n kv-lab get pods -l app=m02 -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.ownerReferences[0].kind}{"/"}{.metadata.ownerReferences[0].name}{"\n"}{end}'
+   )
+   ```
+
+## Solution
+
+<details>
+<summary>Reveal solution</summary>
+
+1. Save the victim UID, delete the Pod, then wait for the replacement. The Deployment specification still asks for two replicas.
+
+   ```bash
+   (
+     set -euo pipefail
+     old=$(kubectl --context kind-kv-lab -n kv-lab get pods -l app=m02 -o jsonpath='{.items[0].metadata.name}')
+     old_uid=$(kubectl --context kind-kv-lab -n kv-lab get pod "$old" -o jsonpath='{.metadata.uid}')
+     kubectl --context kind-kv-lab -n kv-lab delete pod "$old" --wait=true
+     kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m02 --timeout=180s
+     kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod -l app=m02 --timeout=180s
+     uids=$(kubectl --context kind-kv-lab -n kv-lab get pods -l app=m02 -o jsonpath='{.items[*].metadata.uid}')
+     case " $uids " in *" $old_uid "*) echo 'Old Pod UID still present' >&2; false;; esac
+   )
+   ```
+
+</details>
+
+## Verify
+
+1. Check the ready replica count and compare the current Pod names against your initial list.
+
+   ```bash
+   (
+     set -euo pipefail
+     test "$(kubectl --context kind-kv-lab -n kv-lab get deployment m02 -o jsonpath='{.status.readyReplicas}')" = 2
+     kubectl --context kind-kv-lab -n kv-lab get pods -l app=m02 -o wide
+   )
+   ```
+
+## Clean up
+
+1. Remove the resources created by this exercise.
+
+   ```bash
+   bash cleanup.sh
+   ```
+
+## Official references
+
+- [Deployment controllers](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [ReplicaSets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/)

@@ -12,7 +12,7 @@ printf 'Recovery kubeconfig: %s/recovery.kubeconfig\n' "$backup_dir"
 
 The recovery script is intentionally explicit: capture the recovery etcd tool version; stop kube-apiserver and etcd static Pods; wait for both containers to exit; stage the snapshot under /var/lib and confirm it exists; restore to a new data directory with new single-member URLs, a revision bump and compaction; retain the fresh cluster's old directory; restart static Pods; read m18 from the restored API. Source node objects may remain in the snapshot: this is an API-data rehearsal, not a supported migration or a functioning restored worker fleet.
 
-If failure occurs after static Pod removal, inspect ONLY kv-recovery-control-plane with docker exec and its files under /tmp. Delete the recovery cluster to discard it: `backup_dir=$(python3 backup-path.py m18)` followed by `KUBECONFIG="$backup_dir/recovery.kubeconfig" kind delete cluster --name kv-recovery`. Never run replacement-directory commands on kv-lab-control-plane or a production member.
+If failure occurs after static Pod removal, inspect ONLY kv-recovery-control-plane with docker exec and its files under /tmp. Run bash cleanup-recovery.sh with the same private backup directory. It checks the recovery node identity recorded during setup before deleting the cluster. Never run replacement-directory commands on kv-lab-control-plane or a production member.
 
 An etcd snapshot is not a backup of PV files, external object stores, images, kubeadm configuration, PKI, service-account signing keys or encryption-at-rest keys. Real recovery requires those assets, tested version compatibility, member planning and workload checks.
 
