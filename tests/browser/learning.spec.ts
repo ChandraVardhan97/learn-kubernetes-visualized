@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect,type Locator} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs';
 import {parse} from 'yaml';
@@ -123,6 +123,35 @@ test('search finds rendered lesson text and direct anchors resolve',async({page}
  await page.goto('/labs/#m20');await expect(page.locator('#m20')).toBeVisible();
  await page.getByRole('link',{name:'Set up your cluster',exact:true}).click();
  await expect(page.locator('#setup')).toHaveAttribute('open','');
+});
+
+test('copy preserves static commands and current interactive YAML', async ({page, context}) => {
+ await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+ async function copyBlock(pre: Locator) {
+  const text = await pre.locator('code').textContent();
+  expect(text).toBeTruthy();
+  const snippet = pre.locator('..');
+  await snippet.getByRole('button', {name: 'Copy code', exact: true}).press('Enter');
+  await expect(snippet.getByRole('status')).toHaveText('Copied');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
+ }
+
+ await page.goto('/labs/#setup');
+ await copyBlock(page.locator('#setup pre').filter({hasText: 'kind create cluster'}));
+
+ await page.goto('/learn/intermediate/m07-l01/');
+ await copyBlock(page.locator('pre.astro-code').first());
+
+ const scene = page.locator('.scene').first();
+ await expect(scene.getByRole('button', {name: 'Next', exact: true})).toBeEnabled();
+ const experiment = scene.locator('.mechanism-experiment');
+ await experiment.locator('summary').click();
+ const yaml = experiment.locator('pre');
+ await copyBlock(yaml);
+ await experiment.getByRole('slider', {name: 'CPU request', exact: true}).fill('2');
+ await expect(yaml).toContainText('cpu: "2"');
+ await copyBlock(yaml);
 });
 
 test('production layout, reduced motion and accessibility',async({page})=>{

@@ -1,6 +1,7 @@
 ---
 import {render} from 'astro:content';
 import Base from '../../../layouts/Base.astro';
+import CodeBlock from '../../../components/CodeBlock.astro';
 import LessonProgress from '../../../components/LessonProgress';
 import {getLessons,lessonHref} from '../../../lib/content';
 import {getModule,levelNames} from '../../../data/modules';
@@ -12,7 +13,7 @@ const prereqs=all.filter(l=>data.prerequisites.includes(l.data.lessonId));
 ---
 <Base title={data.title} description={data.description} lessonId={data.lessonId}><div class="lesson-layout"><article data-pagefind-body data-pagefind-meta={`level:${levelNames[data.level]}`}>
  <header class="lesson-header"><div class="lesson-meta"><a href={`/curriculum/#${data.level}`}>{levelNames[data.level]}</a><span aria-hidden="true">/</span><a href={`/curriculum/#${data.module}`}>{module.title}</a><span>About {data.minutes} min</span></div><h1>{data.title}</h1><p class="lesson-lead">{data.description}</p><div class="lesson-objectives"><h2>What you will understand</h2><ul>{data.objectives.map(o=><li>{o}</li>)}</ul></div>{!!prereqs.length&&<p class="prerequisites">Builds on: {prereqs.map((p,i)=><>{i>0?', ':''}<a href={lessonHref(p)}>{p.data.title}</a></>)}</p>}</header>
- <div class="prose"><Content /></div>
+ <div class="prose"><Content components={{pre: CodeBlock}} /></div>
  <section class="lesson-sources" id="sources"><h2>Go to the source</h2><ul>{data.sources.map(s=><li><a href={s.url} target="_blank" rel="noreferrer">{s.title} <span aria-hidden="true">↗</span></a></li>)}</ul><p>Reviewed {data.reviewed} · Kubernetes {data.kubernetesVersion} · <a href={`/labs/#${data.lab}`}>Related local exercise</a></p></section>
  <LessonProgress id={data.lessonId} client:visible />
  <nav class="lesson-next" aria-label="Adjacent lessons">{previous&&<a href={lessonHref(previous)}><small>Previous lesson</small>← {previous.data.title}</a>}{next&&<a href={lessonHref(next)} class="next"><small>Next lesson</small>{next.data.title} →</a>}</nav>

@@ -3,6 +3,7 @@ import { useReducedMotion } from 'motion/react';
 import type { Scene } from '../lib/scene-types';
 import { Diagram, DiagramLinks } from './Diagram';
 import SelectControl from './SelectControl';
+import CodeBlock from './CodeBlock';
 import {diagramLayout} from '../lib/diagram-layout';
 import MechanismExperiment, {type ExperimentKind} from './MechanismExperiment';
 
@@ -36,7 +37,7 @@ export default function ScenePlayer({scene,experiment}:{scene:Scene;experiment?:
   {!!scene.variants?.length&&<SelectControl label="Explore a scenario" value={variant} options={[{value:'default',label:'Normal behavior'},...scene.variants.map(item=>({value:item.id,label:item.label}))]} onChange={select} disabled={!hydrated} className="scenario-choice"/>}
   <div className="scene-narration" aria-live="polite" aria-atomic="true"><strong>{frame.title}</strong><p>{frame.narration}</p>{chosen&&<p className="variant-note">{chosen.description}</p>}</div>
   {!!frame.edges?.length&&<div className="scene-narration scene-relationships"><DiagramLinks frame={frame}/></div>}
-  {frame.code&&<details className="scene-code"><summary>Inspect this state in YAML / kubectl</summary><pre><code>{frame.code}</code></pre></details>}
+  {frame.code&&<details className="scene-code"><summary>Inspect this state in YAML / kubectl</summary><CodeBlock code={frame.code}/></details>}
   <details className="scene-transcript"><summary>Read the complete visual sequence</summary><ol>{scene.frames.map((f,i)=><li key={i}><strong>{f.title}</strong><p>{f.narration}</p></li>)}</ol>{scene.variants?.map(v=><section key={v.id}><h4>{v.label}</h4><p>{v.description}</p><ol>{v.frames.map((f,i)=><li key={i}><strong>{f.title}</strong><p>{f.narration}</p></li>)}</ol></section>)}</details>
   <details className="model-note"><summary>About this model</summary><p>{scene.assumption}</p></details>
   {experiment&&<MechanismExperiment kind={experiment}/>}

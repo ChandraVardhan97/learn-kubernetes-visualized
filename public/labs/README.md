@@ -7,7 +7,7 @@ This bundle contains 20 module labs, three cumulative capstone procedures in m20
 - **macOS:** Start [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and open Terminal. Use the Darwin builds of kind and kubectl for your Apple Silicon (ARM64) or Intel (AMD64) Mac. Install Python 3 if needed.
 - **Windows:** Set up [Ubuntu on WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) and [enable Docker Desktop's WSL integration](https://docs.docker.com/desktop/features/wsl/) for Ubuntu in Linux containers mode. Install Python 3 and the Linux builds of kind and kubectl inside Ubuntu. Extract this bundle in your Ubuntu home directory and run the lab commands from Ubuntu's Bash shell. An end-to-end run on Windows WSL 2 is pending.
 
-Use the version-pinned tools above. Confirm Docker is running with `docker version` and check the CLI versions with `kind version`, `kubectl version --client`, and `python3 --version`. See the [website setup guide](https://kubernetes-visualized.chandravardhanb.workers.dev/labs/#setup) for installation links and expected results.
+Use the version-pinned tools above. Confirm Docker is running with `docker version` and check the CLI versions with `kind version`, `kubectl version --client`, and `python3 --version`. See the [website setup guide](https://k8s-visualized.pages.dev/labs/#setup) for installation links and expected results.
 
 ## Setup
 

@@ -7,6 +7,7 @@ import '../styles/global.css';
 import '../styles/refined.css';
 import '../styles/select-control.css';
 import '../styles/diagram.css';
+import '../styles/code-snippet.css';
 import Icon from '../components/Icon.astro';
 import {modules,levelNames,levels} from '../data/modules';
 const {title='Kubernetes, Visualized',description='Understand Kubernetes through interactive visual explanations, from your first Pod to the control plane.',lessonId}=Astro.props;
@@ -41,7 +42,15 @@ const canonical=new URL(path,Astro.site);
   <a href="https://github.com/ChandraVardhan97/learn-kubernetes-visualized/blob/main/CONTRIBUTING.md">Contribute</a>
  </footer></div>
  <dialog id="search-dialog" aria-labelledby="search-title"><div class="search-header"><h2 id="search-title">Search the book</h2><button id="search-close" aria-label="Close search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.7"/></svg></button></div><div id="search-root"><p>Search loads when you open it.</p></div></dialog>
+ <template id="code-snippet-controls">
+  <div part="toolbar">
+   <span part="status" role="status"></span>
+   <button type="button" part="button" aria-label="Copy code"><Icon name="copy" size={14}/>Copy</button>
+  </div>
+ </template>
  <script>
+  import '../lib/code-snippet';
+
   const menu=document.querySelector<HTMLButtonElement>('#menu-toggle')!;
   menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.body.classList.toggle('nav-open',open);if(open)document.querySelector<HTMLAnchorElement>('#navigation a')?.focus();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('nav-open')){menu.setAttribute('aria-expanded','false');document.body.classList.remove('nav-open');menu.focus();}});
