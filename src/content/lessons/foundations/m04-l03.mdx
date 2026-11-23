@@ -2,7 +2,7 @@
 {
   "lessonId": "m04-l03",
   "title": "Configuration and Secrets",
-  "description": "Inject configuration with explicit update semantics and protect secret material beyond base64.",
+  "description": "Give one image different settings and see which changes a running program can pick up.",
   "level": "foundations",
   "module": "m04",
   "order": 3,
@@ -11,9 +11,9 @@
     "m04-l02"
   ],
   "objectives": [
-    "Use ConfigMaps and Secrets through explicit Pod references",
-    "Predict environment and mounted-file updates",
-    "Explain why base64 does not provide confidentiality"
+    "Choose ConfigMap or Secret based on the kind of input being supplied.",
+    "Compare environment variables with files mounted from configuration objects.",
+    "Explain what a Secret protects and which access controls still matter."
   ],
   "concepts": [
     {
@@ -58,19 +58,19 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: configuration is a separate input
+## <span id="mental-model-configuration-is-a-separate-input" aria-hidden="true" />How an app gets settings and credentials
 
-An image packages executable code and defaults. A ConfigMap supplies non-confidential deployment configuration without rebuilding that image. A Secret supplies sensitive values through a resource type designed for secret handling. Separating these inputs lets the same executable run in different environments, but it also creates dependencies: the referenced object and key must exist in the correct namespace before an ordinary required reference can be prepared successfully.
+You run the same app image in a training cluster and a public service. The training app needs a different color on its page and a different API token. Rebuilding the image just to change those values would mix software releases with environment settings. Kubernetes can supply the values when the app runs.
 
-A ConfigMap stores string data under `data` and binary content under `binaryData`. It is not an encrypted credential store. A Secret commonly uses `data` containing base64-encoded bytes, with `stringData` available as a write-time convenience for plain strings. Base64 is reversible encoding, not encryption. Anyone permitted to read a Secret's data can decode it. Putting a password into a YAML file under `stringData` leaves plaintext in that file and any repository or terminal history that records it.
+A **ConfigMap** is an API object for non-confidential configuration, such as a mode flag or the contents of a small settings file. A **Secret** is an API object intended for sensitive data such as credentials. Pods can refer to either kind of object by name and read selected values. References generally need the object in the same namespace.
 
-Security depends on the full access path: least-privilege API authorization, restricted workload creation, protection of node access, encryption at rest where configured, and careful application handling. Permission to create a Pod in a namespace can indirectly expose that namespace's Secrets by mounting them. Do not assess Secret safety solely by whether a user can run `get secret`.
+Using a Secret identifies the data as sensitive so you can put access rules and operational controls around it. The `data` format represents values using base64, a reversible encoding. Anyone authorized to read the Secret can decode it. Protect reads and workload creation permissions with RBAC, manage encryption at rest for stored data, and keep real credentials out of source files, command logs, and screenshots.
 
 <Scene id="m04-l03-secret" />
 
-## Walkthrough: project ordinary settings and a dummy credential
+## <span id="walkthrough-project-ordinary-settings-and-a-dummy-credential" aria-hidden="true" />Mount a ConfigMap and a Secret
 
-This complete training manifest uses an intentionally fake token. Never replace it with a real credential in a committed example. The Pod prints only the non-sensitive setting and checks that the Secret file exists; it does not print Secret content.
+In this example, `MODE` is passed as an environment variable and `settings.ini` is projected as a file. A Secret key is mounted as `/run/token/token`. The training value is fake. The process checks that the token file exists and has content while keeping the value out of its logs.
 
 ```yaml
 apiVersion: v1
@@ -122,7 +122,7 @@ spec:
         defaultMode: 0444 # Training default; choose access for the actual app user.
 ```
 
-Apply the three documents together in one dedicated lab namespace. Because object processing is asynchronous, a Pod may temporarily report missing configuration while the other documents are being created. Required references are retried as preparation proceeds. Inspect the concrete key and namespace if the condition persists.
+Save the manifest as `configuration-demo.yaml` and run the following in a disposable namespace. Expect the app logs to show its mode and the file read to show `color=blue`. If the container cannot start, read its events for a missing object, missing key, or volume setup error. Changing an image will not create a missing configuration object.
 
 ```bash
 kubectl apply -f configuration-demo.yaml
@@ -132,31 +132,25 @@ kubectl logs configuration-demo -c app
 kubectl exec configuration-demo -c app -- cat /etc/application/settings.ini
 ```
 
-Expect `mode=training` in logs and `color=blue` in the non-secret file. The test command checks the dummy token file without echoing it. The `&&` chain keeps the application waiting only after that file check succeeds; if the check fails, this shell exits instead. This makes the required input explicit without placing its sensitive content in logs. Validate failure behavior as well as the successful startup path.
-
 <Scene id="m04-l03-config" />
 
-## Practice: predict configuration refresh
+## <span id="practice-predict-configuration-refresh" aria-hidden="true" />Observe what happens after a config change
 
-Environment variables are established when a container starts. Updating the ConfigMap does not rewrite the environment of an already running process. A projected ConfigMap or Secret volume can refresh eventually, with propagation delay governed by node update behavior. A `subPath` mount does not receive these automatic updates. Even when the file changes, an application that read it once at startup will retain its old in-memory settings until it reloads or restarts.
+Now change the ConfigMap's `MODE` and `settings.ini` while the Pod keeps running. The environment variable was set when the container started, so the current process keeps the old value. A normal mounted ConfigMap volume can see updated files after the kubelet refreshes the projection. An application may need to re-open the file or reload to use those changes. A single file mounted with `subPath` does not receive those automatic ConfigMap or Secret updates.
 
-Change only `settings.ini` to `color=green`, apply, and inspect the mounted file after allowing for propagation. Then change `MODE` to another value and observe that the existing process environment does not automatically update. A deliberate workload rollout can create containers with the new environment. Versioned configuration names can make release identity clearer, provided you manage references and cleanup consciously.
+## <span id="pitfalls" aria-hidden="true" />Control who can read the credential
 
-## Pitfalls
-
-Updating a Secret is not a complete credential rotation. Consumers must reload it, old credentials may need revocation, and dependent systems must accept the new value during the transition. Logs, crash dumps, shell history, and debug output can disclose values after successful injection. Minimize what each container mounts, and use fake credentials during demonstrations.
+Plan how your app will adopt updates. For an environment variable, change or restart the workload's Pods in a controlled way. For a file, check whether the app rereads it and confirm the observed value after the projection updates. A Secret rotation also needs the application and upstream service to agree on when the new credential works. Practice how these inputs appear in a Pod with the [module lab](/labs/#m04).
 
 ## Check your understanding
 
 <details>
 
-<summary>The Secret object changed, but the application still uses its old password. Did base64 prevent the update?</summary>
+<summary>You update a ConfigMap and the file changes, but the app keeps printing its old mode. Why?</summary>
 
-No. Encoding does not control refresh. Determine whether the value was injected as an environment variable, mounted as a normal projected volume, or mounted with subPath. Then determine whether the application rereads files or caches credentials in memory. Rotation requires both delivery of new bytes and consumer adoption, plus revocation policy outside this Pod.
+The file and environment variable are separate delivery paths. The kubelet can update the projected file. The running program still has the environment it inherited at startup. Replace the running container through its workload if the change needs to take effect through that variable.
 
 </details>
-
-Practice both update paths with dummy values in the [module lab](/labs/#m04), then delete the dedicated training resources.
 
 ## Primary documentation
 

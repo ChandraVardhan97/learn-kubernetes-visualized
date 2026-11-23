@@ -1,13 +1,13 @@
 ---
 lessonId: "m14-l01"
 title: "Request lifecycle and admission"
-description: "Separate identity, permission, mutation, and validation before persistence."
+description: "Follow a Kubernetes write through identity, authorization, admission, and storage."
 level: "advanced"
 module: "m14"
 order: 1
 minutes: 16
 prerequisites: ["m13-l03"]
-objectives: ["Trace an API write through authentication, authorization, and admission.", "Choose between a webhook and an in-process validation policy.", "Diagnose rejection without confusing it with controller failure."]
+objectives: ["Identify which part of the request path rejects a bad credential, missing grant, or invalid object.", "Explain where admission mutation and validation change the outcome.", "Use a lab policy binding to see how authorization and admission answer different questions."]
 concepts: [{"id": "m14-l01-request-gates", "title": "Identity, permission, admission, persistence", "scene": "m14-l01-request-gates"}, {"id": "m14-l01-admission-mechanisms", "title": "Mutating webhook and CEL validation", "scene": "m14-l01-admission-mechanisms"}]
 sources: [{"title": "Admission control", "url": "https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/"}, {"title": "Dynamic admission webhooks", "url": "https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/"}, {"title": "ValidatingAdmissionPolicy", "url": "https://kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/"}]
 lab: "m14"
@@ -17,23 +17,17 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a successful HTTP request is only the beginning
+## <span id="mental-model-a-successful-http-request-is-only-the-beginning" aria-hidden="true" />Where the API can reject a write
 
-An API write passes several distinct boundaries. Authentication establishes the caller's identity from a credential; authorization decides whether that identity may perform this verb on this resource. Admission then evaluates the proposed operation. Mutating admission can supply or change fields, while validating admission can reject the resulting object. Successful persistence makes desired state visible; it does not prove a scheduler, controller, or kubelet has fulfilled it. A Deployment can be admitted successfully while all of its Pods remain Pending.
+A deployer submits a Deployment in a team namespace. The deployer has permission to create Deployments, but the request omits the label required for ownership. Kubernetes evaluates the request through several gates. **Authentication** establishes the caller’s identity. **Authorization** evaluates the operation, resource, and namespace for that identity. **Admission** acts on the proposed change after those checks. The API server also validates the object and, for an accepted ordinary write, persists the result to storage. Controllers learn about it and work on it afterwards.
 
-This separation makes incident evidence useful. A forbidden response points toward authorization or a policy rejection whose message explains the denial. An invalid object points toward schema or validation. A webhook timeout names a dependency on the write path. A stored Deployment with unavailable replicas requires downstream investigation. Do not restart application Pods to fix an API admission outage: the rejected desired state may never have reached storage at all.
+A bad credential can yield an authentication error. A correctly identified identity may get a forbidden response from authorization. A permitted writer can get a denial from admission. Identify the gate using the API’s status and message. In the scene, try the same Deployment with different callers and labels.
 
 <Scene id="m14-l01-request-gates" />
 
-## Walkthrough: mutation has consequences for validation
+## <span id="walkthrough-mutation-has-consequences-for-validation" aria-hidden="true" />Add and validate a required team label
 
-Consider an organization that requires every new Deployment to carry a team label. A mutating webhook could inject a default label; a validating rule then checks the final proposal. Mutation occurs before validating admission, but the complete API pipeline also includes decoding, defaulting, conversion and validation associated with the resource. The diagram deliberately summarizes these implementation details. Mutating webhook reinvocation is configurable; implementations must tolerate repeated calls and must not assume a durable ordering between independent mutators.
-
-A webhook is an external HTTPS service with certificate trust, availability, latency and timeout concerns. Its admission review response permits, rejects, or mutates the request; it should not perform irreversible external work as though admission already committed. A ValidatingAdmissionPolicy instead evaluates CEL inside the API server. It is useful for expression-based object rules without an external round trip. A policy needs a binding to select enforcement scope and validation actions. Neither mechanism replaces RBAC: permission to request an operation and permission for the proposed contents are different decisions.
-
-<Scene id="m14-l01-admission-mechanisms" />
-
-The following complete example is an optional cluster-scoped exercise. Save it as `team-policy.yaml`; it targets only Deployments in namespaces labeled `training-policy=enabled`. Label a separate disposable namespace before experimenting. The binding is what enables denial.
+**Mutating admission** can change an incoming object. A webhook might add labels or defaults before **validating admission** checks what would be written. A **ValidatingAdmissionPolicy** uses CEL, the Common Expression Language, for in-process validation. It needs a matching binding to apply. In the example, the policy checks for the `team` label on a Deployment’s own metadata during create or update. The `Deny` binding applies in namespaces labeled `training-policy=enabled`. A team label only on the Pod template does not satisfy that expression.
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1
@@ -65,6 +59,12 @@ spec:
         training-policy: enabled
 ```
 
+<Scene id="m14-l01-admission-mechanisms" />
+
+## <span id="practice-predict-the-boundary-before-inspecting-the-result" aria-hidden="true" />Test authorization and admission separately
+
+Save the manifest as `team-policy.yaml`. Use a disposable `kind-kv-lab` cluster and an authorized account before applying the cluster-scoped objects. Label only the target training namespace for the policy. Run `kubectl auth can-i` to check the verb. Then submit a Deployment with and without the label using server-side dry run. The dry run exercises admission without storing the Deployment, subject to admission support. When finished, remove the binding and policy using the cleanup commands.
+
 ```bash
 kubectl --context kind-kv-lab apply -f team-policy.yaml
 # An authorization check does not execute this admission policy.
@@ -74,24 +74,18 @@ kubectl --context kind-kv-lab delete validatingadmissionpolicybinding kv-team-la
 kubectl --context kind-kv-lab delete validatingadmissionpolicy kv-team-label
 ```
 
-## Practice: predict the boundary before inspecting the result
+The [API mechanics lab](/labs/#m14) provides a disposable baseline and exercises for distinguishing API decisions from controller progress.
 
-Use the [m14 local exercise](/labs/#m14) for safe API ownership and deletion experiments. The optional policy above extends that investigation; the downloadable lab does not install a highly available webhook service. Compare a server-side dry run with a real apply in a disposable selected namespace. A server-side dry run still traverses applicable admission. Matching webhooks must declare `sideEffects: None` or `NoneOnDryRun` and suppress any side effects for the dry run; an incompatible declaration makes the dry-run request fail. Expect the missing-label request to fail before a new Deployment is stored. Add the label and expect admission success, then independently inspect rollout status.
+## <span id="pitfalls-protect-the-write-path" aria-hidden="true" />Plan for admission failures
 
-Record the verb, resource, namespace, response message and whether an object with the expected UID exists. These facts distinguish a rejected request from a controller that has not converged. Existing objects are not automatically scanned and deleted when a new validation policy is introduced; its matching operations govern subsequent requests.
-
-## Pitfalls: protect the write path
-
-A fail-closed webhook can prevent matching writes when its service, DNS, certificate, or endpoints fail. A fail-open configuration trades availability against policy enforcement when calling the webhook fails; `failurePolicy: Ignore` does not override an explicit `allowed: false` response. Select narrowly, use short timeouts, monitor rejection and latency, and design an emergency recovery route that still respects the organization's approval boundary. Excluding a webhook's own dependencies can prevent circular recovery failures. Do not interpret a healthy webhook Pod as proof that the API server can reach its HTTPS endpoint or validate its certificate.
+A webhook runs in the critical path of affected requests. Its timeout and availability matter. A webhook’s `failurePolicy` controls how invocation errors such as timeouts are handled. An explicit denial from a successfully called webhook still rejects the request. Keep matching scopes tight and decide how operators can recover if admission blocks an important change.
 
 ## Check your understanding
 
 <details>
 
-<summary>RBAC allows a Deployment create, but admission rejects its image. Is authorization broken?</summary>
+<summary>kubectl auth can-i says yes, but your Deployment without a team label is rejected. Which check actually rejected it?</summary>
 
-No. Authorization allowed the caller to attempt the operation. Admission evaluated the proposed object's contents and rejected it before persistence. Fix the declared image or applicable policy; granting broader RBAC would not satisfy the image rule.
+Authorization allowed that identity to create a Deployment. Admission then evaluated the proposed object and found it lacked a required label. The response message and a labeled dry-run request help show the difference.
 
 </details>
-
-Next, trace the same request through managed fields and a watch. Keep the API response, persisted object, and eventual workload health as three separate pieces of evidence.

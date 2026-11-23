@@ -2,7 +2,7 @@
 {
   "lessonId": "m01-l02",
   "title": "Images and registries",
-  "description": "Trace an application from a layered image to a node image pull.",
+  "description": "Follow an image from a registry to a node and learn to tell a release label from the actual bytes.",
   "level": "foundations",
   "module": "m01",
   "order": 2,
@@ -11,9 +11,9 @@
     "m01-l01"
   ],
   "objectives": [
-    "Distinguish images from running containers",
-    "Read registry paths, tags, and digests",
-    "Diagnose why an image pull fails"
+    "Follow the image and container filesystem layers.",
+    "Read an image reference and distinguish tags from digests.",
+    "Tell an image pull failure from an application startup failure."
   ],
   "concepts": [
     {
@@ -54,21 +54,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a packaged starting point
+## <span id="mental-model-a-packaged-starting-point" aria-hidden="true" />What a container image contains
 
-An image is a distribution artifact containing filesystem layers and configuration for a container. It is not a running process, a live container snapshot that updates automatically, or a complete copy of an operating system kernel. Starting two containers from one image creates separate runtime instances. Their writable changes are separate even if the runtime shares cached, read-only image layers on disk.
+Say you want five machines to run the same web server you tried on your laptop. The machines need the program, its libraries, and its starting files. An **image** packages those files and configuration, including how to start the program. A **container** is a running instance or a stopped instance made from an image. Two instances can start with identical files and write different temporary files because each has its own writable layer.
 
-A build records filesystem changes in layers. Installing a dependency adds or modifies files relative to earlier layers. A later deletion can hide a file from the final filesystem without removing its bytes from an earlier layer. Therefore never place credentials into one build layer and “delete them later” as a security strategy. Build-time secret facilities and careful build context selection address a different problem from runtime Secret injection.
-
-Image configuration includes defaults such as an executable, arguments, environment, and working directory. A Pod can override some of these. Inspect both the image and the Pod when an application starts with an unexpected command. Packaging a server does not prove that it will stay running or listen on the correct interface.
+Images use layers. If two releases share a base layer, the container runtime can reuse the bytes it already has. A **registry** is a service that stores and serves image content. When a node needs an image, its container runtime resolves the reference, fetches the manifest, and downloads any missing layers. The runtime then prepares the filesystem and starts the container. Each step can succeed or fail separately.
 
 <Scene id="m01-l02-image-layers" />
 
-## Walkthrough: read the full image reference
+## <span id="walkthrough-read-the-full-image-reference" aria-hidden="true" />Read an image reference
 
-In `registry.k8s.io/pause:3.10`, `registry.k8s.io` is the registry hostname, `pause` is the repository path, and `3.10` is a tag. A tag is a human-friendly reference that registry operators may move to another image. A digest identifies content using a hash, for example a complete `sha256` digest obtained from your trusted build or registry. Do not copy an invented digest into a manifest and expect a pull to succeed.
-
-A multi-platform image index can refer to different image manifests for different operating systems or CPU architectures. A tag that works on one workstation may still fail on a differently provisioned node. Validate the supported platform and choose the digest appropriate to your release process. Digest pinning improves identity and repeatability; it does not by itself establish that the producer is trustworthy or that the software has no vulnerabilities.
+Read the example's `nginx:1.27.5` as image name `nginx` and **tag** `1.27.5`. The omitted registry resolves to a default registry under the usual runtime configuration. A longer reference might spell out the registry and repository. Treat the tag as a name assigned by the publisher. A registry can allow a publisher to move a tag to a different image. A **digest**, written after `@sha256:`, identifies specific content by its hash. A multi-platform image can have a digest for the index, which points to separate image manifests for each supported platform.
 
 ```yaml
 apiVersion: v1
@@ -86,7 +82,7 @@ spec:
         - containerPort: 80
 ```
 
-Save this as `image-demo.yaml` in the module lab. `containerPort` describes a port; it neither starts a listener nor publishes that port outside the Pod. The container image starts nginx, which supplies the actual server.
+Save the manifest as `image-demo.yaml` and use a disposable cluster. When the Pod is assigned to a node, the node's kubelet asks its runtime for the image. `IfNotPresent` allows reuse when the requested image is already present locally. This matters with moving tags: one node might have a cached image and a second node might need to fetch it. For a release you need to reproduce, deploy a digest you verified. For exercises like this one, the readable version tag keeps the example short.
 
 ```bash
 kubectl apply -f image-demo.yaml
@@ -96,31 +92,27 @@ kubectl describe pod image-demo
 kubectl get pod image-demo -o jsonpath='{.status.containerStatuses[0].imageID}'
 ```
 
-A successful result progresses toward Running, with a runtime-reported image ID. Its formatting may differ by runtime. Compare it with the requested reference rather than assuming the status field repeats the original tag exactly.
+Check `describe` when the Pod waits. If the events say the image could not be pulled, look at the reference, registry access, and available platforms. If the image is present and the program repeatedly exits, follow the container's exit reason and logs instead. The final command prints the image identity reported by the runtime. Use it when you need evidence of which image a Pod actually used.
 
 <Scene id="m01-l02-registry-pull" />
 
-## Practice: separate download from execution
+## <span id="practice-separate-download-from-execution" aria-hidden="true" />Pull an image and then run it
 
-The kubelet asks the container runtime to ensure the image is available. The runtime contacts the registry when required, resolves manifests, checks its layer cache, and downloads missing content. `Always` requires resolving the reference when starting a container; cached layers can still avoid downloading identical data. `IfNotPresent` can reuse a local image. Neither policy guarantees automatic updates to already running containers when someone moves a tag.
+Try explaining this sequence before changing any configuration: the Pod gets a node, the kubelet reports `ErrImagePull`, then you see `ImagePullBackOff`. The node was chosen. It is the pull that failed, and the runtime is waiting before another attempt. Compare that with a wrong application command. In that case you can often find a container exit status because the container got far enough to run. The [module lab](/labs/#m01) shows the boundary between pulling an image and executing a process.
 
-In a disposable lab, change the reference to an intentionally nonexistent tag and inspect Pod events. The API can accept a perfectly valid object even though the registry cannot supply its image. `ImagePullBackOff` describes delayed retries after pull failures, not an application crash. Check the underlying event for missing tags, authorization, DNS, certificates, connectivity, or platform incompatibility. For private images, image pull credentials must be available in the Pod's namespace using supported credential mechanisms. Avoid printing credential objects while debugging.
+## <span id="pitfalls" aria-hidden="true" />What changes when a tag moves
 
-## Pitfalls
-
-A developer's successful local pull does not establish that a cluster node has the same network route, architecture, cache, or credentials. Resolve failures from the node/runtime's point of view. A cached mutable tag can also cause replicas to use unexpected contents across nodes; a controlled rollout with an immutable image identity is easier to explain.
+Pinning a digest helps you get the same image content again. To decide whether that content should run, also check who built or published it and what your deployment policy trusts. Image pull credentials give access to a registry. Credentials the application itself needs are a separate input.
 
 ## Check your understanding
 
 <details>
 
-<summary>A new image is pushed under the same tag. Will every existing Pod immediately run it?</summary>
+<summary>Two Pods specify the same moving tag with IfNotPresent. Why could they run different images?</summary>
 
-No. Existing containers keep running their current image. A new container start may resolve or reuse the reference according to its pull policy and cache. Changing the Pod template to a verified new digest produces an explicit release identity and, with a Deployment, triggers a managed rollout. Moving a registry tag is not a Kubernetes rollout command.
+The nodes can have different cache histories. An existing local image can satisfy a request on one node while another node fetches the tag's current target. Use the same verified digest and compare the reported image identity if byte-for-byte agreement matters.
 
 </details>
-
-Next, trace how a client reaches the process packaged in that image. Practice image inspection and deliberate pull failure in the [module lab](/labs/#m01).
 
 ## Primary documentation
 

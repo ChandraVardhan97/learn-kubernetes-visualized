@@ -2,7 +2,7 @@
 {
   "lessonId": "m09-l03",
   "title": "Snapshots and storage recovery",
-  "description": "Create a recovery point only when the driver supports it, then verify restoration into a new claim.",
+  "description": "Capture a storage recovery point, restore it to a fresh claim, and verify the recovered data.",
   "level": "intermediate",
   "module": "m09",
   "order": 3,
@@ -11,9 +11,9 @@
     "m09-l02"
   ],
   "objectives": [
-    "Identify snapshot CRDs, controller and CSI driver prerequisites",
-    "Separate crash consistency from application consistency",
-    "Restore to an independent claim and test recovered data"
+    "Trace a VolumeSnapshot from a source claim through the snapshot controller and driver.",
+    "Explain what a snapshot captures when an application is still writing.",
+    "Decide whether a restored claim contains usable data based on direct verification."
   ],
   "concepts": [
     {
@@ -59,17 +59,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a recovery point is a separate resource with prerequisites
+## <span id="mental-model-a-recovery-point-is-a-separate-resource-with-prerequisites" aria-hidden="true" />What a volume snapshot captures
 
-A **VolumeSnapshot** requests a point-in-time snapshot of a supported volume. The namespaced object represents the user's request; a cluster-scoped **VolumeSnapshotContent** represents the bound backend snapshot. A **VolumeSnapshotClass** selects the CSI driver and snapshot deletion policy. The relationship resembles PVC, PV and StorageClass, but snapshots are not automatically available simply because PVCs work.
+A report service is about to change its data format. You want a copy of the disk from before the change so you can inspect the old data if needed. A **VolumeSnapshot** is a Kubernetes request for a point-in-time copy of volume data. It names the source PVC and a snapshot class. A snapshot controller and a compatible CSI driver arrange the copy, and a `VolumeSnapshotContent` object represents the snapshot in the cluster. Check that the cluster has the snapshot APIs, a controller, and a driver with snapshot support before running these examples.
 
-The cluster needs the snapshot API CRDs, a snapshot controller, the relevant CSI integration and a driver and backend that support snapshot operations. Some local host-directory provisioners do not implement this CSI snapshot workflow. A missing API kind or unsupported driver is a capability limit, not a reason to invent a class name until validation succeeds. Use the [module lab](/labs/#m09) to inspect capabilities first; where snapshots are unavailable, practice recovery by copying a disposable application export to a new claim and clearly label that as an application backup exercise.
+A snapshot captures what the storage system can see. If the report process is halfway through writing, the volume might contain a partial result. A database may need its own backup or checkpoint procedure to recover consistently. Choose the moment to capture based on what the application guarantees, then use the scene to walk from the source claim to a ready snapshot.
 
 <Scene id="m09-l03-snapshot" />
 
-## Walkthrough: capture bytes at a meaningful application boundary
+## <span id="walkthrough-capture-bytes-at-a-meaningful-application-boundary" aria-hidden="true" />Take a snapshot at a known point
 
-This example assumes `app-data` exists and `lab-snapshots` is an installed VolumeSnapshotClass for its driver. Snapshot readiness is asynchronous. Read `readyToUse`, binding and error fields rather than treating creation of the API object as a completed backend operation.
+Save the example as `app-before-change.yaml`. Replace `lab-snapshots` with a real snapshot class for the PVC’s driver and verify that `app-data` exists in the same namespace. Before taking a test snapshot, write a known value and record its checksum. If the application has more than one volume, determine how it makes its data consistent across those volumes before treating individual snapshots as one recovery point.
 
 ```yaml
 apiVersion: snapshot.storage.k8s.io/v1
@@ -90,13 +90,11 @@ kubectl get volumesnapshot app-before-change -o yaml
 kubectl describe volumesnapshot app-before-change
 ```
 
-A storage snapshot can be **crash-consistent**: it reflects storage state comparable to an abrupt machine interruption, without coordinating application transactions. **Application-consistent** recovery may need database checkpointing, a quiesce operation, a native backup API or coordination across several volumes. Files present on disk are not necessarily a valid complete transaction. If a database spans data and log volumes, independently snapshotting each at different times can create an unusable combination even when every individual snapshot reports ready.
+Look for `readyToUse` and the restore size in status. That status tells you the storage system has prepared a copy you can request for a restore.
 
-A snapshot is also not automatically an independent backup against every failure. It may share the same backend, account, credentials or regional failure domain as the source. Define the recovery objective: accidental file deletion, volume loss, account compromise and regional loss require different protection boundaries. Retention, encryption and access permissions belong in that design, alongside the application's restore procedure.
+## <span id="practice-restore-to-a-new-name-and-prove-the-content" aria-hidden="true" />Restore to a fresh claim and verify its contents
 
-<Scene id="m09-l03-restore" />
-
-## Practice: restore to a new name and prove the content
+Create the restored volume from a separate PVC. The `dataSource` points to the snapshot. Choose a compatible StorageClass and a request at least as large as the required restore size. Mount the fresh claim in a temporary Pod, then compare the saved checksum or run a read-only application check. Keeping the source claim untouched makes it easier to validate both copies.
 
 ```yaml
 apiVersion: v1
@@ -115,24 +113,23 @@ spec:
       storage: 2Gi             # At least the required restore size.
 ```
 
-Restore into a separate claim rather than overwriting the source during practice. Mount it in a recovery Pod whose process cannot accidentally serve production traffic. First check a known marker or checksum. Then run application-native integrity checks and perform a meaningful read or transaction against the restored data. A directory listing proves files exist, while a successful database integrity check answers a much stronger question about recoverability.
+<Scene id="m09-l03-restore" />
 
-Record the time represented by the recovered data and the steps needed to make it usable. Compare that result with the intended recovery point and acceptable recovery time without claiming measured service-wide guarantees from a small lab. Keep the original and restored volumes until verification passes. Deleting a bound VolumeSnapshot invokes its content's deletion policy: `Delete` removes the VolumeSnapshotContent and backend snapshot, while `Retain` preserves both. Inspect that policy before cleanup, just as you inspect a PV reclaim policy.
+The [persistent storage lab](/labs/#m09) supplies a file-based persistence baseline. The CSI snapshot exercise requires snapshot support. You can practice the content-verification step in either environment by comparing the expected file with what the replacement or restored Pod reads.
 
-## Pitfalls: readiness is not a restore rehearsal
+## <span id="pitfalls-readiness-is-not-a-restore-rehearsal" aria-hidden="true" />Check what failures your backup can survive
 
-An object reporting `readyToUse` means the storage snapshot operation reached the relevant ready state. It does not establish application consistency, independent retention or successful restore on a different cluster. StorageClass parameters, driver support, source volume mode and restore-size constraints can prevent a new claim from using an otherwise ready snapshot. Capture events from both snapshot and destination PVC before changing data. A backup procedure that has never been restored leaves its most important assumption untested.
+Snapshots can share a storage system, account, or location with the source volume. Check which failures the copy survives before planning to rely on it. A bound restored claim shows that Kubernetes can supply a volume. It takes a content and application check to establish that the restore actually met the recovery goal.
 
 ## Check your understanding
 
 <details>
-<summary>A database snapshot is readyToUse and the restored directory contains all expected files. Is the recovery complete?</summary>
 
-No. Those observations establish storage checkpoints, but the database may still require log recovery, integrity validation, compatible configuration and a successful application read. Restore into an isolated environment and verify the application-level state before directing clients to it. The purpose of recovery testing is to turn assumptions about bytes into evidence about usable data.
+<summary>The restored Pod starts but the report is missing its final records. Which part of your process could account for that?</summary>
+
+The snapshot may have been taken before the app committed the last records. Compare the expected recovery point with the application’s flush or checkpoint time. A successful mount and a ready snapshot cannot supply records that had yet to reach the captured volume.
 
 </details>
-
-Next, give stateful replicas stable identities and claims. The controller can maintain names and storage relationships, while the application must still handle replication and recovery correctly.
 
 ## Primary documentation
 

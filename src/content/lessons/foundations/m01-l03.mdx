@@ -2,7 +2,7 @@
 {
   "lessonId": "m01-l03",
   "title": "Networking before Kubernetes",
-  "description": "Follow DNS, TCP ports, and HTTP across a container network boundary.",
+  "description": "Trace a web request from the name you type to the process that answers it.",
   "level": "foundations",
   "module": "m01",
   "order": 3,
@@ -11,9 +11,9 @@
     "m01-l02"
   ],
   "objectives": [
-    "Distinguish port declarations from actual listeners",
-    "Trace DNS resolution before an HTTP request",
-    "Explain loopback and host port publishing"
+    "Distinguish an interface, its IP address, and a TCP port.",
+    "Trace a connection and read the resulting HTTP status.",
+    "Identify whether a failure happened during DNS, connection, or HTTP."
   ],
   "concepts": [
     {
@@ -54,19 +54,19 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: name, address, connection, message
+## <span id="mental-model-name-address-connection-message" aria-hidden="true" />Where a web request goes
 
-A web request crosses several boundaries. DNS turns a hostname into address information. Routing determines how packets reach an address. In the TCP-based HTTP examples used here, TCP establishes a connection between address-and-port pairs, and HTTP carries application messages over it; HTTPS adds TLS. HTTP/3 instead uses QUIC over UDP, so TCP is not a universal HTTP requirement. These steps can fail independently. A correct DNS answer does not prove that a server is listening, and a successful connection does not prove that the requested HTTP path exists.
+You open a web browser and type `http://127.0.0.1:8080/`. What has to happen before you see a page? First, the operating system needs somewhere to send the packets. The address `127.0.0.1` is IPv4 **loopback**, an address for reaching the same machine from the current network view. A network **interface** is a connection point that can have addresses assigned to it. Loopback is one interface. Wi-Fi and virtual container interfaces are other examples.
 
-A port identifies a transport endpoint within a network namespace, not a physical opening in a container. A server must bind an address and port. Binding `127.0.0.1:8080` normally accepts connections only over that network namespace's loopback interface. Binding `0.0.0.0:8080` accepts connections on all local IPv4 interfaces, subject to networking and policy. IPv6 listeners and dual-stack behavior need deliberate configuration; do not infer them from an IPv4 example.
+A **port** is a number used by a transport protocol, such as TCP, to direct traffic to an application endpoint at an address. When nginx listens on TCP port 80 inside a container, a client needs a network path to that endpoint. In the example, Docker publishes a second endpoint on your machine's loopback at port 8080, then forwards connections there to the container's port 80.
 
-Two containers with separate network namespaces can each listen on port 80 without conflict. Two processes sharing one network namespace cannot usually bind the same address, port, and protocol simultaneously. This becomes important when multiple containers share a Pod's network namespace: they reach each other through `localhost`, and their listening ports must coexist.
+After the connection opens, the client sends an **HTTP request** with a method and a path, such as `GET /`. The server sends back an **HTTP response** with a status, headers, and often a body. A 404 response is useful evidence. Something accepted the connection, understood HTTP, and said the requested path was missing.
 
 <Scene id="m01-l03-port-path" />
 
-## Walkthrough: publish a local training port
+## <span id="walkthrough-publish-a-local-training-port" aria-hidden="true" />Connect to a container from your machine
 
-This optional exercise uses Docker, not a Kubernetes Service. It makes the network boundary visible before the cluster adds more layers. Docker must already be installed; the nginx image is a training dependency. Use Docker Engine 28.0.0 or later for the documented loopback-only exposure behavior: older releases can allow hosts on the same layer-2 network to reach ports published to localhost.
+Follow both numbers in the publish option from left to right. `8080` is where the browser connects on your machine. `80` is where nginx listens in its own network view. Binding the host side to loopback keeps this practice endpoint local. Execute the commands in order and compare the response headers for the two paths.
 
 ```bash
 # Bind only the laptop's IPv4 loopback address for this local exercise.
@@ -81,13 +81,11 @@ curl -i http://127.0.0.1:8080/does-not-exist
 docker stop network-demo
 ```
 
-The first request should receive an HTTP success response if the container starts and the port is available. The second typically receives HTTP 404. Both responses prove that a server answered the connection. “Connection refused” is different: the requested transport endpoint rejected the connection before an HTTP response existed. A timeout indicates that an expected response did not arrive; filtering, routing problems, an unresponsive server, and other causes require further evidence.
+Expect the first request to return a page. The second normally returns a 404 from nginx. After you stop the container, trying the first command again should fail to connect if no other program is listening there. Those outcomes tell you whether you reached the server, found the requested resource, or failed before sending HTTP.
 
-An image's `EXPOSE` instruction or Kubernetes `containerPort` field does not publish a host port or create a listener. A manifest can document port 80 while the process actually listens on 8080. Follow the process configuration and the forwarding configuration separately. Kubernetes later replaces manual Pod-address tracking with Services, without changing this basic requirement.
+## <span id="dns-happens-before-the-request" aria-hidden="true" />What DNS does before the request
 
-## DNS happens before the request
-
-For a URL such as `http://shop.example.test:8080/catalog`, the client extracts the hostname, resolves it using its resolver configuration, connects to an address on port 8080, and sends an HTTP request for `/catalog`. The hostname can also matter at the application layer through HTTP authority or Host information and, for HTTPS, TLS server name selection. Replacing a hostname with an IP can therefore change more than just DNS.
+A URL with a hostname adds a step. The **Domain Name System** (DNS) lets the client look up records for a name. For a web connection, the client typically uses one of the returned IPv4 or IPv6 addresses. Several addresses can be valid. A successful lookup demonstrates name resolution. The client still has to connect to an address and receive an answer from the intended application.
 
 <Scene id="m01-l03-dns" />
 
@@ -98,27 +96,25 @@ nslookup kubernetes.io
 curl -v https://kubernetes.io/ -o /dev/null
 ```
 
-DNS answers can be cached according to their TTL and resolver behavior. An application may keep using an existing TCP connection after a DNS record changes, so a DNS update does not forcibly migrate every active request. A records carry IPv4 addresses, AAAA records carry IPv6 addresses, and CNAME records refer to another DNS name. No DNS record makes a backend healthy by itself.
+Read the verbose `curl` output from the beginning. Look for a resolved address, the connection attempt, TLS negotiation for HTTPS, then the HTTP status. In later Kubernetes examples, the same sequence helps you trace requests to a Service from inside a Pod.
 
-## Practice: predict the first broken boundary
+## <span id="practice-predict-the-first-broken-boundary" aria-hidden="true" />Find where a request failed
 
-Draw a four-step path for a request: resolve, connect, negotiate TLS if applicable, exchange HTTP. For each symptom, identify the earliest step that must have succeeded. An HTTP 500 means an HTTP-speaking component answered; it does not identify whether the fault originated in that server or an upstream dependency. A certificate-name error usually means name resolution and some connection establishment already happened. A DNS “name does not exist” result prevents ordinary connection setup to that name.
+When a request breaks, form a prediction before changing anything. With a misspelled hostname, start at DNS. With the right address and the wrong port, look for a refused connection or timeout. With a real HTTP error, inspect the server, route, or application. Try the first version of this exercise with the [module lab](/labs/#m01).
 
-## Pitfalls
+## <span id="pitfalls" aria-hidden="true" />Check the address from the caller
 
-`localhost` always refers to the caller's own network namespace. From a laptop it is the laptop, from a Pod it is that Pod. A port-forward or host publishing rule deliberately bridges a boundary. Do not assume those bridges exist merely because two tools use the same port number.
+The meaning of `localhost` follows where the client process runs. From a container it usually refers to that container's network namespace. Connect from the same location as the failing client when testing a path.
 
 ## Check your understanding
 
 <details>
 
-<summary>A DNS lookup succeeds but curl reports connection refused. Should you change the DNS name first?</summary>
+<summary>The request returns HTTP 404. Is changing the published port a useful first step?</summary>
 
-First inspect the address, destination port, server listener, and forwarding path. The successful lookup supplied address information; refusal occurs at a later boundary. DNS may still have supplied the wrong address, but changing names without checking the listener discards useful evidence. Test the exact address and port, then compare them with the server's bind configuration.
+Start with the response and the path. The request reached an HTTP server at the port you used. Check whether that server was the intended one and whether it has a route for that path.
 
 </details>
-
-Use the [module lab](/labs/#m01) to compare a successful HTTP response, an HTTP error response, and a transport failure before moving into cluster components.
 
 ## Primary documentation
 

@@ -1,13 +1,13 @@
 ---
 lessonId: "m17-l01"
 title: "CPU throttling, OOM, and eviction"
-description: "Identify the resource boundary before choosing a remedy."
+description: "Diagnose three different resource failures using container status, node pressure, and CPU signals."
 level: "advanced"
 module: "m17"
 order: 1
 minutes: 16
 prerequisites: ["m07-l03", "m15-l01"]
-objectives: ["Distinguish CPU quota throttling from memory OOM termination.", "Explain node-pressure eviction and its evidence.", "Relate requests, limits and QoS without promising immunity."]
+objectives: ["Explain how CPU quota delays runnable work.", "Recognize a container memory limit violation in termination state.", "Distinguish an OOM kill from kubelet eviction under node pressure."]
 concepts: [{"id": "m17-l01-cpu-memory-boundary", "title": "CPU delays work; memory can terminate it", "scene": "m17-l01-cpu-memory-boundary"}, {"id": "m17-l01-pressure-eviction", "title": "Node pressure differs from a container OOM", "scene": "m17-l01-pressure-eviction"}]
 sources: [{"title": "Container resources", "url": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"}, {"title": "Node-pressure eviction", "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/"}, {"title": "Pod QoS", "url": "https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/"}]
 lab: "m17"
@@ -17,23 +17,23 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: different limits fail differently
+## <span id="mental-model-different-limits-fail-differently" aria-hidden="true" />Why CPU pressure and memory limits look different
 
-A CPU limit can cause throttling when the container exhausts its allowed execution quota. The process is delayed rather than automatically killed for crossing a CPU limit. Latency and request queues can grow even while average CPU graphs look modest, particularly when sampling hides short bursts. A CPU request instead informs scheduling and relative allocation under contention; it is not a promise that every request receives a dedicated physical core.
+During a traffic spike, some API requests slow down and one worker stops entirely. The resource numbers tell different stories. **CPU throttling** delays a runnable process after it consumes the CPU time allowed for the current interval. Requests may queue up even while the container keeps running. Compare request latency with CPU usage and throttling counters when available. Check whether the workload could run faster with more CPU or is waiting on something else.
 
-Memory has a different failure boundary. A container that cannot satisfy allocations within its enforced memory limit can be terminated by the kernel OOM mechanism. Kubernetes can report OOMKilled in container termination state, and restart policy determines what happens next. Memory requests guide placement and eviction considerations; they do not reserve every byte against every failure. A process can also fail allocations itself, so an application exception is not automatically evidence of a kernel OOM kill.
+A container can also hit its **memory limit**. The kernel can reclaim some memory, but if it cannot satisfy demand within the memory boundary it can kill a process. Kubernetes may report `OOMKilled` when the container terminates. The Pod’s restart policy then controls what happens to that container. Compare the traces in the first scene. A CPU throttle can explain latency without a restart, while a memory kill can explain a termination.
 
 <Scene id="m17-l01-cpu-memory-boundary" />
 
-## Walkthrough: pressure can remove a whole Pod
+## <span id="walkthrough-pressure-can-remove-a-whole-pod" aria-hidden="true" />When the kubelet evicts a Pod
 
-Node-pressure eviction is the kubelet reclaiming resources when thresholds for memory, disk space, inodes or other supported signals are met. It differs from a container reaching its own memory limit. An evicted Pod is normally marked Failed with an eviction reason and message; a workload controller may create a replacement. The replacement may land on another node, but only if scheduling and capacity allow it. Eviction is not equivalent to a container restart inside the same Pod identity.
-
-QoS classes help characterize resource configuration, but Guaranteed is not immunity from every eviction or host failure. Eviction ranking considers whether usage exceeds requests, Pod priority and relative excess for the pressured resource. Disk and inode pressure have their own accounting complications. Preserve the termination message, events, node conditions and container lastState before a cleanup or new rollout hides the evidence. A single exit code without context is usually insufficient to distinguish all these paths.
+**Node pressure eviction** happens when the kubelet needs to reclaim a scarce resource on the whole node. It may first attempt cleanup such as deleting unused images, then evict Pods if pressure persists. For memory, it ranks candidates using whether usage exceeds requests, priority, and relative usage. The Pod can be marked `Failed` with reason `Evicted` even when its containers were below their individual limits. Its controller may create a replacement with a different UID.
 
 <Scene id="m17-l01-pressure-eviction" />
 
-This complete memory-limited Pod is an optional small demonstration similar to the m17 download. It intentionally allocates memory through a memory-backed volume so the allocation is charged to the container. Its local outcome depends on runtime and kernel accounting; the downloadable script checks for OOMKilled rather than claiming every environment behaves identically.
+## <span id="practice-explain-the-observed-termination" aria-hidden="true" />Inspect a container killed under its memory limit
+
+The teaching example mounts an in-memory `emptyDir` at `/memory`. The writer attempts to place 96 MiB in it with a 32 MiB container memory limit. Those file contents count toward memory use, so even a process writing to a filesystem can hit the memory boundary. Treat this as a small disposable experiment. The snippet names the Pod `m17-memory`. The inspection commands use `m17-oom`, the separate scenario supplied by the lab. Use the name that matches the exercise you ran.
 
 ```yaml
 apiVersion: v1
@@ -72,24 +72,18 @@ kubectl --context kind-kv-lab get nodes
 kubectl --context kind-kv-lab -n kv-lab get events --sort-by=.metadata.creationTimestamp
 ```
 
-## Practice: explain the observed termination
+In the [performance lab](/labs/#m17), check the actual termination reason, exit code, and node conditions. Compare a container that was killed with the entire Pod being evicted. The exit code alone may be ambiguous.
 
-Run the [m17 local exercise](/labs/#m17) rather than generating node-wide pressure on your laptop. The scripted Pod has a bounded memory limit and the script waits for OOMKilled. Inspect the exact container termination reason and compare it with the Pod phase. If the expected reason does not appear, inspect logs and runtime accounting; do not automatically increase allocation until the host becomes unstable. This is a container-limit exercise, not a proof of production eviction ordering.
+## <span id="pitfalls-bigger-limits-can-move-the-bottleneck" aria-hidden="true" />Check the bottleneck before raising limits
 
-For a throttling investigation, collect CPU quota/throttling metrics from the runtime or monitoring system and correlate them with application latency, concurrency and queue length. `kubectl top` requires a metrics provider and gives a sampled utilization view, not the complete throttling history. For eviction, inspect node pressure conditions and kubelet events before changing container memory limits. Choose the remedy at the boundary the evidence actually identifies.
-
-## Pitfalls: bigger limits can move the bottleneck
-
-Increasing memory limits without increasing requests can let Pods consume more than the node can safely support. Increasing CPU limits may improve one container's burst behavior while increasing contention for neighbors. A memory-backed emptyDir consumes memory and can contribute to memory pressure; a disk-backed emptyDir has different pressure behavior. Include startup peaks, caches, heap behavior and realistic load when setting requests. Avoid using restart count alone as the health signal: repeated replacement Pods can reset the visible history under new UIDs.
+Raising a limit can buy time for a legitimate workload, or move the pressure to the node if the process keeps growing. Observe memory over time, inspect allocations and cache behavior, and read container and node evidence before tuning. Keep runtime limits and placement requests in view together.
 
 ## Check your understanding
 
 <details>
 
-<summary>A request becomes slow at its CPU limit but the container stays Running. Is that inconsistent?</summary>
+<summary>The process is slow but keeps running. Its memory is flat and CPU throttled time rises during peaks. What would you test?</summary>
 
-No. CPU quota exhaustion commonly throttles execution rather than killing the container. Check throttling and queueing evidence. OOMKilled and node-pressure eviction are different mechanisms with different termination and event evidence.
+Check whether the process reaches its CPU quota during the slow periods. Compare latency and throughput with a deliberate quota change or less work per replica while keeping other inputs fixed. That can show whether CPU availability explains the delay.
 
 </details>
-
-Next, examine how an autoscaler interprets CPU usage relative to requests. Resource configuration changes both placement and the feedback signal used to scale.

@@ -2,7 +2,7 @@
 {
   "lessonId": "m03-l02",
   "title": "Labels, selectors, and namespaces",
-  "description": "Organize API objects and choose exactly which set a controller or Service observes.",
+  "description": "Find related Pods by their labels, then check which controller is responsible for them.",
   "level": "foundations",
   "module": "m03",
   "order": 2,
@@ -11,9 +11,9 @@
     "m03-l01"
   ],
   "objectives": [
-    "Use equality and set-based selectors correctly",
-    "Separate labels from annotations and ownership",
-    "Explain namespace scope without assuming isolation"
+    "Use labels and selectors to identify a set of resources.",
+    "Distinguish labels from annotations and their purposes.",
+    "Explain how namespaces and owner references affect what you inspect."
   ],
   "concepts": [
     {
@@ -63,19 +63,19 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: identity, grouping, and scope
+## <span id="mental-model-identity-grouping-and-scope" aria-hidden="true" />Organize objects with namespaces and labels
 
-Names address individual objects; labels group objects. A label is a string key/value pair attached under `metadata.labels`. Many Pods can share `app: catalog`. That is useful precisely because labels are not unique identifiers. A selector expresses requirements for a set of objects. Controllers and Services use these sets for different purposes, so a correct-looking label on the wrong object can still break behavior.
+A store runs catalog and checkout services in one training cluster. Each has an API and some background workers. You want to list just the catalog API Pods. Pod names can change when a Deployment replaces them, so searching for the same names tomorrow is unreliable. A **label** is a short key-value pair attached to an object, such as `app=catalog` or `tier=api`. A **selector** is a matching rule. Kubernetes can use it to find all objects with the labels you requested, including replacements.
 
-A Service selector matches Pod labels in its own namespace. A Deployment selector must match its Pod template labels, and the Deployment manages replicas through ReplicaSets. The label on the Deployment object itself does not automatically label its Pods. Think of parent metadata and template metadata as two distinct object records at different places in the tree.
+**Annotations** are key-value metadata for additional information that tools or people can read. The example includes an annotation for the purpose of the exercise. A label selector reads labels. Use labels when people and components need to group objects, and annotations for information such as a source link, an explanation, or a tool-specific setting.
 
-An **annotation** is also string metadata, but it holds descriptive or tool-specific information rather than ordinary label-selection dimensions. A release-note URL belongs naturally in an annotation. So does a tool's structured configuration when that tool documents an annotation contract. An annotation only changes behavior if a component understands and acts on it; adding a plausible annotation name does not teach Kubernetes a new policy.
+A **namespace** gives namespaced API objects a scope. You can create a Pod called `catalog-demo` in `selection-lab` and a Pod with the same name in a different namespace. A query made in one namespace sees the matches there; `-A` requests every namespace you are allowed to list. Node objects are cluster-scoped. A namespace by itself only provides naming scope. Traffic isolation and permission boundaries need their own controls.
 
 <Scene id="m03-l02-selection" />
 
-## Walkthrough: select a precise set
+## <span id="walkthrough-select-a-precise-set" aria-hidden="true" />Select the objects you need
 
-Create a disposable namespace named `selection-lab`, then save and apply this object there:
+Save the file as `catalog-demo.yaml` and use your disposable cluster. The file describes one Pod in `selection-lab`. Before running the list commands, predict whether the labels make it match each selector. Both list commands should find it.
 
 ```yaml
 apiVersion: v1
@@ -105,17 +105,13 @@ kubectl -n selection-lab get pods -l 'environment in (training,staging)'
 kubectl -n selection-lab get pods --show-labels
 ```
 
-The first query selects Pods that meet both requirements. The second selects either listed value for one key, but does not create a general OR across unrelated keys. Set-based selectors can also require a key's presence or absence. Read the exact operator semantics: a negative match can include objects where the key is missing, which may be broader than your intended “all production objects except frontend.”
-
-A namespace scopes names for many API resources. `catalog-demo` in `selection-lab` is distinct from an identically named Pod in another namespace. Namespaces are not nested folders, and an individual namespaced object belongs to one namespace. Some resources, including Nodes and Namespaces themselves, are cluster scoped. Use `kubectl api-resources --namespaced=true` and `--namespaced=false` to inspect that distinction.
+The first selector uses two equalities joined by a comma. Both have to hold. A Pod with `app=catalog` and `tier=worker` fails the second test. The second selector uses `in`, so the environment label may have either listed value. If your result is empty, run `--show-labels`, read the namespace, and compare the values one requirement at a time. Some API fields, such as a Service's selector, accept a simpler map of exact label matches.
 
 <Scene id="m03-l02-scope" />
 
-## Practice: selection does not imply ownership
+## <span id="practice-selection-does-not-imply-ownership" aria-hidden="true" />Compare labels with owner references
 
-Owner references link a dependent object to a particular owner's UID and support lifecycle behavior such as garbage collection. Labels alone do not express that relationship. A Pod labeled `app: catalog` is not automatically owned by a similarly labeled Deployment. For managed workloads, let the appropriate controller create child objects and their owner references. Hand-writing owner references without understanding scope and controller rules is not an ordinary grouping operation.
-
-Inspect both mechanisms on a Deployment-created Pod:
+Now compare selection with **ownership**. An owner reference in metadata records which API object owns a dependent. A Deployment normally owns a ReplicaSet, and the ReplicaSet owns its Pods. References identify specific owners with UIDs. A Service can select the same Pods to send them traffic while owning none of them. A one-off Pod can also match a label query without having an owner. Use the next commands with a managed Pod from a Deployment exercise. The standalone `catalog-demo` above has no Deployment owner.
 
 ```bash
 kubectl -n selection-lab get pods --show-labels
@@ -124,25 +120,19 @@ kubectl -n selection-lab get pod ACTUAL_MANAGED_POD \
   -o jsonpath='{.metadata.ownerReferences}'
 ```
 
-If the example Pod is standalone, owner references should be absent. That absence explains why deleting it does not obligate a ReplicaSet to replace it. A controller can sometimes adopt an eligible unowned matching object; avoid overlapping workload selectors rather than relying on accidental adoption.
+## <span id="pitfalls" aria-hidden="true" />What a label change can affect
 
-## Pitfalls
-
-A namespace is an API organization and policy attachment boundary, not automatic network isolation or a separate Linux namespace. Without appropriate authorization, network policy, admission, and resource controls, workloads in different namespaces can still interfere or communicate. Secret and ConfigMap references from ordinary Pods are namespace scoped; creating the same name elsewhere does not satisfy the reference.
-
-Changing a label can change who selects the object immediately after observers catch up. Treat labels used by Services and controllers as operational configuration, not decorative tags. Namespace deletion also removes namespaced resources within it, so only delete dedicated training namespaces in this exercise.
+When a selector controls behavior, each label edit can have a consequence. If you remove the label a Service selects, the routing path can change. Avoid overlapping selectors for independent controllers that manage the same kind of dependent. When you are deciding who will recreate a Pod or what deletion might collect, inspect owner references and the controller. The [module lab](/labs/#m03) practices applying and inspecting object metadata.
 
 ## Check your understanding
 
 <details>
 
-<summary>A Service selects app=catalog, but only the Deployment object has that label. Will it select the Deployment's Pods?</summary>
+<summary>A standalone Pod and two managed Pods all match app=catalog. Does one selector make them share an owner?</summary>
 
-Only if the Pods themselves also carry the label. The Service evaluates Pod labels, not the Deployment's metadata or its name. Put the intended labels in the Pod template, verify the created Pods, and inspect the Service's EndpointSlices later. Selection and ownership remain separate questions.
+They share a label match. Ownership comes from the dependents' owner references and the relevant controller behavior. The list alone cannot tell you what will be recreated after deletion.
 
 </details>
-
-Practice label inspection and namespace-qualified commands in the [module lab](/labs/#m03). Next, make cluster context explicit before issuing any mutation.
 
 ## Primary documentation
 

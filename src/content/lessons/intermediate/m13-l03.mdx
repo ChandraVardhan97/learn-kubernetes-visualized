@@ -2,7 +2,7 @@
 {
   "lessonId": "m13-l03",
   "title": "Release configuration and safe delivery",
-  "description": "Promote an explicit application configuration, protect rollout headroom and verify a compatible recovery path.",
+  "description": "Define what to verify before promoting a release and what a Deployment rollback can restore.",
   "level": "intermediate",
   "module": "m13",
   "order": 3,
@@ -11,9 +11,9 @@
     "m13-l02"
   ],
   "objectives": [
-    "Define a release as code, image, configuration and dependencies",
-    "Coordinate readiness, rollout budgets and autoscaler ownership",
-    "Choose rollback or roll-forward using application and data compatibility evidence"
+    "Record the image, configuration, and manifest inputs needed to reproduce a release.",
+    "Check a readiness-gated rollout and measure the behavior callers actually need.",
+    "Evaluate whether the previous version can still use the current data and configuration."
   ],
   "concepts": [
     {
@@ -68,17 +68,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a release is more than a changed image
+## <span id="mental-model-a-release-is-more-than-a-changed-image" aria-hidden="true" />Record what makes up a release
 
-A reproducible **release configuration** identifies the application image, rendered workload resources, non-secret configuration references, credential-delivery method and required dependencies. Pin a production image by an approved immutable digest so that the same identifier means the same content. Keep the source revision and rendered artifact associated with the release. A mutable tag can be convenient in a training exercise, but it weakens the claim that tomorrow's deployment is identical to today's.
+A new API image starts and returns HTTP 200 on `/ready`, but checkout still fails because the image expects a configuration key that staging used and production lacks. A release includes the image, rendered workload, configuration, and external dependencies. Record the versions and references together. An image digest identifies the exact image contents, while a floating tag can refer to different contents later.
 
-Configuration also has lifecycle semantics. A Deployment creates a new ReplicaSet when its Pod template changes. Changing a ConfigMap's data without changing that template does not automatically trigger a rollout. Environment-derived configuration is fixed for an existing process, while mounted configuration can update eventually but still needs application reload support. A `subPath` mount has different update behavior. Versioned generated ConfigMap names or a deliberate template annotation can make configuration changes part of an explicit rollout rather than an invisible side effect.
+A Deployment revision is created when its Pod template changes. Updating an independently referenced ConfigMap does not change that template by itself. A ConfigMap mounted as a normal volume may refresh eventually, but the app must use the refreshed value. Environment variables from it are available at process startup. If your release requires a restart, a versioned config reference or another deliberate Pod template change can trigger it. Inspect the scene to see which inputs belong to a release.
 
 <Scene id="m13-l03-release-inputs" />
 
-## Walkthrough: trade surge capacity against unavailable replicas
+## <span id="walkthrough-trade-surge-capacity-against-unavailable-replicas" aria-hidden="true" />Set the rollout budget and readiness check
 
-The following Deployment strategy fragment assumes three healthy application replicas, a useful readiness probe and enough capacity for an extra Pod. It belongs under the Deployment's `spec`; the readiness fragment belongs in the application container. A zero-unavailable rollout still needs headroom and a backend capable of supporting both versions at once.
+The example fragments apply to an existing Deployment and container. The rollout allows one extra Pod and aims to avoid reducing availability due to the update. New Pods have to remain ready for ten seconds before being counted as available. The readiness check must actually exist on port 8080. Give it a meaningful condition for receiving requests, and make sure capacity and quota can accommodate the extra Pod.
 
 ```yaml
 # Deployment spec fragment.
@@ -102,11 +102,11 @@ readinessProbe:
   periodSeconds: 5
 ```
 
-Readiness says whether a Pod should receive ordinary Service traffic. It should represent the application's ability to serve, while avoiding fragile checks that make every replica unready for a minor optional dependency. `minReadySeconds` requires a stable ready interval before counting a new replica as available for rollout progress. `progressDeadlineSeconds` exposes a stalled rollout condition; it does not by itself perform an automatic rollback. The controller can wait indefinitely for a repair unless external delivery tooling makes a decision.
+## <span id="practice-promote-only-the-behavior-you-actually-checked" aria-hidden="true" />Verify a release before promoting it
+
+Reproduce the intended change with the same rendering inputs you plan to promote. Inspect the diff, watch the rollout, and compare the Service’s ready endpoints with the expected replica count. Run a user-level check for the operation you care about, such as one checkout or report read. Compare error rate and latency with a known baseline if your lab has instrumentation. The scene shows how passing one gate leaves the next verification to do.
 
 <Scene id="m13-l03-delivery-gates" />
-
-## Practice: promote only the behavior you actually checked
 
 ```bash
 kubectl diff -k overlays/training
@@ -120,26 +120,21 @@ kubectl rollout history deployment/api -n learning
 # kubectl rollout undo deployment/api -n learning --to-revision=REVISION
 ```
 
-Use the [delivery lab](/labs/#m13) to record the intended revision, rendered diff, ready endpoints and one real request result. Compare error rate, latency and saturation against the previous version using the installed telemetry, without claiming results from an absent monitoring stack. A rollout command can finish while an important business path remains broken. A smoke test should exercise the changed path with safe data and a known expected response.
+Use the [application delivery lab](/labs/#m13) to promote a small change and document the evidence. The local overlay is intended for training. Adapt the probe fragment to a server that implements it before applying that fragment.
 
-**Promotion** can mean proceeding from a test environment, increasing traffic to a candidate or finishing a rollout. A canary needs a routing or replica strategy that actually controls the desired traffic share; creating a second Deployment alone does not guarantee a chosen percentage. Keep evaluation windows long enough to cover relevant startup and workload behavior. Define an operator decision and recovery path before sending consequential traffic to a new version.
+## <span id="pitfalls-rollback-has-a-data-and-configuration-compatibility-boundary" aria-hidden="true" />Check old code against new data and settings
 
-## Pitfalls: rollback has a data and configuration compatibility boundary
-
-A workload rollback restores a prior Pod template revision, not every ConfigMap, external message or database migration. Use backward-compatible schema changes, staged migration patterns and explicit release records when old and new versions overlap. Rolling forward may be safer than restoring binaries that cannot read newly written data. Do not label a successful ReplicaSet switch as a full business recovery until the customer path and data state are verified.
-
-Resource and ownership controls also affect delivery. Include surge in quota and node-capacity calculations. Avoid reapplying a fixed replica count when HPA should own it. Ensure PDB expectations, rollout strategy and maintenance windows describe compatible availability goals, recognizing that PDBs do not directly govern Deployment rolling updates. Validate required APIs against the target cluster before upgrading charts or controllers; a manifest using a removed API fails before its application behavior can be tested.
+Before choosing rollback, ask whether the previous image can run with the current configuration and data format. Restoring an old Pod template cannot reverse a schema migration or restore replaced credentials. For a database column removal, plan a transition that allows both versions to run during the rollout, and keep a separate data recovery procedure.
 
 ## Check your understanding
 
 <details>
-<summary>A new ConfigMap value breaks the application, but the Deployment Pod template did not change. Will rollout undo necessarily restore the old value?</summary>
 
-No. Deployment revision history tracks Pod template changes, not an arbitrary history of all referenced ConfigMap data. Restore the intended configuration through its recorded source or use versioned configuration references as part of a new compatible release. Then verify what each running process actually consumes before declaring recovery.
+<summary>The Deployment finished its rollout, but the checkout smoke test fails. What does the rollout status tell you and what do you still need to investigate?</summary>
+
+The controller reports that the new Pods met its rollout conditions. Investigate the application paths, dependencies, and configuration that the readiness check did not exercise. Use that evidence to choose a fix or a compatible rollback.
 
 </details>
-
-Continue into the advanced API lessons to understand admission, watches and field ownership beneath these delivery workflows. Retain the intermediate lab evidence as a concrete map of where each operational guarantee ends.
 
 ## Primary documentation
 

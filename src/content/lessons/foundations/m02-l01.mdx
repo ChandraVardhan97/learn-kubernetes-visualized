@@ -2,7 +2,7 @@
 {
   "lessonId": "m02-l01",
   "title": "Inside a Kubernetes cluster",
-  "description": "Map the API, state store, controllers, and worker responsibilities.",
+  "description": "Follow a Pod from the Kubernetes API to the machine where its container runs.",
   "level": "foundations",
   "module": "m02",
   "order": 1,
@@ -11,9 +11,9 @@
     "m01-l03"
   ],
   "objectives": [
-    "Assign each cluster component its actual responsibility",
-    "Explain API server and etcd boundaries",
-    "Distinguish control-plane coordination from node execution"
+    "Identify the parts of the control plane that accept, store, and act on requests.",
+    "Trace who chooses a node and who starts a container.",
+    "Use component boundaries to narrow down a failure."
   ],
   "concepts": [
     {
@@ -69,25 +69,23 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: coordination and execution
+## <span id="mental-model-coordination-and-execution" aria-hidden="true" />Who does what in a Kubernetes cluster
 
-A Kubernetes cluster combines a control plane that coordinates desired state with worker nodes that run application containers. “Control plane” is a responsibility boundary, not a promise about one particular machine. A local cluster can place several responsibilities on one host; production distributions can spread them across machines or provide a managed control plane. The component roles still explain what happens.
+Suppose you have three machines and want to run a web server. You could log into one and launch it by hand. With Kubernetes, you submit a description of what should run. Kubernetes needs a place to accept that request, somewhere to save it, a decision about which machine will run it, and a way to do the work on that machine.
 
-The **API server** exposes the Kubernetes API. Clients submit object requests, and cluster components observe and update objects through it. It handles request authentication, authorization, admission, validation, and persistence coordination. Successful object creation means the API accepted and stored the request; it does not mean every downstream action succeeded. A valid Pod can still fail to schedule or pull its image.
+A **cluster** is the group of machines and Kubernetes components working together. A **node** is a machine registered with the cluster, physical or virtual. The **control plane** manages cluster-level decisions. Its **API server** is the front door. `kubectl` sends requests there. The server checks the request and uses **etcd**, a distributed key-value store, to store the cluster's API state. Your terminal and the application containers do not have to connect directly to etcd.
 
-**etcd** stores the cluster's persistent API data. It is not an application database for your web service, and it does not contain your running container filesystem. Ordinary clients and worker components interact with the API server rather than writing directly into etcd. Bypassing the API would bypass invariants and supported access paths. An etcd backup protects coordination state; persistent application data requires its own recovery plan.
+A **controller** watches for relevant state and takes action to bring the cluster toward the target. A Deployment controller manages ReplicaSets, and a ReplicaSet controller makes Pods to maintain the requested count. The **scheduler** watches for Pods that still need a node, checks candidate machines against their requirements, and records a placement. Each component solves a part of the problem using the API.
 
 <Scene id="m02-l01-api-store" />
 
-## Walkthrough: distribute the responsibilities
+## <span id="walkthrough-distribute-the-responsibilities" aria-hidden="true" />Find the components in your lab cluster
 
-A **controller** observes objects and takes actions toward an intended state. For example, the ReplicaSet controller creates Pod objects when there are fewer matching managed Pods than requested. Controllers do not choose a worker for every new Pod or personally launch its executable.
-
-The **scheduler** watches for Pods that have not been assigned a node. It evaluates eligible nodes and records a binding decision. Capacity, placement constraints, taints, volumes, and other factors can prevent a match. A scheduler decision is about placement; it does not pull the application image or start a container. Later lessons examine those placement inputs.
-
-The **kubelet** is the node agent. It observes Pod specifications assigned to its node and works to establish their containers, mounts, and relevant local lifecycle behavior. It reports node and Pod status through the API. It asks a container runtime, such as containerd or CRI-O, to perform runtime operations through the **Container Runtime Interface**, or CRI. CRI is a protocol boundary, not another scheduler or an interchangeable name for Docker. The runtime and networking/storage integrations do the local implementation work.
+Once the Pod is assigned, the **kubelet** on that node handles the local steps. A kubelet is the agent that keeps the containers for assigned Pods running according to their specs and reports their status. It talks to a **container runtime**, such as containerd, through the **Container Runtime Interface** (CRI). The interface is the agreed way to request work like setting up a Pod sandbox or starting a container.
 
 <Scene id="m02-l01-worker" />
+
+Try the read-only commands on a practice cluster. `get nodes` tells you which nodes are registered and reporting health. `get pods -n kube-system` shows system Pods the cluster exposes there. Some managed services run control-plane components outside the namespaces you can see. The API inventory answers which kinds of API resources your server currently offers.
 
 ```bash
 # Read-only inventory; component visibility varies by distribution.
@@ -98,9 +96,7 @@ kubectl cluster-info
 kubectl api-resources
 ```
 
-You should see at least the nodes your training environment exposes. Some system Pods appear in `kube-system`, but managed services may hide the API server, scheduler, or etcd entirely. Absence from that Pod listing is not evidence that the role does not exist. Do not delete unfamiliar system Pods as an exploration technique.
-
-A small Pod object can demonstrate the separation without introducing a controller:
+The short Pod definition below requests one nginx container. If you submit it in a practice namespace, the API stores the Pod spec, the scheduler assigns the node, and the node's kubelet and runtime start the container. This example creates a Pod directly. With a Deployment, the controllers create the Pod object first and the same node-startup steps follow.
 
 ```yaml
 apiVersion: v1
@@ -113,27 +109,23 @@ spec:
       image: nginx:1.27.5
 ```
 
-After applying it in a disposable namespace, inspect `kubectl get pod component-demo -o wide` and `kubectl describe pod component-demo`. The node column records placement. Events may show scheduling, pulling, creation, and starting. Their timestamps describe asynchronous observations, not a globally exact trace of every internal call.
+## <span id="practice-explain-partial-failure" aria-hidden="true" />Predict what still works if a component fails
 
-## Practice: explain partial failure
+Use the component boundaries to reason about failures. If your client cannot connect to the API server, existing containers can keep running for a time, depending on what they need from the API. New writes and scheduling decisions can stall. If the API accepts the Pod but its image cannot be pulled, start at the node and registry boundary. Find the Pod's assigned node and read the event to learn what the kubelet was attempting. In the [module lab](/labs/#m02), you can see a controller respond when one of its Pods disappears.
 
-Imagine the API server becomes unavailable after a Pod has started. Existing processes can continue running on nodes; the API server is not an HTTP hop for every application request. However, new object writes and much cluster coordination are impaired. A node agent may still perform local container supervision using known specifications, while broader replacement and status propagation depend on restored control-plane communication. Avoid turning that observation into an unconditional availability guarantee: networking, credentials, and the application's own dependencies still matter.
+## <span id="pitfalls" aria-hidden="true" />Check where your provider runs the control plane
 
-## Pitfalls
-
-Do not call the scheduler the component that “moves a running Pod” to another node. A Pod's binding is not a live migration operation. Replacement means a new Pod, with a new identity, gets scheduled. Likewise, the API server stores intentions and observations; a Running status does not prove application requests succeed.
+Control-plane availability and application health answer different questions. A healthy API can report an unhealthy workload. A running container can keep answering requests during a control-plane interruption. Check the actual evidence at each boundary before restarting anything.
 
 ## Check your understanding
 
 <details>
 
-<summary>The ReplicaSet controller creates a Pod, but its node field remains empty. Which responsibility has not completed?</summary>
+<summary>A Pod has a node name but the image is still downloading. Which component do you investigate first?</summary>
 
-Scheduling has not produced a binding. Inspect Pod events and scheduling constraints before debugging the container's HTTP code. No worker has yet been selected for the normal Pod execution path. If a node is assigned but the image cannot be pulled, the investigation moves to kubelet/runtime image preparation instead.
+Look at the assigned node's kubelet and runtime, using the Pod events as a starting point. The node name shows scheduling already made a placement. The next work is to obtain the image, prepare the container, and start it.
 
 </details>
-
-Next, follow the reconciliation loop over repeated observations. Explore component evidence in the [module lab](/labs/#m02).
 
 ## Primary documentation
 

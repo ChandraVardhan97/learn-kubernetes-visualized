@@ -1,13 +1,13 @@
 ---
 lessonId: "m16-l03"
 title: "Ownership and failure recovery"
-description: "Repair missing children while refusing unsafe adoption and cleanup."
+description: "Verify child ownership, let reconciliation repair a missing child, and check what happens on parent deletion."
 level: "advanced"
 module: "m16"
 order: 3
 minutes: 16
 prerequisites: ["m16-l02", "m15-l03"]
-objectives: ["Verify child owner references by parent UID.", "Explain repair after deletion and refusal to adopt unrelated objects.", "Choose finalizers only for cleanup obligations not handled by garbage collection."]
+objectives: ["Use owner reference UIDs to verify that a child belongs to the current WebApp.", "Distinguish a missing child that can be recreated from a name collision.", "Test garbage collection and understand where external cleanup differs."]
 concepts: [{"id": "m16-l03-operator-owner-check", "title": "Stable names do not grant adoption", "scene": "m16-l03-operator-owner-check"}, {"id": "m16-l03-operator-repair-gc", "title": "Repair a child, then delete the parent", "scene": "m16-l03-operator-repair-gc"}]
 sources: [{"title": "Owner references", "url": "https://kubernetes.io/docs/concepts/overview/working-with-objects/owners-dependents/"}, {"title": "Garbage collection", "url": "https://kubernetes.io/docs/concepts/architecture/garbage-collection/"}, {"title": "Finalizers", "url": "https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/"}]
 lab: "m16"
@@ -17,23 +17,23 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: ownership must survive name reuse
+## <span id="mental-model-ownership-must-survive-name-reuse" aria-hidden="true" />Verify which WebApp owns a child
 
-A controller manages a relationship between a parent intention and dependent resources. In this lab, the generated Deployment and ConfigMap carry ownerReferences naming the WebApp's UID and identifying it as controller owner. The UID matters because a WebApp can be deleted and recreated with the same name. The replacement is a new parent identity. A controller that adopts any child with the expected name could overwrite a resource belonging to someone else or a previous lifecycle.
+The WebApp operator expects a ConfigMap called `m16`. It finds an object with that name. Before updating it, the operator needs to know whether it created the object for the current WebApp. It could belong to another workload, or to an older WebApp that used the same name. An **owner reference** includes the parent’s UID, so the operator can check ownership of this exact object lifetime.
 
-The Python operator checks existing child ownership and refuses unrelated objects. This is a useful safety property even in a tiny controller. Labels such as `app=m16` help find resources, but labels are mutable selection metadata, not proof of ownership. If an operator reports an adoption refusal, inspect both the current parent UID and the child's complete ownerReferences before considering any repair. Do not remove the check simply to make a demonstration proceed.
+If ownership matches, the operator can repair fields it manages. If there is no child, it can create one using the parent’s current UID. If the name belongs to somebody else, report the conflict and let an operator decide how to handle it. Step through these cases in the owner-check scene and see what changes when a parent is replaced under the same name.
 
 <Scene id="m16-l03-operator-owner-check" />
 
-## Walkthrough: repair and deletion are different reconciliations
+## <span id="walkthrough-repair-and-deletion-are-different-reconciliations" aria-hidden="true" />Compare child repair and parent deletion
 
-When the ConfigMap is accidentally deleted while the WebApp still exists, the next pass computes the same desired child and recreates it. Its new UID proves replacement; the parent's UID remains unchanged. When a Deployment is deleted, the next pass recreates that child too, but application availability may be disrupted while Pods return. Reconciliation provides a route back toward desired state, not instantaneous immunity from destructive changes.
-
-Deleting the parent is different. The teaching operator skips resources with deletionTimestamp and relies on Kubernetes garbage collection for its Kubernetes children. No external system is provisioned, so there is no external cleanup finalizer in this example. A production operator managing a cloud database might need a finalizer to coordinate retention or deletion before the parent disappears. Such cleanup must be idempotent and must handle the external resource already being absent. A finalizer cannot turn a nontransactional pair of systems into one atomic transaction.
+Recreating a missing child serves a parent that still exists and wants that child. When the parent is being deleted, the intended outcome changes. Kubernetes garbage collection can remove API dependents whose owner reference points to the deleted parent. An object in an external system needs its own cleanup policy, often implemented with a finalizer when cleanup should complete before parent deletion. In the scene, compare deleting the generated ConfigMap with deleting the WebApp.
 
 <Scene id="m16-l03-operator-repair-gc" />
 
-This manifest illustrates the parent relationship through the real WebApp API. Owner references on the children are generated by the controller; do not copy a UID from documentation into a hand-written dependent manifest.
+## <span id="practice-collect-evidence-at-each-boundary" aria-hidden="true" />Recreate a child and inspect its owner
+
+Start with the example WebApp and generated children from the disposable lab. Record the WebApp UID and the ConfigMap’s owner reference. Delete only the lab’s generated ConfigMap and run one reconcile pass. The new ConfigMap gets a fresh UID and should point to the same parent UID. Read its data and owner reference to verify recovery. To complete the deletion exercise, follow the [operator lab](/labs/#m16) cleanup sequence and confirm the expected children are collected.
 
 ```yaml
 apiVersion: labs.kv.example/v1alpha1
@@ -57,26 +57,16 @@ python3 webapp-reconciler.py --once
 kubectl --context kind-kv-lab -n kv-lab get configmap m16 -o yaml
 ```
 
-## Practice: collect evidence at each boundary
+## <span id="pitfalls-cleanup-policy-belongs-in-the-api-design" aria-hidden="true" />Choose which resources should survive deletion
 
-Use the [m16 local exercise](/labs/#m16). Record the parent UID, child UID and child owner UID before failure. Delete the generated ConfigMap, run one reconcile pass, and record them again. Expect the child UID to change, its owner UID to match the unchanged WebApp UID, and the page content to match current spec.message. This proves repair toward current intention rather than restoration of a particular old object identity.
-
-Parent deletion is demonstrated again in the m20 platform capstone. Before trying it manually, save the desired manifest and ensure the objects contain no data you need to preserve. Delete the WebApp, wait for dependent removal, and inspect events if deletion stalls. Background garbage collection is asynchronous. A child can remain briefly visible after the parent's delete request returns. Do not immediately declare ownership broken because two terminal reads caught different points in the deletion sequence.
-
-## Pitfalls: cleanup policy belongs in the API design
-
-A database operator needs a documented retention decision: should deleting the custom resource preserve data, require a separate approval, or remove storage? ownerReferences alone cannot express every data policy. A broken finalizer controller can block deletion, while a missing finalizer can leak an external resource. Repeated cleanup attempts must not delete a newly recreated external object with the old name; carry and verify external identity as well as Kubernetes UID. Conditions should identify the failed cleanup step without placing credentials or sensitive data in status messages.
-
-For recovery, pause destructive automation when necessary and understand what will reconcile next. Restoring an old custom resource into a live environment can cause the operator to enact old intent immediately. A backup procedure must include a plan for controller startup and ownership reconciliation, not just an API import.
+Some objects should survive parent deletion. A database backup or persistent data volume may need a retention policy independent of the controller’s app objects. Document which resources the API owns and whether deletion retains or removes them. Allow time for asynchronous garbage collection before investigating a child that still exists, and verify the exact owning UID before considering manual removal.
 
 ## Check your understanding
 
 <details>
 
-<summary>A child has the expected name and labels, but its owner UID differs. Should the operator overwrite it?</summary>
+<summary>The ConfigMap name matches, but its owner reference contains the UID of an older WebApp. How should a cautious reconciler react?</summary>
 
-No. Those facts do not establish that it belongs to the current parent. The lab operator refuses adoption so an operator or user must investigate identity and choose an explicit recovery action rather than silently seizing the child.
+Report a conflict and preserve the child until its lifecycle is understood. An identical name cannot establish ownership across parent lifetimes. After the old object is safely resolved, the reconciler can create or manage a child owned by the current WebApp.
 
 </details>
-
-Next, relate reconciliation pressure to resource pressure. A reliable loop still depends on enough CPU, memory, API capacity and storage to finish its work.

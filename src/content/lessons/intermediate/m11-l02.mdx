@@ -2,7 +2,7 @@
 {
   "lessonId": "m11-l02",
   "title": "Security contexts and Pod Security",
-  "description": "Constrain process privileges and use admission policy to keep unsafe Pod settings out of a namespace.",
+  "description": "Run a container with fewer privileges and verify that it can still write where the application needs to.",
   "level": "intermediate",
   "module": "m11",
   "order": 2,
@@ -11,9 +11,9 @@
     "m11-l01"
   ],
   "objectives": [
-    "Explain UID, capabilities, seccomp and privilege escalation settings",
-    "Handle read-only filesystems and volume ownership deliberately",
-    "Separate Pod Security Admission enforcement from runtime controls"
+    "Explain how a security context configures process identity and container privileges.",
+    "Mount a writable directory for a process while keeping the root filesystem read-only.",
+    "Use Pod Security Admission to check a manifest before a Pod starts."
   ],
   "concepts": [
     {
@@ -59,17 +59,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: authorization to create a Pod is only the first boundary
+## <span id="mental-model-authorization-to-create-a-pod-is-only-the-first-boundary" aria-hidden="true" />Choose what the application process can do
 
-A user who can create Pods can ask a node to execute processes. The Pod's **security context** determines important parts of the resulting privilege boundary: user identity, Linux capabilities, privilege escalation, syscall filtering and filesystem access. Running as a non-root UID reduces exposure, but UID alone is not a complete sandbox. Host mounts, privileged mode, host namespaces and powerful capabilities can expose the host even when an image is described as a container.
+A report worker needs to write a status file to `/work`. It has no reason to alter system files or gain root privileges. A **security context** lets you set the Linux identity and privileges under which a Pod or container runs. The Pod can set defaults such as a user and group ID. Container-level settings govern details such as Linux capabilities and privilege escalation.
 
-Security settings exist at Pod and container levels, with particular fields applying at one or both levels. A Pod-level `runAsUser` provides a default for eligible containers; a container can override fields where the API permits it. `runAsNonRoot` asks Kubernetes to prevent root execution according to its checks. `allowPrivilegeEscalation: false` restricts gaining additional privileges through mechanisms such as setuid executables on Linux. Dropping capabilities removes selected kernel powers, while **seccomp** filters the syscall surface. `RuntimeDefault` selects the runtime's default profile, not a universal identical syscall list on every runtime.
+The example runs as user and group 1000. It drops all Linux capabilities, which are individual privileges processes can otherwise hold. `allowPrivilegeEscalation: false` prevents the process from gaining more privileges through operations such as running a set-user-ID program. The runtime default `seccompProfile` limits available system calls. Toggle the settings in the scene and watch which parts of the process boundary they change.
 
 <Scene id="m11-l02-process-boundary" />
 
-## Walkthrough: supply the writable paths the application actually needs
+## <span id="walkthrough-supply-the-writable-paths-the-application-actually-needs" aria-hidden="true" />Give the process a writable working directory
 
-This complete Pod uses a non-root training process and a read-only root filesystem, with a deliberate writable volume at `/work`. It demonstrates mechanics rather than claiming that arbitrary production software works without additional image or permission changes.
+Save the manifest as `restricted-writer.yaml`. Its root filesystem is read-only, but the container mounts an `emptyDir` volume at `/work`. A writable mount on the right directory lets the process create its status file. `fsGroup: 1000` provides group-related access on supported volumes. It is worth testing the exact process UID and path because a mount that exists can still be inaccessible to the app.
 
 ```yaml
 apiVersion: v1
@@ -101,13 +101,9 @@ spec:
       emptyDir: {}
 ```
 
-`readOnlyRootFilesystem` prevents writes to the container root filesystem; it does not make separately mounted volumes read-only automatically. Give applications explicit writable paths for temporary files or state. `fsGroup` can help make supported mounted volumes accessible to the process group, but ownership handling depends on the volume type and CSI behavior. An existing backend with incompatible ownership may still fail. Test actual write permissions instead of solving every error by enabling root or making all directories world-writable.
+## <span id="practice-reject-an-unsafe-proposal-before-it-reaches-a-node" aria-hidden="true" />Test the namespace’s Pod security policy
 
-<Scene id="m11-l02-admission" />
-
-## Practice: reject an unsafe proposal before it reaches a node
-
-**Pod Security Standards** define Privileged, Baseline and Restricted policy levels. **Pod Security Admission**, or PSA, evaluates Pods against the chosen level according to namespace labels and cluster configuration. Enforcement rejects violating new Pod admissions; warning and audit modes communicate violations without the same rejection behavior. These checks evaluate Pod configuration, not application code quality, image provenance or every tenant risk.
+**Pod Security Standards** define three levels of constraints called Privileged, Baseline, and Restricted. **Pod Security Admission** enforces, warns, or audits against a chosen level in a namespace. Label a disposable namespace to enforce Restricted at version `v1.37`. Apply the passing example, then read its status file and verify the process identity. To observe an admission denial, try a disposable copy with an unsafe field such as `privileged: true` using server-side dry run. Read the rejection to see which requirement it violated.
 
 ```bash
 # Use a new disposable namespace with no production workloads.
@@ -120,22 +116,23 @@ kubectl exec -n security-practice restricted-writer -- cat /work/status
 kubectl exec -n security-practice restricted-writer -- id
 ```
 
-Expect the compliant Pod to be admitted and the mounted-path write to work on a compatible cluster. Try a separately named copy with `privileged: true` only in this disposable namespace and expect rejection under Restricted enforcement. For workload controllers, admission may accept the controller object while later Pod creation is rejected; inspect ReplicaSet or Job events for the denied template. A namespace policy change does not retroactively rewrite an already running Pod's security context.
+<Scene id="m11-l02-admission" />
 
-## Pitfalls: admission and runtime protection are complementary
+Use the [workload security lab](/labs/#m11) to check access controls from the workload’s point of view.
 
-PSA does not install NetworkPolicy, limit RBAC grants or prove the container image lacks vulnerabilities. Namespace labels also need governance: a tenant able to remove enforcement labels may weaken the intended boundary. Pinning the policy version makes upgrades deliberate, but it also means reviewing new restrictions rather than leaving a historical policy forever. Linux security fields and operating-system support vary; verify the target nodes and runtime, especially in mixed-OS clusters.
+## <span id="pitfalls-admission-and-runtime-protection-are-complementary" aria-hidden="true" />Separate admission errors from runtime errors
+
+Passing admission means that the manifest met the selected checks. The application can still fail after it starts if a required cache or temporary directory is read-only. Conversely, a runtime failure writing a file gives you no evidence that Pod Security Admission rejected the Pod. Verify the Pod exists, then check its runtime identity, mounts, and permissions. A namespace’s security labels do not evict previously admitted Pods.
 
 ## Check your understanding
 
 <details>
-<summary>A non-root container has a read-only root filesystem but mounts a writable PVC. Can it still modify that PVC?</summary>
 
-Yes, if the volume is mounted writable and its permissions allow the process UID or group to write. The read-only root setting applies to the container root filesystem, not every mount. Set mount access and filesystem permissions deliberately, then test the exact path the application uses.
+<summary>The Pod was admitted, but the worker gets a permission error writing to /tmp. What would you inspect before lifting the read-only setting?</summary>
+
+Check the worker’s expected write paths and which volumes are mounted. If the process genuinely needs writable temporary space, mount it at `/tmp` with permissions the process can use, then verify the write.
 
 </details>
-
-Use the [security lab](/labs/#m11) to compare an API rejection with a runtime permission error. Next, protect credentials and combine namespace controls into a realistic tenant boundary.
 
 ## Primary documentation
 

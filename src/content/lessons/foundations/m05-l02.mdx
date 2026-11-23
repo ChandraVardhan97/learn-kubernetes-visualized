@@ -2,7 +2,7 @@
 {
   "lessonId": "m05-l02",
   "title": "Rolling updates and rollback",
-  "description": "Follow old and new ReplicaSets under explicit availability and surge limits.",
+  "description": "Follow old and new replicas through a rolling update, then use revision history to recover from a failed release.",
   "level": "foundations",
   "module": "m05",
   "order": 2,
@@ -11,9 +11,9 @@
     "m05-l01"
   ],
   "objectives": [
-    "Explain what triggers a Deployment rollout",
-    "Calculate simple surge and unavailable bounds",
-    "Perform a rollback without assuming data or config is restored"
+    "Predict which Pods a rolling update can add or remove at each step.",
+    "Recognize the evidence that tells you a release is stuck waiting for readiness.",
+    "Recover a Deployment by restoring a known Pod template revision."
   ],
   "concepts": [
     {
@@ -54,19 +54,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: two release recipes, one controlled transition
+## <span id="mental-model-two-release-recipes-one-controlled-transition" aria-hidden="true" />How a rolling update replaces Pods
 
-A Deployment rollout starts when its Pod template changes. Updating the container image, an environment value in that template, or template annotations can create a new revision. Changing only `spec.replicas` scales the workload without creating a new Pod-template revision. Editing a ConfigMap under the same name does not by itself change the Deployment template, so it does not automatically trigger this rollout machinery.
+A catalog service has three healthy copies. You want to release a new container image while those copies keep answering requests. A **rolling update** changes the Pod template and switches traffic gradually as replacement Pods become ready. The Deployment keeps the old and new copies in separate ReplicaSets. You can watch their counts change as the rollout proceeds.
 
-The Deployment controller manages an old and a new ReplicaSet during a rolling update. Each ReplicaSet creates or removes its own Pods according to its current target. The scheduler and kubelets still perform placement and execution. Existing Pods do not swap their process binary in place when an image field changes in the parent. New Pods run the new template while old Pods are terminated according to the update plan.
-
-`maxSurge` allows temporary extra replicas above the desired count. `maxUnavailable` bounds how many desired replicas may be unavailable during the transition. With desired three, surge one, and unavailable zero, the controller can normally introduce a fourth non-terminating replica and should keep at least three available before removing another old replica. Terminating Pods and asynchronous observations can cause visible totals or resource usage above a naive desired-plus-surge count. Budget arithmetic is a controller policy, not instantaneous accounting of every process.
+With `maxSurge: 1` and `maxUnavailable: 0`, the Deployment can ask for a fourth replica while the three old ones are still available. It waits until the first new Pod becomes available before it scales down an old copy. The spare slot can then hold the next new Pod. The rule works as long as the cluster has room to schedule the extra copy and the updated application passes its checks.
 
 <Scene id="m05-l02-rollout" />
 
-## Walkthrough: state the update budget
+## <span id="walkthrough-state-the-update-budget" aria-hidden="true" />Choose how much capacity to keep available
 
-Use this complete Deployment as `rollout-demo.yaml` in a disposable namespace. The HTTP probe uses nginx's existing root page. It demonstrates HTTP availability, not deep business correctness. Resource requests and placement constraints are intentionally deferred to the next level.
+Save the example as `rollout-demo.yaml`. The readiness probe asks nginx for `/`. Once a new Pod is ready, `minReadySeconds: 5` makes it stay ready for at least five seconds before the Deployment counts it as available. `progressDeadlineSeconds` gives the controller a threshold for reporting a lack of progress. If that threshold expires, inspect the conditions before choosing a recovery.
 
 ```yaml
 apiVersion: apps/v1
@@ -101,6 +99,8 @@ spec:
             periodSeconds: 5
 ```
 
+Apply the original version and wait for it to complete. Record its revision from the history. Update the image and watch the two ReplicaSets. Their desired and ready counts can differ while Pods are starting. Stop the watch when you have seen the update finish or have enough evidence to investigate a stall.
+
 ```bash
 kubectl apply -f rollout-demo.yaml
 kubectl rollout status deployment/rollout-demo --timeout=180s
@@ -110,13 +110,9 @@ kubectl set image deployment/rollout-demo web=nginx:1.28.0
 kubectl get rs -l app=rollout-demo -w
 ```
 
-The training image versions are examples, not claims that an upgrade is appropriate for your application. For a real release, use verified image identities and compatibility checks. After the image update, inspect both ReplicaSets and Pods. The new replica must become ready and satisfy `minReadySeconds` before the controller can count it as available under these settings.
+## <span id="practice-stall-deliberately-then-restore-a-template" aria-hidden="true" />Recover a release that gets stuck
 
-<Scene id="m05-l02-rollback" />
-
-## Practice: stall deliberately, then restore a template
-
-In a dedicated lab, update to an intentionally nonexistent image tag. New Pods should fail image preparation while the old available replicas are retained as far as the strategy permits. The Deployment reports lack of progress after its configured deadline; Kubernetes does not automatically select a previous application release merely because `progressDeadlineSeconds` expires.
+In a disposable lab, try changing the image to a tag that does not exist. The new Pod can remain in `ImagePullBackOff` while the three old Pods stay up. Check the Deployment conditions and the new Pod’s events. Pick the known-good revision you recorded and use `rollout undo` to restore its Pod template. The controller reconciles toward that template and you can wait again for rollout status. Watch the same sequence in the recovery scene.
 
 ```bash
 kubectl describe deployment rollout-demo
@@ -127,25 +123,23 @@ kubectl rollout undo deployment/rollout-demo --to-revision=ACTUAL_GOOD_REVISION
 kubectl rollout status deployment/rollout-demo --timeout=180s
 ```
 
-Rollback restores a retained earlier Pod template through another reconciliation. It does not rewind a database migration, restore external state, revert a ConfigMap changed in place, or revoke credentials. Old and new application versions can overlap during both forward rollout and rollback, so compatible protocols and schema transitions are application responsibilities. Keep the source manifest consistent after recovery; otherwise the next apply can reintroduce the failed release.
+<Scene id="m05-l02-rollback" />
 
-## Pitfalls
+Follow the [rollout and rollback exercise](/labs/#m05) to watch a healthy update and a failure you can recover from. Check the final image and readiness along with the success message.
 
-A surge budget requires enough capacity for extra Pods. With `maxUnavailable: 0`, a full cluster can stall safely because no new Pod can fit and old replicas cannot be removed yet. With a looser unavailable budget, you trade some availability headroom for room to progress. Percent-based settings also have documented rounding rules; use simple integer budgets while learning and calculate actual bounds before using percentages.
+## <span id="pitfalls" aria-hidden="true" />Check what rollback can restore
 
-Revision history is bounded by retained ReplicaSets. Deleting old history removes straightforward template rollback options. A successful rollout status only confirms controller progress and availability criteria; use request tests and observability to establish that the release behaves correctly for users.
+A revision tracks changes to the Pod template. Undoing a Deployment cannot restore a separate ConfigMap, undo a database migration, or put previously deleted data back. Budget spare capacity before choosing a surge strategy. Terminating Pods can also use resources while shutting down. Check whether your readiness probe really proves a Pod can serve the requests the release is meant to handle.
 
 ## Check your understanding
 
 <details>
 
-<summary>A new replica never becomes ready with maxUnavailable zero. Should the controller delete an old healthy replica to force progress?</summary>
+<summary>Five minutes into the release, the old Pods still serve traffic and the first new Pod never became ready. Which evidence would you inspect?</summary>
 
-Not under that availability policy. Keeping old available capacity is the intended safety property. Inspect why the new Pod is unready or unschedulable, and repair the release or choose a deliberate different budget. A stalled rollout can be a safer outcome than discarding the last known-good replicas.
+Read the new Pod’s events, conditions, and application logs. These tell you whether the Pod was unable to schedule, unable to start, or failed its readiness probe. Those failures can all look like a stuck Deployment from the outside and require different repairs.
 
 </details>
-
-Practice a bad-image rollout and explicit recovery in the [module lab](/labs/#m05), then compare rollout health with the probe semantics in the next lesson.
 
 ## Primary documentation
 

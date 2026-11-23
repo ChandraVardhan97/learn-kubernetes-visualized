@@ -2,7 +2,7 @@
 {
   "lessonId": "m10-l01",
   "title": "StatefulSets and stable identity",
-  "description": "Use ordered identities and per-replica claims while keeping application replication explicit.",
+  "description": "Give each replica a stable name and its own claim, then see what a replacement Pod inherits.",
   "level": "intermediate",
   "module": "m10",
   "order": 1,
@@ -11,9 +11,9 @@
     "m09-l03"
   ],
   "objectives": [
-    "Explain StatefulSet ordinals, stable names and headless discovery",
-    "Trace per-replica volumeClaimTemplates",
-    "Predict ordered rollout blocking and safe recovery choices"
+    "Explain which parts of ledger-1’s identity persist when the Pod is replaced.",
+    "Connect the headless Service, per-Pod DNS record, and generated storage claim.",
+    "Predict the order of creation and rollout under the default StatefulSet policy."
   ],
   "concepts": [
     {
@@ -55,17 +55,19 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: stable logical identities over disposable processes
+## <span id="mental-model-stable-logical-identities-over-disposable-processes" aria-hidden="true" />Which parts of a replica’s identity stay stable
 
-A **StatefulSet** manages Pods with stable ordinal identities such as `ledger-0`, `ledger-1` and `ledger-2`. Replacing `ledger-1` creates a new Pod object with the same logical name and its associated storage relationship. Its UID and process instance are new. Stable identity helps software that distinguishes peers or associates durable data with a specific replica. It does not keep the original process alive and does not itself replicate database records.
+Imagine an application with three ledger members. Each writes to its own disk and needs to find two specific peers. If the second member restarts, it needs its previous data and the other members need a familiar address to reconnect. A **StatefulSet** manages Pods with stable ordinal identities. An **ordinal** is the numbered slot in the set. Here the slots are `ledger-0`, `ledger-1`, and `ledger-2`. They share a Pod template, but each slot can represent a distinct application member.
 
-A **headless Service**, using `clusterIP: None`, provides discovery without a single load-balancing ClusterIP. Combined with the StatefulSet's `serviceName`, it supports predictable per-Pod DNS names such as `ledger-0.ledger`. DNS answers depend on readiness and publication configuration, so bootstrap-sensitive applications must account for when peers become discoverable. Negative DNS caching can also delay discovery of a newly created name. Stable naming is a coordination tool, not a promise that a hostname always resolves to a healthy process.
+When Kubernetes replaces `ledger-1`, the new Pod gets the same name and can use the same claim. It receives a new UID, runs a new process, and can receive a new IP address. In the identity scene, follow the name through the replacement and spot which state changes. Software using that name still needs to reconnect and recover its own state.
 
 <Scene id="m10-l01-identity" />
 
-## Walkthrough: identity and data travel together
+## <span id="walkthrough-identity-and-data-travel-together" aria-hidden="true" />Give each member a name and a claim
 
-This optional example shows the essential fields of a claim-backed StatefulSet. To run it, supply a matching headless Service named `ledger` and a functioning default StorageClass. The module lab's baseline instead runs a one-member `m10` StatefulSet with a headless Service and no claims; it demonstrates identity, while the m09 lab separately demonstrates PVC persistence. The file writer below combines those concepts without implementing a replicated database.
+A **headless Service** has `clusterIP: None`. With a selector matching the StatefulSet’s Pods, it can publish addresses for the members instead of giving callers one virtual IP. In the same namespace, a client can use a per-Pod name such as `ledger-1.ledger`. A fully qualified example is `ledger-1.ledger.default.svc.cluster.local`, assuming the default namespace and cluster domain. By default, readiness affects which addresses are published. A workload that needs to discover peers during startup can use `publishNotReadyAddresses` deliberately. Clients then need to handle peers that answer DNS but are still initializing. A cached failed lookup can also delay discovery shortly after creation.
+
+The manifest refers to the headless Service through `serviceName: ledger`. Create a matching Service and use a working default StorageClass before trying the three-member example. The claim template named `data` creates one PVC per ordinal, including `data-ledger-1`. The writer mounts that claim at `/data` and records its hostname each time it starts.
 
 ```yaml
 apiVersion: apps/v1
@@ -98,13 +100,11 @@ spec:
             storage: 1Gi
 ```
 
-Each ordinal gets its own claim, such as `data-ledger-0`. The claim belongs to that logical replica; the StatefulSet does not share one generic disk across all members. A replacement mounts the same claim, subject to driver attachment and topology constraints. Default retention generally preserves claims when Pods are removed or the StatefulSet is deleted. Explicit PVC retention policy can alter scale-down and deletion behavior, so read the actual policy before treating cleanup as harmless.
-
-**OrderedReady**, the default Pod management policy, creates and scales members in ordinal order and waits for readiness before proceeding. Default rolling updates replace higher ordinals before lower ones, waiting for readiness. This ordering supports some stateful applications' membership protocols, but can also block progress when a member never becomes ready. `Parallel` changes scale behavior, not a universal removal of every rollout ordering guarantee. Read the controller's chosen update strategy rather than inferring it from Pod count alone.
-
 <Scene id="m10-l01-claims" />
 
-## Practice: replace one member and inspect continuity
+## <span id="practice-replace-one-member-and-inspect-continuity" aria-hidden="true" />Replace one ledger member and verify its disk
+
+Use the example’s commands after the three Pods are ready. Write down the Pod UID, IP, and claim name for `ledger-1`, then delete the Pod only. Stop the watch after the replacement is ready. The PVC stays bound across this replacement with default retention, and the file should contain the earlier start plus the new one. The [StatefulSet lab](/labs/#m10) demonstrates stable identity with a smaller workload. Use the storage lab for a separate claim persistence exercise.
 
 ```bash
 kubectl get statefulset ledger
@@ -116,24 +116,21 @@ kubectl get pod ledger-1 -w
 kubectl exec ledger-1 -- cat /data/starts
 ```
 
-Run these commands only after creating the optional three-member `ledger` example in a disposable namespace; the baseline [workload lab](/labs/#m10) does not create `ledger-1` or `/data/starts`. Expect a replacement named `ledger-1` and another line in the file on its retained claim. Compare its new UID to the previous one. Inspect the headless Service and per-Pod DNS from a client. The data demonstration proves claim reuse for this local setup; it does not prove failover across a lost host or recovery from corrupted application files.
+## <span id="pitfalls-controller-ordering-is-not-a-database-protocol" aria-hidden="true" />Understand rollout order and application recovery
 
-For a blocked rollout, inspect the member's readiness probe, events, application logs and mounted volume before changing ordering. A rollback can restore the template while a bad member still needs targeted recovery. Do not force-delete a member on an unreachable node until you have established that its old process cannot still write to shared state. Duplicate logical identities with active writers are much more dangerous than a visibly stalled replacement.
+With the default `OrderedReady` management policy, the controller creates from lowest ordinal upward and scales down in reverse order. The default rolling update works from highest ordinal downward and waits for each updated Pod to become ready before proceeding. In this example, a broken update can stall at `ledger-2`. Check its Pod and events first. If reverting the template leaves a failed update stuck, the supported recovery can require deleting the affected Pod after the revert so it is recreated.
 
-## Pitfalls: controller ordering is not a database protocol
-
-A three-replica StatefulSet does not elect a leader, create a quorum or copy data unless the application implements those behaviors. A readiness probe should reflect that application's serving role, and startup dependencies must avoid circular waits where every member refuses readiness until all others are ready. Choose an operator or application-specific procedure when membership, upgrade and recovery require more than generic Pod identity management.
+The application remains responsible for copying records to peers, deciding which member accepts writes, and recovering from data loss. The sample writer simply appends a line to its own volume.
 
 ## Check your understanding
 
 <details>
-<summary>After ledger-1 is replaced, must it have the same UID, IP address and data?</summary>
 
-Its logical Pod name is stable, but its UID is new and its IP can change. Its data can continue through the retained per-ordinal claim if the storage remains available and the replacement mounts it successfully. Identity continuity and data availability are distinct guarantees, and neither automatically establishes healthy application replication.
+<summary>ledger-1 comes back with the same name. How can you tell it used the old disk and that Kubernetes created a new Pod?</summary>
+
+Confirm it references `data-ledger-1` and can read the original file. Compare Pod UIDs before and after deletion. The claim and file demonstrate storage continuity, while the UID identifies a new object lifetime.
 
 </details>
-
-Next, compare this identity-oriented controller with node-local DaemonSets and finite Jobs. The controller choice should match what a replica means for the application.
 
 ## Primary documentation
 

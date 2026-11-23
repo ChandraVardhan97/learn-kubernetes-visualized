@@ -2,7 +2,7 @@
 {
   "lessonId": "m07-l02",
   "title": "Scheduling constraints",
-  "description": "Combine node selection, Pod affinity, and taints without turning preferences into guarantees.",
+  "description": "Use labels, affinity, and taints to control which nodes a workload can run on.",
   "level": "intermediate",
   "module": "m07",
   "order": 2,
@@ -11,9 +11,9 @@
     "m07-l01"
   ],
   "objectives": [
-    "Explain filtering and scoring before binding",
-    "Choose between node affinity and inter-Pod affinity",
-    "Predict why a toleration permits but does not attract a Pod"
+    "Predict which nodes survive the scheduler’s required placement rules.",
+    "Use Pod affinity and anti-affinity to express relationships between workloads.",
+    "Pair a label requirement with a toleration on a dedicated worker."
   ],
   "concepts": [
     {
@@ -50,17 +50,21 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: first eligibility, then preference
+## <span id="mental-model-first-eligibility-then-preference" aria-hidden="true" />Which nodes can run this Pod
 
-The scheduler chooses a node for an unscheduled Pod by filtering unsuitable nodes and scoring the feasible remainder. Resource requests are one filter. Node labels, required affinity, taints, storage topology, and other constraints also contribute. A preferred rule changes scoring but does not make an otherwise invalid node eligible. When every node fails at least one hard rule, the correct result is a Pending Pod with scheduling evidence, not an arbitrary placement that ignores the manifest.
+A cluster shares workers between ordinary web apps and maintenance tools. You want the tools to run on one labeled worker and ordinary apps to stay off it. Kubernetes has a way to express the Pod’s requirements and a separate way for the node to repel workloads.
 
-A `nodeSelector` requires matching labels on a node. Node affinity expresses richer conditions: required terms filter nodes, while preferred terms influence scoring. In `requiredDuringSchedulingIgnoredDuringExecution`, “ignored during execution” means changing a matching node label later does not by itself evict an already running Pod. Multiple expressions inside one selector term are combined with AND; alternative node selector terms are combined with OR. This small logical distinction can double the intended set of eligible nodes accidentally.
+A **node selector** requires matching node labels. **Node affinity** also evaluates node labels and can express alternatives and preferences. Required rules remove nodes from consideration. Preferred rules influence the scheduler’s scoring of eligible nodes. In the scene, find which nodes are still eligible before the scheduler compares preference scores.
+
+**Pod affinity** evaluates where other Pods with selected labels run. For example, a worker could prefer the same zone as a cache it calls frequently. **Pod anti-affinity** can keep matching web replicas apart by hostname so one node failure affects fewer replicas. The topology key defines what “together” or “apart” means. A hard one-per-node requirement for three replicas needs at least three eligible nodes.
 
 <Scene id="m07-l02-affinity" />
 
-## Walkthrough: dedicate capacity with two independent controls
+## <span id="walkthrough-dedicate-capacity-with-two-independent-controls" aria-hidden="true" />Reserve one worker for maintenance tools
 
-Taints repel Pods that lack matching tolerations. They do not identify the node a Pod should seek. A toleration lets a Pod pass a taint check; node affinity can require the intended pool. The following Pod combines both, assuming a lab worker is deliberately labeled `workload=tools` and tainted `dedicated=tools:NoSchedule`.
+A **taint** is a node setting that repels Pods without a matching **toleration**. `NoSchedule` blocks new placements that do not tolerate it. It leaves already-running Pods in place. `PreferNoSchedule` is a soft preference. `NoExecute` can also evict existing Pods without a matching toleration. A toleration gives a Pod permission to run on a tainted node when other rules allow it.
+
+Save this manifest as `tools-client.yaml`. The Pod needs a node labeled `workload=tools` and tolerates `dedicated=tools:NoSchedule`. Put both settings on the same disposable worker. The label requirement guides the tools there, and the taint protects the worker from ordinary new Pods. Try each setting on its own in the scene.
 
 ```yaml
 apiVersion: v1
@@ -87,13 +91,11 @@ spec:
           memory: 16Mi
 ```
 
-`NoSchedule` prevents new placement without a toleration but does not evict already assigned Pods. `PreferNoSchedule` is a preference to avoid the node. `NoExecute` can also cause existing Pods without a matching toleration to be evicted; a matching toleration with `tolerationSeconds` can give a bounded stay. These effects are operationally different. Never experiment with cluster-wide worker taints on a shared cluster simply to see which Pods disappear.
-
-**Inter-Pod affinity** uses labels on other Pods and a topology key on nodes. A cache client might prefer to share a zone with cache Pods. **Pod anti-affinity** can avoid placing replicas in the same hostname domain. Required anti-affinity improves separation but can make replicas unschedulable when there are fewer eligible domains than replicas. Preferred anti-affinity can reduce that availability trade-off, at the cost of accepting some co-location. Topology labels must be consistently present; a missing label is not a new physical failure domain.
-
 <Scene id="m07-l02-taints" />
 
-## Practice: prove every filter before adding another
+## <span id="practice-prove-every-filter-before-adding-another" aria-hidden="true" />Read the scheduling event
+
+Before applying, confirm the context points to the lab and choose a worker name from the node listing. After scheduling, read the `NODE` column in `kubectl get pod -o wide`. If it stays Pending, inspect the `FailedScheduling` event. It can point to an unmatched selector, an untolerated taint, or insufficient resources. Delete the Pod and remove the training settings after the experiment.
 
 ```bash
 # Substitute a disposable lab worker name obtained from the first command.
@@ -109,24 +111,21 @@ kubectl taint node LAB_WORKER dedicated=tools:NoSchedule-
 kubectl label node LAB_WORKER workload-
 ```
 
-Run this exercise only in the module's disposable cluster. If there is no eligible worker, stay with the visual scenario instead of changing a control-plane node's scheduling policy. Expect the Pod to bind only if the labeled node also passes resource and other scheduler checks. Remove its toleration in a separately named copy and predict the scheduling event before applying it. The tainted node should be rejected despite its matching label.
+The [placement lab](/labs/#m07) uses constrained capacity and labels to help you see why a Pod remains pending.
 
-Inspect `FailedScheduling` messages as a list of reasons across nodes. A message mentioning both insufficient memory and untolerated taints does not necessarily mean the same node failed both checks. Inspect each node's labels, taints, allocatable resources and existing requests to build the actual feasible set. Avoid setting `spec.nodeName` as a shortcut: it bypasses normal scheduler selection and hides the mechanism you are learning.
+## <span id="pitfalls-hard-constraints-compose-into-an-empty-set" aria-hidden="true" />Check all the hard requirements together
 
-## Pitfalls: hard constraints compose into an empty set
-
-Copying required anti-affinity from a three-node environment into a one-node local cluster often blocks the second replica. Similarly, a toleration broad enough to tolerate every taint can allow access to pools that were intended to remain dedicated. Use narrow keys, values and effects, and apply an admission policy when pool access must be a security or governance rule. Placement configuration alone should not be treated as an authorization boundary against users who can freely change it.
+Required constraints apply together. A labeled node can be rejected for a taint or for lack of CPU. A toleration can leave several nodes eligible, and adding a preference still leaves their final scores to the scheduler. Read the event summary and check the actual labels and taints on each candidate before relaxing constraints.
 
 ## Check your understanding
 
 <details>
-<summary>A Pod tolerates the GPU node's taint but has no selector. Must the scheduler put it on a GPU node?</summary>
 
-No. The toleration only removes one reason to reject GPU nodes. Other untainted nodes may also be feasible and may receive a higher score. Use a resource request for the extended GPU resource and appropriate placement rules when the workload needs that hardware. A matching toleration alone neither reserves nor requests a device.
+<summary>A tools Pod tolerates the dedicated worker’s taint. An ordinary worker also has room. Can the Pod land on the ordinary worker?</summary>
+
+Yes, if the Pod has no other requirement that rules it out. Add a node selector or required affinity matching the dedicated worker’s label to make that placement mandatory.
 
 </details>
-
-Use the [module lab](/labs/#m07) to remove one constraint at a time. Next, spread multiple replicas across topology domains while reserving enough namespace budget for their rollout.
 
 ## Primary documentation
 

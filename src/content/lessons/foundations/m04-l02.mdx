@@ -2,7 +2,7 @@
 {
   "lessonId": "m04-l02",
   "title": "Init containers and sidecars",
-  "description": "Use ordered setup and persistent helpers without hiding their lifecycle costs.",
+  "description": "Give an app a file before it starts, then keep a helper running beside it.",
   "level": "foundations",
   "module": "m04",
   "order": 2,
@@ -11,9 +11,9 @@
     "m04-l01"
   ],
   "objectives": [
-    "Distinguish regular init containers from restartable sidecars",
-    "Explain explicit shared volume communication",
-    "Predict startup when initialization cannot complete"
+    "Explain when a regular init container finishes and when app containers can start.",
+    "Recognize a native restartable sidecar in a Pod definition.",
+    "Follow the same volume through three containers and debug a blocked start."
   ],
   "concepts": [
     {
@@ -54,19 +54,21 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: setup versus continued cooperation
+## <span id="mental-model-setup-versus-continued-cooperation" aria-hidden="true" />What starts before the app
 
-A regular init container runs before ordinary app containers and must complete successfully before the next regular initialization step proceeds. Multiple regular init containers run in their specified sequence. They can perform setup using a different image from the main application, such as preparing a configuration file or checking a prerequisite. They are not permanent background workers. A regular init command that sleeps forever prevents the application from starting.
+A web server needs an `index.html` when it starts. One way to arrange that is to run a small command that creates the file first, then launch the server. Another helper might continue reading or processing files while the server runs. Kubernetes gives these helpers different lifecycle roles.
 
-A sidecar is a helper that remains active alongside the main application. Kubernetes supports a restartable sidecar as an entry in `initContainers` with container-level `restartPolicy: Always`. It starts as part of initialization and keeps running, with independent restart supervision. An older pattern uses two ordinary app containers in `containers`; that can still be useful, but it does not express the same ordered sidecar lifecycle. Identify which pattern a manifest actually uses.
-
-A sidecar is not a remote dependency made local by naming it a sidecar. It shares the Pod's placement, network namespace, and lifecycle boundary. It consumes resources and can affect readiness and termination. If it needs independent scaling or release cadence, a separate workload may fit better. Shared placement is a coupling decision, not a default way to assemble every service.
+A **regular init container** runs during Pod startup and has to finish successfully before Kubernetes goes on to the next init step. Init containers run in list order. They can prepare files or check dependencies so the application starts with what it needs. If a setup step repeatedly fails, later steps must wait. This makes a failure in the helper a valid explanation for why the web server has never started.
 
 <Scene id="m04-l02-init" />
 
-## Walkthrough: create content before serving it
+A **sidecar** is a helper that operates alongside the main application. A **native restartable sidecar** is declared within `initContainers` with its own `restartPolicy: Always`. Kubernetes waits for it to start, then advances to later init containers or application startup while the sidecar remains running. A startup probe, if configured, can determine when it counts as started. A regular second container in `containers` can also help an app, but it follows normal application-container startup rules.
 
-The following complete Pod uses a regular init container to write one file into an emptyDir. nginx then serves that shared file. A restartable sidecar watches the same file and writes only training content to its own stdout. Save it as `collaboration-demo.yaml` in your disposable lab namespace.
+<Scene id="m04-l02-sidecar" />
+
+## <span id="walkthrough-create-content-before-serving-it" aria-hidden="true" />Use an init container to prepare a file
+
+In the manifest, the `prepare` init container writes a page to the volume `page`. The restartable `observer` reads it every ten seconds. nginx mounts the same volume at its document root and serves the page. The three mount paths belong to different containers. The underlying file is the same because all three use the volume named `page`.
 
 ```yaml
 apiVersion: v1
@@ -101,7 +103,7 @@ spec:
       emptyDir: {} # Pod lifetime, not persistent storage.
 ```
 
-The mount paths differ between containers but refer to the same volume. `/work/index.html` in the initializer becomes `/usr/share/nginx/html/index.html` in nginx. Root filesystems remain separate. The init image's shell does not somehow become installed in the nginx image.
+Save the file as `collaboration-demo.yaml` and try it in a disposable namespace. In `describe`, the `prepare` container should finish and the observer and web container should stay running. `prepare` writes its output to a file, so its logs may be empty. The observer's logs should contain `prepared by init`. Start port forwarding if you want to fetch the page from your machine.
 
 ```bash
 kubectl apply -f collaboration-demo.yaml
@@ -111,33 +113,23 @@ kubectl logs collaboration-demo -c observer --tail=10
 kubectl port-forward pod/collaboration-demo 8080:80
 ```
 
-Request `http://127.0.0.1:8080/` while the forward runs. Expect the prepared text if startup succeeds. The prepare container may emit no stdout because its command writes to a file. Its successful termination state, rather than a nonempty log, shows completion. Inspect `status.initContainerStatuses` to distinguish completed setup from the still-running observer sidecar.
+## <span id="practice-predict-a-blocked-initializer" aria-hidden="true" />Diagnose a blocked init container
 
-<Scene id="m04-l02-sidecar" />
+For a separate copy of the Pod, change the preparation command so it exits with a nonzero code. Predict which containers never start and then inspect that Pod. Check the named init container's logs and termination status first. Looking at web-server logs cannot explain a failure that happened before nginx ran. For this comparison use a different Pod name, since many fields in an existing Pod cannot be edited in place.
 
-## Practice: predict a blocked initializer
+## <span id="pitfalls" aria-hidden="true" />Check whether a helper must start first
 
-In a new disposable Pod, make the regular initializer exit 1. Under the basic Always Pod restart policy, the kubelet retries failed initialization, and the ordinary application waits. Inspect init status and `kubectl logs ... -c prepare`, not only the nginx log. If a regular initializer waits for the web process in that same Pod, it can create a circular dependency: the web process cannot start until initialization finishes.
-
-Initialization should be safe to retry. A script that appends duplicate configuration or performs an irreversible database migration on every restart needs a stronger design. Keep setup idempotent, bound external waits, and make failures observable. For changes requiring coordination across many replicas, a Pod-local initializer is not a global deployment lock or a transactional migration controller.
-
-## Pitfalls
-
-Starting a sidecar process does not necessarily mean it is ready to accept connections. Where startup ordering depends on actual readiness, use an appropriate startup probe and verify the sidecar lifecycle semantics. Merely placing a proxy first in YAML is not a health contract. A readiness probe on a sidecar can also contribute to Pod readiness, so test the effect of helper failure on traffic eligibility.
-
-The shared emptyDir survives an individual container restart in this Pod, but replacement of the Pod creates a new emptyDir and reruns initialization. Keep durable business data outside this training volume. Also consider permissions: sharing a volume does not guarantee both images' users can read or write the same files.
+Use an init step for work that needs to finish first. For dependencies such as another service, give any wait a timeout and a useful error so the next operator can tell why startup stopped. The shared volume here has the Pod's lifetime. If Kubernetes replaces the Pod, preparation runs again. The [module lab](/labs/#m04) demonstrates regular init ordering and a second application container sharing a file. Its companion follows the regular container rules.
 
 ## Check your understanding
 
 <details>
 
-<summary>A regular init container tails a file forever. Will the main web container start after it prints its first line?</summary>
+<summary>The observer has started, but no nginx logs exist yet. Has the observer blocked nginx by continuing to run?</summary>
 
-No. A regular init container must finish successfully. Printing a line is not completion. If continued operation is intended, use a deliberately designed sidecar pattern; if setup is intended, make the command terminate after completing that setup. Then verify permissions, startup health, and retry behavior.
+With the native sidecar configuration shown, Kubernetes can advance after the observer starts. It does not wait for that helper to exit. Check application container state and the startup of any other init steps to find what is still pending.
 
 </details>
-
-Practice ordered setup and the alternate failure branch in the [module lab](/labs/#m04). Next, replace hard-coded settings with scoped ConfigMaps and Secrets.
 
 ## Primary documentation
 

@@ -1,13 +1,13 @@
 ---
 lessonId: "m17-l02"
 title: "Autoscaling mechanics and feedback"
-description: "Calculate a replica recommendation and follow the delays that shape it."
+description: "Calculate a first autoscaling recommendation and identify the delays before users see extra capacity."
 level: "advanced"
 module: "m17"
 order: 2
 minutes: 16
 prerequisites: ["m17-l01"]
-objectives: ["Calculate CPU utilization from usage and resource requests.", "Explain HPA tolerance, missing metrics and stabilization.", "Separate replica scaling from node capacity and application throughput."]
+objectives: ["Estimate an HPA replica recommendation from measured and target utilization.", "Explain how missing metrics, readiness, stabilization, and scaling policies affect the result.", "Diagnose one slow stage between increased demand and ready Pods."]
 concepts: [{"id": "m17-l02-hpa-formula", "title": "Utilization divides usage by requests", "scene": "m17-l02-hpa-formula"}, {"id": "m17-l02-hpa-feedback", "title": "Demand becomes useful capacity after delays", "scene": "m17-l02-hpa-feedback"}]
 sources: [{"title": "Horizontal Pod Autoscaler algorithm", "url": "https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/"}, {"title": "HPA walkthrough", "url": "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"}, {"title": "Resource metrics pipeline", "url": "https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/"}]
 lab: "m17"
@@ -17,23 +17,19 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: the signal has a denominator
+## <span id="mental-model-the-signal-has-a-denominator" aria-hidden="true" />Calculate the first replica recommendation
 
-For a CPU resource-utilization target, the HPA compares measured usage with requested CPU. If each relevant container requests 100 millicores and consumes 80 millicores on average, its utilization is approximately eighty percent of request. A limit of 500 millicores does not change that utilization denominator. Raising the request while holding usage constant lowers utilization and changes the HPA signal, even if actual traffic and latency have not improved.
+An API runs four replicas. Each requests `200m` of CPU and uses about `150m` during a spike. Its average utilization is 75%, and its HPA target is 50%. The basic recommendation is the current count times observed divided by target, rounded up. Here that gives `ceil(4 × 75 / 50) = 6`. The scene lets you change usage and requests separately to see which number drives the recommendation.
 
-The basic recommendation is the ceiling of current replicas multiplied by current metric divided by desired metric. With three replicas, eighty-percent utilization and a fifty-percent target, the simple calculation recommends five replicas. This is a teaching calculation before tolerance, missing data, readiness handling, scaling policies and stabilization are applied. HPA is a periodic feedback controller, so the exact count at a particular instant can differ from the raw arithmetic.
+The **Horizontal Pod Autoscaler** reads metrics periodically and writes a desired scale when the recommendation passes its rules. CPU utilization is measured relative to requested CPU. If the requests double while actual usage stays the same, utilization falls. A workload with missing CPU requests or an unavailable Metrics API may provide no usable utilization signal for that metric.
 
 <Scene id="m17-l02-hpa-formula" />
 
-## Walkthrough: recommendations pass through guardrails
+## <span id="walkthrough-recommendations-pass-through-guardrails" aria-hidden="true" />How HPA rules change the recommendation
 
-The resource metrics API needs a working metrics provider, commonly Metrics Server, and containers need the relevant resource requests for utilization calculations. Missing metrics and not-yet-ready Pods affect the algorithm conservatively. A missing request can make utilization for that Pod undefined; an unknown metric is not zero demand. Inspect HPA conditions and events instead of assuming a replica count that stays constant means no scaling pressure exists.
+The formula is the starting point. The HPA uses a tolerance around the target, handles missing metrics conservatively, and treats not-yet-ready Pods specially when evaluating CPU. If you use multiple metrics, the controller computes recommendations for them and generally chooses the largest valid one. Metric errors can prevent a scale-down even if another metric suggests one. Scaling policies limit changes over time, and a stabilization window can keep a recent higher recommendation during scale-down.
 
-Stabilization uses recent recommendations to reduce oscillation. Downscale stabilization can retain a larger recent recommendation while demand briefly falls; policies can separately bound how quickly replica counts change. minReplicas and maxReplicas bound the permitted range. These controls reduce churn but also delay reaction. Adding a replica then requires scheduling, image startup, readiness and endpoint propagation before useful capacity arrives. If all nodes are full, HPA can request more Pods while throughput stays unchanged.
-
-<Scene id="m17-l02-hpa-feedback" />
-
-This HPA is an optional extension to a Deployment named `m17-web`, which you must create with CPU requests first. It does not install a metrics provider or generate realistic load. The local OOM exercise remains independent so it works without that add-on.
+In the example, the replica bounds are two and eight and scale-down looks back five minutes. A short drop in demand can leave the count high while the window still contains a recent larger recommendation.
 
 ```yaml
 apiVersion: autoscaling/v2
@@ -62,6 +58,12 @@ spec:
       stabilizationWindowSeconds: 300
 ```
 
+## <span id="practice-predict-a-recommendation-before-changing-configuration" aria-hidden="true" />Follow scale-up from demand to readiness
+
+Estimate a desired count before changing requests or load. Check the metrics API, the HPA target and conditions, then the Deployment and ready Pods. Newly created Pods still need placement, image pulls, and readiness. If capacity must grow, an infrastructure autoscaler may need time to add suitable nodes. In the scene, follow the demand spike all the way to the point when new Pods can serve requests.
+
+<Scene id="m17-l02-hpa-feedback" />
+
 ```bash
 kubectl --context kind-kv-lab get apiservice v1beta1.metrics.k8s.io
 kubectl --context kind-kv-lab -n kv-lab get hpa
@@ -71,26 +73,18 @@ kubectl --context kind-kv-lab -n kv-lab get pods -o wide
 kubectl --context kind-kv-lab -n kv-lab top pods
 ```
 
-## Practice: predict a recommendation before changing configuration
+The [performance lab](/labs/#m17) uses HPA status and failure conditions in the local baseline. Live usage and a scale-up experiment require a working resource metrics pipeline and sustained test load.
 
-Use the [m17 local exercise](/labs/#m17) for resource-limit evidence, then calculate a hypothetical HPA recommendation on paper. Start with four replicas, a request of 200 millicores, average usage of 100 millicores and a target of fifty percent. The signal is on target. Now halve the request without changing traffic or usage. The utilization becomes one hundred percent and the simple recommendation doubles. This reveals why right-sizing and autoscaler settings must be reviewed together.
+## <span id="pitfalls-more-replicas-can-amplify-dependencies" aria-hidden="true" />See how load affects shared dependencies
 
-If you install a metrics provider and run the optional experiment, record timestamps for demand change, metric observation, replica recommendation, Pod creation and readiness. These are observations for your setup, not portable latency guarantees. Check CPU usage distribution as well as the average; one hot shard can suffer while average utilization looks acceptable. For queues, consider an appropriate external or custom metric with a defined scaling relationship instead of assuming CPU captures all workload demand.
-
-## Pitfalls: more replicas can amplify dependencies
-
-Horizontal scaling can multiply database connections, cache misses or outbound API requests. A saturated database may worsen when more workers arrive. CPU limits can cap the measured usage even as request latency grows, masking unsatisfied demand. Missing metrics, maxReplicas and unavailable node capacity each create different ceilings. Do not have GitOps continuously reset spec.replicas while HPA manages it; establish field ownership so two reconciliation loops do not fight over the scale target.
-
-With multiple configured metrics, the HPA evaluates recommendations according to its documented algorithm; errors can constrain downscaling rather than silently becoming zero load. Inspect each metric status when one healthy metric appears to disagree with the final replica recommendation.
+Extra replicas can increase connections and contention on a shared dependency. Use a metric that reflects what you want to improve. Queue depth can help a worker fleet when work is divisible, while CPU may tell you little about a workload blocked on a saturated database. Measure the end result, such as queue age or request latency.
 
 ## Check your understanding
 
 <details>
 
-<summary>CPU usage is unchanged, but requests double. What happens to utilization-based HPA input?</summary>
+<summary>The formula predicts six replicas. The HPA reports six desired, but request latency stays high. What are two next checks?</summary>
 
-The utilization percentage is roughly halved because request is its denominator. The raw scale recommendation can fall even though demand did not. Actual scaling still depends on tolerance, available metrics, stabilization and configured policies.
+Check whether all six replicas are ready and eligible for traffic. If they are, measure where requests spend time and whether a shared dependency has become the limiting resource.
 
 </details>
-
-Next, combine the feedback loop with cluster capacity. A replica recommendation is an intention, while schedulable resources and application bottlenecks determine useful capacity.

@@ -2,7 +2,7 @@
 {
   "lessonId": "m11-l03",
   "title": "Protecting Secrets and tenant boundaries",
-  "description": "Combine credential handling, encryption, RBAC, admission and network controls around realistic trust boundaries.",
+  "description": "Follow a credential from its Kubernetes Secret to the application, then reason about who can read it.",
   "level": "intermediate",
   "module": "m11",
   "order": 3,
@@ -11,9 +11,9 @@
     "m11-l02"
   ],
   "objectives": [
-    "Explain why base64 Secret data is not encryption",
-    "Trace credential access through API, mounts and application logging",
-    "Assess what namespace controls provide for mutually untrusted tenants"
+    "Distinguish Base64 encoding, encryption at rest, and access control.",
+    "Deliver a Secret as a read-only file and verify presence without logging its contents.",
+    "Identify the controls needed when multiple teams share a cluster."
   ],
   "concepts": [
     {
@@ -59,17 +59,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a Secret is sensitive API data, not an automatic vault
+## <span id="mental-model-a-secret-is-sensitive-api-data-not-an-automatic-vault" aria-hidden="true" />Where a credential travels
 
-A Kubernetes **Secret** stores small sensitive values for applications and integrations. Its `data` field is base64-encoded because the API must represent bytes in text. Anyone who can read those encoded values can decode them. Encoding is not encryption, and moving a password from a ConfigMap to a Secret does not by itself make every storage, access and logging path safe.
+A frontend needs a database password. Putting it directly in a Deployment would copy the value into every manifest and every place the manifest is reviewed. A Kubernetes **Secret** gives the credential its own API object. The workload can refer to the object by name. In a typical manifest, values in `data` use Base64 so binary values can be represented as text. Anyone who can read that field can decode it. Encryption at rest is configured separately at the API server or through the managed cluster service.
 
-**Encryption at rest** protects stored API data according to the control plane's configured encryption provider. It is not universally enabled merely because an object is kind Secret. Managed providers may configure it as part of the service; self-managed clusters need deliberate API server configuration, key handling and verification. Existing stored objects can require a rewrite after encryption configuration changes. Key management, control-plane access and backups remain part of the boundary. At-rest encryption also does not stop an authorized API reader from receiving plaintext Secret data.
+Follow the password in the scene. An authorized client or deployment process writes the Secret. Kubernetes stores it as API data. A Pod specification requests it as a volume, and the kubelet writes the selected content into a mount. Every boundary has its own access checks, and every process with access to the mounted file can read it.
 
 <Scene id="m11-l03-secret-path" />
 
-## Walkthrough: minimize every place credentials can appear
+## <span id="walkthrough-minimize-every-place-credentials-can-appear" aria-hidden="true" />Mount a Secret and plan its rotation
 
-The following Pod fragment shows file-based Secret consumption without embedding the credential value in the workload manifest. This optional exercise requires a separately provisioned throwaway Secret or an approved external credential workflow; the module lab's baseline does not create this Secret. Keep real credentials out of examples, shell history and version control.
+The snippet goes inside a Pod spec. In the same namespace, create `application-login` with a dummy `password` key. The mount exposes that key as `/credentials/password` and is read-only inside the container. Check that the file’s mode and ownership allow the actual process identity to read it. `automountServiceAccountToken: false` avoids automatically mounting an API token in a workload that uses no API calls.
 
 ```yaml
 # Fragment: spec of a workload that does not need Kubernetes API access.
@@ -89,13 +89,11 @@ volumes:
       defaultMode: 0400   # Ensure the configured process UID can read it.
 ```
 
-A Secret volume can be updated eventually when the Secret changes, but the application must reread the file or reload its configuration. A mount through `subPath` does not receive normal projected updates. A Secret injected as an environment variable does not update in an already running process when the Secret object changes. Plan rotation around both the external credential's validity and the application's consumption method; updating one API object is not a complete rotation procedure.
+If a Secret volume is mounted normally, kubelet updates its files eventually when the Secret changes. The application still needs to reload or reread them. Secret environment variables are set at container startup and changing the source does not change a running process’s environment. A mount using `subPath` does not receive automatic Secret volume updates.
 
-File permissions must match the process identity. The `0400` example is appropriate only when the intended process owns or can validly read the file under the actual volume and security context arrangement. A non-root process may need an intentionally designed group-readable mode and group settings. Do not solve a permission error by logging the Secret content to prove that it exists. Check file metadata and access results without revealing values.
+## <span id="practice-verify-access-presence-and-reload-without-revealing-data" aria-hidden="true" />Verify access without revealing the password
 
-<Scene id="m11-l03-tenant-controls" />
-
-## Practice: verify access, presence and reload without revealing data
+In a lab namespace, check whether your identity is allowed to read Secrets. Check file readability with the example command so its actual value never appears in console output. If you exercise rotation, use a dummy credential and verify that the app behaves correctly with the new one. A readable file proves the mount worked. A successful login with the new credential proves the app picked it up.
 
 ```bash
 kubectl get secret application-login
@@ -106,24 +104,23 @@ kubectl exec application -- sh -c 'test -r /credentials/password && echo readabl
 kubectl get pod application -o yaml
 ```
 
-The last command can show whether unexpected credential mounts or ServiceAccount settings were admitted. Treat Pod environment output and application debug endpoints as sensitive because they may expose secret-derived values. When extending the [security lab](/labs/#m11) with this Secret example, use only throwaway credentials, then rotate one value and observe whether the mounted file and application behavior change. Record reload behavior rather than printing the value itself.
+Practice with dummy data in the [security lab](/labs/#m11). Try the tenant scene to see which layer controls each path.
 
-A **tenant boundary** combines several controls. RBAC limits API operations; admission limits which Pod configurations those operations can create; NetworkPolicy constrains permitted traffic when enforced; quotas limit declared resource consumption; and node or cluster isolation limits shared host risk. Namespaces organize these controls but do not automatically supply all of them. Users allowed to create Pods in a namespace can often consume that namespace's Secrets indirectly, even without direct `get secrets`, unless additional controls restrict workload creation and credential use.
+<Scene id="m11-l03-tenant-controls" />
 
-## Pitfalls: shared cluster trust is a design decision
+## <span id="pitfalls-shared-cluster-trust-is-a-design-decision" aria-hidden="true" />Protect the rest of the tenant boundary
 
-A privileged tenant workload or hostPath mount can bypass assumptions about namespace isolation. Some API resources are cluster-scoped, and CRDs or admission webhooks may affect many tenants. Two cooperative application teams and two mutually hostile customers require different boundaries. For stronger isolation, consider dedicated nodes with enforced placement rules, virtualized control planes or separate clusters, while evaluating which data-plane and host resources remain shared. Never describe quotas or a namespace label as a complete security sandbox.
+A namespace scopes many resources. Its boundary also depends on who may create workloads, which API permissions they hold, and which connections and runtime settings are allowed. A user who can create arbitrary Pods in a namespace can potentially mount Secrets there. Use scoped RBAC, admission rules, and enforced network policies together. For tenants requiring a stronger trust boundary, dedicated nodes or clusters may be appropriate.
 
 ## Check your understanding
 
 <details>
-<summary>A user cannot get Secrets directly but can create arbitrary Pods in the same namespace. Is the Secret necessarily protected from that user?</summary>
 
-No. The user may create a Pod that mounts the Secret or uses a more powerful ServiceAccount, depending on admission rules and available identities. Analyze indirect access paths as well as direct API verbs. Protecting credentials requires constraints on workload creation, identity selection and mounts, in addition to limiting Secret read permission.
+<summary>You rotated a Secret mounted as a file, but the app still tries the old database password. What would you verify?</summary>
+
+Verify whether the file was refreshed and how the app reloads it. An ordinary volume may update after a delay, while a `subPath` mount stays unchanged. An app that reads once at startup needs a supported reload or a controlled restart.
 
 </details>
-
-Next, use these boundaries while diagnosing failures. Operational visibility should reveal the responsible layer without collecting credentials or unnecessary tenant data.
 
 ## Primary documentation
 

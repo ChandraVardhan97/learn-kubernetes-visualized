@@ -1,13 +1,13 @@
 ---
 lessonId: "m17-l03"
 title: "Capacity and scale trade-offs"
-description: "Size headroom around failure, startup and shared dependencies."
+description: "Plan enough eligible capacity for normal load, rollouts, and a node failure."
 level: "advanced"
 module: "m17"
 order: 3
 minutes: 16
 prerequisites: ["m17-l02", "m15-l02"]
-objectives: ["Estimate schedulable capacity from requests and allocatable resources.", "Account for rollouts, failure domains and startup delays.", "Locate control-plane and application scaling bottlenecks separately."]
+objectives: ["Calculate remaining room using node allocatable resources and existing requests.", "Account for Pod placement constraints, overhead, and namespace quotas.", "Estimate extra capacity needed when a rollout and node failure overlap."]
 concepts: [{"id": "m17-l03-capacity-budget", "title": "Allocatable capacity must satisfy every constraint", "scene": "m17-l03-capacity-budget"}, {"id": "m17-l03-headroom-transition", "title": "Headroom covers rollout and failure transitions", "scene": "m17-l03-headroom-transition"}]
 sources: [{"title": "Node allocatable resources", "url": "https://kubernetes.io/docs/tasks/administer-cluster/reserve-compute-resources/"}, {"title": "Large-cluster considerations", "url": "https://kubernetes.io/docs/setup/best-practices/cluster-large/"}, {"title": "Node autoscaling", "url": "https://kubernetes.io/docs/concepts/cluster-administration/node-autoscaling/"}]
 lab: "m17"
@@ -17,23 +17,23 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: capacity is a constrained budget
+## <span id="mental-model-capacity-is-a-constrained-budget" aria-hidden="true" />Find room for each Pod on an eligible node
 
-Node capacity and node allocatable are different quantities. The operating system, kubelet and other reserved functions consume resources, leaving allocatable capacity for Pods. DaemonSets then occupy part of that budget on each eligible node. The scheduler compares Pod requests with available accounting and placement constraints. Summing physical CPU cores and dividing by a container's observed average CPU use therefore overstates what you can safely promise a workload.
+Six API replicas each request half a CPU and 512 MiB of memory. They need at least three allocatable CPUs and 3 GiB of memory in total. Kubernetes schedules one Pod at a time on one viable node, though. Half a CPU spare across the cluster might be split into small amounts no single new Pod can use. If the workload also needs a particular zone or storage topology, only nodes in suitable locations count.
 
-A simple planning estimate starts with allocatable resources after required system workloads, then checks both CPU and memory requests. The tighter resource sets a rough upper bound, but fragmentation, topology, ports, Pod limits and volumes can lower it further. A Pod requiring one large memory allocation cannot use small free fragments distributed across several nodes. ResourceQuota limits namespace consumption; it does not manufacture feasible capacity or reserve a replacement node during a failure.
+**Allocatable capacity** is what a node reports as available for Pods after applicable reservations. Subtract requests already assigned, including node agents, and consider Pod overhead where a RuntimeClass specifies it. Check both CPU and memory alongside other constraints such as Pod count, taints, and device availability. Use the budget scene to see why a single total can hide a placement failure.
 
 <Scene id="m17-l03-capacity-budget" />
 
-## Walkthrough: the spare capacity has a job
+## <span id="walkthrough-the-spare-capacity-has-a-job" aria-hidden="true" />Plan for a failure during a rollout
 
-Capacity must cover more than the steady-state replica count. A rolling Deployment may temporarily run surge Pods while old replicas remain. Draining a node moves demand onto the remaining pool. Losing a zone can concentrate replicas in fewer failure domains. Startup probes, image pulls, cache warming and storage attachment delay the point when replacements serve traffic. Headroom is the explicit budget for these transitions, rather than an unexplained percentage chosen after an outage.
-
-Horizontal workload scaling and node autoscaling form separate feedback loops. HPA changes desired replicas from metrics, while node autoscaling typically reacts to unschedulable demand and provider-specific signals. New node provisioning may fail because of cloud quota, unavailable instance types, subnet limits or required-zone constraints. A local kind cluster cannot reproduce those provider contracts by creating more Pods. Treat its resource behavior as mechanism practice and validate real capacity decisions in the target environment.
+**Headroom** means capacity left for events you expect, such as a rollout, drain, or sudden increase in demand. Imagine three eligible nodes each carrying two replicas at half a CPU apiece. Lose one node and the remaining nodes need room for two replacement Pods. If a rolling update also permits one surge replica, you need space for three additional placements on those remaining nodes to handle that overlap. Observe how the answer changes if the replacements need to spread across failure domains.
 
 <Scene id="m17-l03-headroom-transition" />
 
-The following quota is a complete example of a namespace budget. It intentionally does not promise where those requests fit. Save as `capacity-quota.yaml` only if you want an isolated optional quota experiment; quotas can reject later requests in the namespace until removed.
+## <span id="practice-plan-for-one-failure-and-one-rollout" aria-hidden="true" />Compare the namespace and node budgets
+
+Read both physical and namespace budgets. The illustrative quota allows two CPUs in requests. In the six-replica example, the quota would reject some Pods even if every node had spare CPU. Five 400m replicas also use the full two-CPU budget and leave nothing for a rollout surge. Review quota usage, then inspect node allocatable and assigned requests. The example quota is optional in the disposable lab and the cleanup removes only that quota.
 
 ```yaml
 apiVersion: v1
@@ -60,26 +60,18 @@ kubectl --context kind-kv-lab -n kv-lab get resourcequota
 kubectl --context kind-kv-lab -n kv-lab delete resourcequota m17-budget --ignore-not-found
 ```
 
-## Practice: plan for one failure and one rollout
+Use the [capacity lab](/labs/#m17) to calculate which placement or admission requirement is limiting you. Name the event you want to tolerate and verify that spare capacity remains on eligible nodes after that event.
 
-Use the [m17 local exercise](/labs/#m17) to connect a container's request and limit to observed behavior. Then sketch three identical nodes with one CPU allocatable each after required system workloads. A service has six replicas requesting 250 millicores each. The aggregate request fits, but ask whether it also fits after one node fails and while a rollout creates two surge Pods. Include memory and placement constraints before claiming the plan works.
+## <span id="pitfalls-more-objects-also-load-the-control-plane" aria-hidden="true" />Check control-plane load as the cluster grows
 
-Compare the sketch with `describe node` allocated-resource output. That output reflects declared requests and limits, not a complete history of actual resource contention. For production planning, combine declarations with measured distribution, startup peaks and a failure drill. Record the assumptions behind any calculated replica ceiling. A capacity model is useful because it identifies what must be measured and tested; it is not evidence that an untested failure will meet an availability objective.
-
-## Pitfalls: more objects also load the control plane
-
-Many short-lived Pods increase API writes, watch events, scheduling work, admission calls and etcd churn. More controller workers can increase throughput until the API, admission dependency or external service becomes the bottleneck. High-cardinality metrics and verbose logs can strain observability systems before CPU becomes the limiting application resource. Use backoff, bounded concurrency, event aggregation and sensible object lifetimes. Avoid treating published scalability envelopes as guarantees for your object mix and add-ons.
-
-A service can have spare Kubernetes capacity while its database, connection pool or upstream quota is exhausted. Inspect latency, errors, queue length and dependency saturation together. Scaling one layer should be an experiment with an expected bottleneck change, not an automatic response to every slowdown.
+Cluster growth affects the control plane too. More Pods generate more API objects, watch events, leases, and status changes. When expanding a cluster, observe scheduling latency and API server and etcd performance alongside node utilization. Resource availability for workload Pods and capacity to coordinate them can become separate bottlenecks.
 
 ## Check your understanding
 
 <details>
 
-<summary>The namespace quota allows another Pod, but it stays Pending. Is the quota ineffective?</summary>
+<summary>The cluster reports 2 CPUs spare. A Pod requesting half a CPU remains Pending. What can explain that?</summary>
 
-No. Quota authorizes consumption within a namespace budget; scheduling still requires a node that satisfies requests and placement constraints. Admission success and available physical capacity are different boundaries.
+No single eligible node may have half a CPU available, or another required resource or placement rule may fail. Inspect the scheduling event and compare each candidate’s available requests and labels.
 
 </details>
-
-Next, size the coordination system itself. Control-plane availability depends on quorum, disk behavior, membership and failure domains in addition to worker capacity.

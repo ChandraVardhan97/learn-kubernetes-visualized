@@ -1,13 +1,13 @@
 ---
 lessonId: "m14-l02"
 title: "Watches and server-side apply"
-description: "Follow a resumable watch cursor and negotiate field ownership explicitly."
+description: "Keep a client’s object view current and resolve conflicts when two writers declare the same field."
 level: "advanced"
 module: "m14"
 order: 2
 minutes: 16
 prerequisites: ["m14-l01"]
-objectives: ["Resume watches without treating resourceVersion as a clock.", "Explain stale caches and relisting after expired history.", "Resolve server-side apply conflicts through an ownership decision."]
+objectives: ["Describe how a list response and resourceVersion establish a watch starting point.", "Explain how to recover a watch when its history is no longer available.", "Inspect managed fields and resolve a server-side apply conflict deliberately."]
 concepts: [{"id": "m14-l02-watch-cursor", "title": "List, resume, and rebuild a watch", "scene": "m14-l02-watch-cursor"}, {"id": "m14-l02-apply-owners", "title": "Two managers and one declared field", "scene": "m14-l02-apply-owners"}]
 sources: [{"title": "API list and watch semantics", "url": "https://kubernetes.io/docs/reference/using-api/api-concepts/"}, {"title": "Server-side apply ownership", "url": "https://kubernetes.io/docs/reference/using-api/server-side-apply/"}]
 lab: "m14"
@@ -17,23 +17,17 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: observation and ownership solve different problems
+## <span id="mental-model-observation-and-ownership-solve-different-problems" aria-hidden="true" />How a client keeps its object view current
 
-A watch delivers changes to a selected API collection. A client typically lists a baseline, then watches from its resourceVersion, preserving the string unchanged. Current kube-apiserver resources, including CRDs, support ordering versions within the same API group and resource type using arbitrary-size decimal comparison; conformant implementations guarantee this from Kubernetes 1.35. Extension APIs require checking their contract and numeric format. This permits constrained ordering, not subtraction to count changes, cross-resource ordering, or elapsed-time calculations.
+A controller needs to know which ConfigMaps exist and keep track of changes. It can **list** the relevant objects to build an initial view, then **watch** for later additions, modifications, and deletions. A list response includes a `resourceVersion` the client can use to request changes after that snapshot. This gives the client a way to avoid missing a change between its initial read and the start of the watch.
 
-A disconnected client has not necessarily lost its ability to recover. It can reconnect from its last accepted version while history remains available. If the requested history is too old, the server can return an expired-history response such as HTTP 410 Gone. The client must rebuild its baseline and continue watching. A watch is therefore a resumable observation protocol, not a permanent audit log or a guarantee that every intermediate state reaches every controller.
+If the connection drops, the client can resume from a suitable recent version. If the API server has discarded too much history, a `410 Gone` response tells the client to list again and rebuild its view before watching further. A resource version is a cursor for API state and should be passed back as provided; use the API’s documented comparison guarantees only where they apply. It is distinct from a wall-clock time or a count of application changes.
 
 <Scene id="m14-l02-watch-cursor" />
 
-## Walkthrough: watch current state, negotiate field changes
+## <span id="walkthrough-watch-current-state-negotiate-field-changes" aria-hidden="true" />What happens when field managers disagree
 
-An informer uses watch information to maintain a local cache, but cache reads can lag a successful write. A reconcile loop must handle an object that is already changed on the API server while its cached copy still looks old. Kubernetes controllers work toward current desired state rather than executing an irreversible business transaction once for every watch notification. For durable audit requirements, configure an audit pipeline with its own retention and access model instead of retaining a controller's event stream.
-
-Server-side apply solves a separate coordination problem: multiple actors declare intentions for fields. The API server records field managers in managedFields. When an apply changes a field owned by another manager to a different value, it normally reports a conflict. Managers may share ownership when applying the same value; an ordinary update or patch can also change field ownership according to its operation. Ownership is field-specific and schema-dependent, including list merge behavior; it is not an exclusive lock on the entire object.
-
-<Scene id="m14-l02-apply-owners" />
-
-Save this as `ownership.yaml` in a disposable directory. Manager `kv-gitops` owns the declared data field after applying it. A second apply using another manager and a different value should conflict.
+Now imagine two writers setting the ConfigMap’s `data.release` field. One declares `git-declared` from a repository and another applies a manual change. **Server-side apply** tracks each writer’s declared fields under a field manager in `metadata.managedFields`. Applying a different value to a field owned by another manager can cause a conflict. A different manager can apply the same value and share ownership. Compare both outcomes in the scene.
 
 ```yaml
 apiVersion: v1
@@ -48,6 +42,12 @@ data:
   release: git-declared
 ```
 
+<Scene id="m14-l02-apply-owners" />
+
+## <span id="practice-capture-a-conflict-instead-of-suppressing-it" aria-hidden="true" />Reproduce and inspect an apply conflict
+
+Save the ConfigMap as `ownership.yaml` and start with the `kv-gitops` manager. Inspect managed fields. Watch the object in a second terminal, and in the first terminal change `data.release` in the file. Apply as `kv-human` and read which manager and path the conflict names. A rejected change gives the watch no successful object update for that attempt.
+
 ```bash
 kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f ownership.yaml
 kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership -o yaml --show-managed-fields
@@ -57,24 +57,18 @@ kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership --watch
 kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-human -f ownership.yaml
 ```
 
-## Practice: capture a conflict instead of suppressing it
+Try this in the [API mechanics lab](/labs/#m14). For a shared cluster, resolve a conflict by deciding who should manage the field. Remove the field from a manager’s declared configuration where appropriate, coordinate an update through the owner, or take ownership deliberately with a reviewed force apply. Transferring ownership changes what other reconcilers may be able to apply.
 
-Run the [m14 local exercise](/labs/#m14). It creates a ConfigMap with one field manager and attempts a conflicting declaration with another. Observe the exact field path in the conflict and inspect managedFields before choosing a resolution. For this experiment the intended result is the conflict itself; do not add force simply to make every command green. Watch delivery may group closely timed changes differently from your terminal expectations, so inspect final state as well as the event stream.
+## <span id="pitfalls-persistence-is-not-cache-synchronization" aria-hidden="true" />Check whether the controller saw the write
 
-There are three useful resolutions to discuss. The second actor can stop declaring the field, both actors can agree on the same value, or an authorized owner can deliberately take ownership using force conflicts. That last option changes the ownership contract. Record who will manage the field on the next reconciliation, otherwise two automated systems can repeatedly undo each other's changes.
-
-## Pitfalls: persistence is not cache synchronization
-
-A successful apply is evidence about the API write, not proof that every cache has observed it. Check the resource's documented status conditions and, where reported, whether observedGeneration covers the desired generation; metadata.generation alone records desired-state changes, not convergence. A watch bookmark advances progress information without representing a normal object change, and clients must interpret event types correctly. Use maintained client libraries for list/watch recovery. Do not invent a cursor or use `resourceVersion: "0"` as a universal request for the newest possible read; resourceVersion semantics depend on the operation and associated options.
+A watch observes API writes. A controller may still need to process the update and report its progress. Compare object status and values produced by reconciliation separately. After a relist, evaluate current state instead of assuming every intermediate change was available to the client.
 
 ## Check your understanding
 
 <details>
 
-<summary>A watch cursor changes from one numeric-looking string to another. How many updates occurred?</summary>
+<summary>A controller reconnects with a stale watch resourceVersion and the server sends 410 Gone. What happens to its cached view?</summary>
 
-The strings do not count updates. Documented same-resource ordering does not make resourceVersion a per-object event counter or a clock. Reconcile observed state; use an audit or application log when individual changes matter.
+The client refreshes its view from a new list response and watches from that version. That works even if some intermediate events are unavailable, because the controller can reconcile from current desired and observed state.
 
 </details>
-
-Next, connect field ownership to deletion ownership. managedFields controls declarations of fields; ownerReferences and finalizers control different lifecycle relationships.

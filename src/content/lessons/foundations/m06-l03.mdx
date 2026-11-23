@@ -2,7 +2,7 @@
 {
   "lessonId": "m06-l03",
   "title": "Your first debugging workflow",
-  "description": "Turn a broken request into evidence at the API, workload, listener, Service, and DNS boundaries.",
+  "description": "Find where a workload or Service stops working by gathering evidence in the order a request depends on it.",
   "level": "foundations",
   "module": "m06",
   "order": 3,
@@ -11,9 +11,9 @@
     "m06-l02"
   ],
   "objectives": [
-    "Choose logs and events according to the failure stage",
-    "Trace a request without restarting away useful evidence",
-    "Verify both a targeted repair and the original caller path"
+    "Use Pod status, events, and container logs for different kinds of startup failures.",
+    "Test a request from the caller and follow it through DNS, Service, and backend.",
+    "Repair a selector mismatch and verify the fix from the client."
   ],
   "concepts": [
     {
@@ -63,17 +63,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: locate the first failed boundary
+## <span id="mental-model-locate-the-first-failed-boundary" aria-hidden="true" />Find the first part that failed
 
-“A request failed” is a symptom, not a diagnosis. Start by identifying the caller, exact destination and port, response or error, time window, namespace, and recent change. Then separate the API object path from the application packet path. A successful `kubectl get` proves access to the API, not that the web server works. A successful Pod port-forward tests a selected backend through a debugging tunnel, not necessarily the Service's ordinary forwarding path.
+Your frontend reports that the catalog is unavailable. At first, that symptom could mean the catalog did not start, DNS could not resolve its name, or the Service has no backend. Start by finding the first failed part of the path. Write down the caller, namespace, host, and port so you can repeat the exact request after a repair.
 
-Use the narrowest useful evidence first. Confirm the context and namespace so you do not investigate a different workload with the same name. Inspect the owning Deployment, its ReplicaSets, and current Pods. Check whether Pods exist, have node assignments, started containers, and became ready. Each transition has a responsible component and different failure evidence. Avoid deleting the failing Pod before reading its status and logs; replacement can discard the very observation needed to explain the incident.
+**Conditions** describe whether particular states hold for an object, such as whether a Pod is ready. **Events** report recent activity around an object, such as a failed image pull or scheduling attempt. **Container logs** show messages written by the running application to standard output and error. Each answers a different question. Try the startup scene and decide which evidence to check before changing the workload.
 
 <Scene id="m06-l03-startup" />
 
-## Walkthrough: inspect startup before transport
+## <span id="walkthrough-inspect-startup-before-transport" aria-hidden="true" />Investigate startup before network traffic
 
-Use `service-demo` from the preceding lessons in its dedicated lab namespace. Replace `ACTUAL_POD_NAME` with a current Pod name from the first listing. Keep your verified context and namespace explicit when multiple clusters are configured.
+Use the `service-demo` Deployment from the previous lessons. First ask if it has any ready Pods. Use a real Pod name from the list in the remaining commands. A pending Pod can have a `FailedScheduling` event explaining why no node is a fit. A running container that restarts can have a useful error in the previous instance’s logs. If the image never started, look at Events because there is no application output from that attempt.
 
 ```bash
 kubectl get deployment service-demo
@@ -85,13 +85,9 @@ kubectl logs ACTUAL_POD_NAME -c web --previous --tail=100
 kubectl get events --sort-by=.metadata.creationTimestamp
 ```
 
-Events describe observations by components, such as failed scheduling, image pulling, mount preparation, or probe failures. They are not an indefinite audit log and may be aggregated or expire. Container logs are the application's stdout/stderr made available through the runtime and node log path. They are not every file in the container, and they are not durable centralized storage by themselves. A failed image pull has no running application process to emit its startup logs.
+## <span id="follow-a-broken-request-one-hop-at-a-time" aria-hidden="true" />Follow the client request
 
-An unassigned Pending Pod points toward scheduling evidence. A bound Pod waiting for an image points toward reference, credentials, and registry access. A restarting container points toward termination reason, exit code, logs, probe results, or memory pressure. `CrashLoopBackOff` describes delayed retries after repeated failures; it does not identify the underlying application defect. Read the immediate cause before choosing a repair.
-
-## Follow a broken request one hop at a time
-
-Once a backend runs, inspect the Service selector, ports, and EndpointSlices. Compare endpoint addresses with actual Pod IPs, readiness conditions with probe evidence, and target ports with the actual listener. Test from the same caller network when possible. A probe from your laptop may use a different DNS resolver, network route, firewall policy, or credential path from the failing Pod.
+Once a backend is running, follow the request from `discovery-client`. Verify the client can resolve the Service. Inspect its selector and the actual Pod labels side by side. Read the EndpointSlice addresses and readiness conditions, then check that the target port reaches the application’s listener. Finally make the original request from the client. The result tells you whether the path works as a whole.
 
 ```bash
 kubectl get service service-demo -o yaml
@@ -102,13 +98,11 @@ kubectl exec discovery-client -- nslookup service-demo
 kubectl exec discovery-client -- wget -qO- http://service-demo:8080/
 ```
 
-If name lookup fails, inspect the caller's resolver configuration and cluster DNS path. If lookup succeeds, retain that evidence and test address/port reachability. If a direct Pod-IP request works from the same client but the Service request fails, focus on frontend port mapping, endpoint records, and Service forwarding. If both fail, the listener, network reachability, policy, or application becomes more likely. No single test proves every possible path healthy.
-
 <Scene id="m06-l03-request" />
 
-## Practice: repair one deliberate mismatch
+## <span id="practice-repair-one-deliberate-mismatch" aria-hidden="true" />Repair the Service selector
 
-This valid Service object intentionally selects nothing in the previous workload. Save it as `debug-mismatch.yaml` and apply it only in the disposable lab namespace:
+Save the manifest as `debug-mismatch.yaml` and apply it alongside the working `service-demo` workload. There are two Services now. Make the same request to `debug-mismatch:8080` from the debug client and see where the evidence differs. That Service has a DNS entry, but its selector matches none of the intended Pods. Change its selector to `app: service-demo`, reapply, and check the slices before rerunning the request.
 
 ```yaml
 apiVersion: v1
@@ -123,23 +117,21 @@ spec:
       targetPort: http
 ```
 
-Predict that the Service can receive a ClusterIP and DNS record while lacking usable endpoints. Verify each prediction, change only the selector to `app: service-demo`, apply, and repeat the original client request to `http://debug-mismatch:8080/`. The repair should change the backend evidence and the request result. Merely seeing “configured” after apply is not the success condition.
+Use the [Service troubleshooting lab](/labs/#m06) to repeat the exercise with its own test names and cleanup steps. Write down the symptom, the observation that explained it, and the result after the fix. That record helps when a later fault produces the same symptom for a different reason.
 
-## Pitfalls
+## <span id="pitfalls" aria-hidden="true" />Collect evidence from the failing caller
 
-A minimal image may have no shell, nslookup, or curl. Missing debug tools do not establish an application failure. Use an approved client Pod or later an ephemeral-debug-container workflow rather than modifying the production image during an incident. Redact credentials and user data from logs before sharing them. Also avoid assuming every HTTP 500 comes from the Pod you intended; proxies and upstream dependencies can produce their own responses.
+Events can expire and repeated failures can be grouped. Capture recent evidence while the failure is happening. A test from a different namespace or container might have different DNS search paths, policy, or networking. Try from the original caller whenever possible. After the exercise delete the deliberately broken Service and the temporary client when they are no longer needed.
 
 ## Check your understanding
 
 <details>
 
-<summary>The Pod answers over port-forward, but the Service request fails from a client Pod. Is the Service proven healthy?</summary>
+<summary>The catalog Pods are ready. The short Service name resolves, but the request times out. What would you check before restarting the Pods?</summary>
 
-No. Port-forward reaches a selected Pod through a different path. Inspect Service selection, endpoint readiness, client-facing and target ports, DNS, and node forwarding from the failing caller. Preserve the successful backend test as a useful narrowing result, then verify the repaired original path and several representative requests.
+Compare the Service selector with the Pod labels, inspect EndpointSlice readiness and ports, and verify the application’s listener. These checks can expose a bad Service mapping while the Pods themselves remain healthy. If the mapping is correct, continue through the caller’s policy and network path.
 
 </details>
-
-Complete the [module lab](/labs/#m06) by recording symptom, evidence, responsible layer, targeted change, and repeated verification. You are ready to study resources and placement with this same boundary-by-boundary method.
 
 ## Primary documentation
 

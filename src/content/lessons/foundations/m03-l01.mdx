@@ -2,7 +2,7 @@
 {
   "lessonId": "m03-l01",
   "title": "Objects, YAML, and apply",
-  "description": "Read Kubernetes object structure and make declarative changes you can inspect.",
+  "description": "Read a Deployment file by tracing where each setting goes and what changes after you apply it.",
   "level": "foundations",
   "module": "m03",
   "order": 1,
@@ -11,9 +11,9 @@
     "m02-l03"
   ],
   "objectives": [
-    "Identify object identity, metadata, spec, and status",
-    "Read YAML mappings, sequences, and string values",
-    "Preview and apply a deliberate object change"
+    "Recognize an object, its manifest, and the fields Kubernetes fills in.",
+    "Follow YAML indentation to distinguish a Deployment from its Pod template.",
+    "Preview a change and compare the requested result with the reported result."
   ],
   "concepts": [
     {
@@ -64,21 +64,19 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: an API record, not a script
+## <span id="mental-model-an-api-record-not-a-script" aria-hidden="true" />What gets created when you apply YAML
 
-A Kubernetes object is a persistent API record representing intent, observations, or configuration. A manifest is a serialized description sent to the API. Writing YAML does not execute each line from top to bottom. The API interprets a document using its `apiVersion` and `kind`, validates its fields, supplies defaults where appropriate, and stores an object. Other components then act asynchronously.
+You have a web app and want Kubernetes to keep one copy running. You write a short file describing the app and run `kubectl apply`. When someone asks what you deployed, you can point to two different things: the file you wrote and the Deployment that now exists in the cluster.
 
-An object's name identifies it within its resource type and scope. Namespaced resources also need a namespace. The server assigns a UID that distinguishes this particular instance from another object later created with the same name. Deleting and recreating `web` can preserve the name while changing its UID. This matters for ownership, logs, and references to a specific lifetime.
+A **Kubernetes object** is a record the Kubernetes API manages. A Deployment is one type of object. A **manifest** is the description you submit, usually as a file written in YAML. `kubectl` reads the file and sends an API request. The server uses `apiVersion` and `kind` to identify the shape of the object, checks the fields, adds defaults where appropriate, and stores the accepted result. The Deployment controller then reads that result and does further work. The order of lines in the YAML describes a structure; it does not tell the controller which action to run first.
 
-`metadata` contains identifying and organizing information, including name, namespace, labels, annotations, UID, and resource version. Some fields are authored by you and others by the server. A typical workload `spec` contains desired configuration. `status` contains reported observations supplied by cluster components. ConfigMaps and Secrets illustrate why “every object has a spec” is wrong: their primary configuration fields include `data` rather than a workload-style spec.
+**Metadata** is information about the object, such as its name, namespace, and labels. Think of `web` in namespace `test` and `web` in namespace `live`. Each identifies a different object of the same type. Within a namespace, delete and recreate `web` and its name can stay the same. The server assigns the replacement a new **UID**, which identifies that particular object's lifetime. An owner reference uses the UID so a brand-new object does not inherit dependents just because it has the same name.
 
 <Scene id="m03-l01-object" />
 
-## Walkthrough: read structure before values
+## <span id="walkthrough-read-structure-before-values" aria-hidden="true" />Read the Deployment and its Pod template
 
-YAML mappings associate keys and values. Sequences use a dash for each item. Indentation defines nesting, so `containers` belongs under `spec`, while `name` under one container identifies that container rather than the Pod. Use spaces consistently. Quote values that must be strings when YAML could interpret them as numbers or booleans. A Kubernetes schema determines the expected field type; visually plausible YAML can still violate that schema.
-
-Save this as `object-demo.yaml` in your disposable lab namespace:
+YAML represents keys and values, nested groups, and lists. Indentation tells you where a field belongs. A line starting with a dash adds an item to a list. In the example, `containers` lists one entry named `web`. The Deployment has its own name, `object-demo`, several levels above it. Read upward from a line until you reach its enclosing key when you are unsure which object or field it describes.
 
 ```yaml
 apiVersion: apps/v1 # API group and version for Deployments.
@@ -102,7 +100,9 @@ spec:
           image: nginx:1.27.5
 ```
 
-The Deployment's labels do not automatically become Pod labels. The nested `template` is a separate recipe for Pods; its metadata is where you label those Pods. This repeated structure is intentional, not redundant formatting.
+Here `spec` holds the configuration the controller should work toward. `replicas: 1` is a number. Quoting it as `"1"` makes it a string, which does not fit that field. The Deployment's outer labels describe the Deployment; the labels under `template.metadata` describe the Pods it creates. The Deployment selector is a rule for identifying the Pods and must agree with the template labels.
+
+In a disposable namespace, save the file as `object-demo.yaml`. `explain` shows the API's field definitions, server dry-run asks the server to check the proposed write without saving it, and `diff` shows the proposed changes. A diff with differences exits with code 1, so read the output before treating it as a failure.
 
 ```bash
 # Discover field structure from the API schema.
@@ -115,33 +115,25 @@ kubectl apply -f object-demo.yaml
 kubectl get deployment object-demo -o yaml
 ```
 
-The retrieved object includes server fields and observed status beyond your original file. Keep your source manifest focused on intentional input; do not copy a live object wholesale into a release repository with transient status, UID, or managed field records attached.
-
 <Scene id="m03-l01-apply" />
 
-## Practice: change intent and inspect convergence
+## <span id="practice-change-intent-and-inspect-convergence" aria-hidden="true" />Ask for another replica and check the result
 
-Change `replicas` from one to two, run the diff, then apply the file again. Expect the desired count to change immediately after the accepted write, while observed readiness can lag. Applying the same intended file repeatedly should not create a fresh Deployment each time. The resource name and scope address the existing object.
+Change `replicas` to 2 and apply it. Look at `spec.replicas` and `status.availableReplicas` in the retrieved YAML. The first states what you asked for. The second reports what is available so far. The second Pod still needs a node, a running container, and time to become available. Some object types use different fields. For example, a ConfigMap holds its settings in `data` rather than a workload-style `spec`.
 
-Apply is a declarative management operation, not a guarantee that your file is the only writer. The default client-side apply uses a last-applied configuration annotation to calculate changes. Server-side apply records field managers and detects some conflicting ownership; its deeper rules appear later. In either mode, mixing imperative edits, multiple pipelines, and competing manifest copies needs deliberate coordination. An earlier `kubectl scale` can be overwritten when you reapply a file that still declares the old replica count.
+## <span id="pitfalls" aria-hidden="true" />What to keep in the manifest
 
-## Pitfalls
-
-A dry run validates what the API can check at request time. It does not prove image availability, enough node capacity, valid application credentials, or healthy HTTP behavior. Likewise, a syntactically valid file can put a valid field at the wrong level, changing its meaning. Read the nesting and use `kubectl explain` instead of guessing field locations.
-
-Some object fields are immutable after creation. An apply error about an immutable field is not a request to force-delete the workload immediately. Understand the field and plan the replacement or a differently named object, especially when storage or stable identity is involved.
+Plain `kubectl apply` computes changes using the previous apply configuration. The server-side form tracks which field managers own values and can report conflicts. A separate operation such as `kubectl scale` can set a value that a later apply changes again. Keep the source file focused on your input fields. Live status and server-assigned UIDs belong to the current cluster object. Try these differences in the [module lab](/labs/#m03).
 
 ## Check your understanding
 
 <details>
 
-<summary>You changed the manifest's replicas to two, but status still reports one available replica. Which value is wrong?</summary>
+<summary>Your file says two replicas and the Deployment status says one available. What should you inspect next?</summary>
 
-Neither must be wrong. The spec records the accepted target, while status reports observed progress. Inspect whether the controller has processed the update and whether the new Pod can schedule, start, and become ready. Treat a persistent mismatch as evidence to investigate, not as a reason to manually edit status.
+Read both fields as written. Two is the accepted target and one is the observation. List the Pods and inspect the new member's events or conditions to see whether it is waiting for placement, startup, or readiness.
 
 </details>
-
-Next, use labels to select related objects without confusing selection with identity. Practice schema discovery, diff, and apply in the [module lab](/labs/#m03).
 
 ## Primary documentation
 
