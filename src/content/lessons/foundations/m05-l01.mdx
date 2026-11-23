@@ -101,7 +101,7 @@ kubectl get pods -l app=replicas-demo -o wide
 
 ## <span id="practice-scale-delete-and-observe-the-right-repair" aria-hidden="true" />Scale the Deployment and delete a Pod
 
-Read one Pod’s owner reference. It identifies a ReplicaSet. On the ReplicaSet, look for `Controlled By` to find the Deployment. Scale the Deployment to four in the scene and see which object creates the extra Pod. Deleting a managed Pod leaves the assigned count at four, so the ReplicaSet makes a replacement. The replacement has its own name and UID.
+Read one Pod’s owner reference. It identifies a ReplicaSet. On the ReplicaSet, look for `Controlled By` to find the Deployment. Scale the Deployment from two to three in the scene and see which object creates the extra Pod. In the lab, deleting a managed Pod leaves the assigned count unchanged, so the ReplicaSet makes a replacement. The replacement has its own name and UID.
 
 ```bash
 # Replace the placeholder with one real Pod name from the listing above.

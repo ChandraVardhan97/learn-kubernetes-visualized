@@ -19,9 +19,9 @@ import Scene from '../../../components/Scene.astro';
 
 ## <span id="mental-model-adding-an-api-does-not-add-behavior" aria-hidden="true" />Add a new object type to the API
 
-A platform team wants app authors to ask for a web app with a message and replica count. The platform will supply the standard Deployment and Service. A **CustomResourceDefinition (CRD)** registers a new type with the Kubernetes API. After registering `WebApp`, clients can create and watch WebApp objects. Each saved WebApp is an instance of that custom type. A separate controller has to read the object and create the application resources.
+A platform team wants app authors to ask for a web app with a message and replica count. The lab reconciler supplies a Deployment and a ConfigMap for the page content. A **CustomResourceDefinition (CRD)** registers a new type with the Kubernetes API. After registering `WebApp`, clients can create and watch WebApp objects. Each saved WebApp is an instance of that custom type. A separate controller has to read the object and create the application resources.
 
-Try registering the type in the scene. Before registration, the API cannot find that resource endpoint. Afterwards, the API can validate and store a WebApp even if no Deployment is created yet. This lets you diagnose the API definition and the controller independently.
+Register the type, apply the WebApp, and start the demo reconciler in the scene. Before registration, the API cannot find that resource endpoint. Afterwards, the API can validate and store a WebApp even if no Deployment is created yet. This lets you diagnose the API definition and the controller independently.
 
 <Scene id="m16-l01-crd-registration" />
 

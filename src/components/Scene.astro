@@ -1,14 +1,20 @@
 ---
-import ScenePlayer from './ScenePlayer';
+import CurriculumScene from './CurriculumScene';
+import { getVisualStory } from '../data/lesson-visuals';
+import { getPilot } from '../lib/pilot-scenes';
+import '../styles/pilot-scenes.css';
+import '../styles/curriculum-scenes.css';
 import { getScene,scenes } from '../lib/scenes';
 import type {ExperimentKind} from './MechanismExperiment';
 const {id}=Astro.props;
 const scene=getScene(id);
+const pilot=getPilot(id);
+const story=getVisualStory(id);
 const experiments:Record<string,ExperimentKind>={'m06-l01':'endpoints','m07-l01':'scheduling','m09-l01':'storage','m11-l01':'authorization','m16-l02':'operator'};
 const prefix=scene.id.slice(0,7);
 const experiment=scenes.find(s=>s.id.startsWith(prefix))?.id===scene.id?experiments[prefix]:undefined;
 ---
-<figure id={`scene-${id}`} class="scene" data-ui>
- <figcaption><h3>{scene.title}</h3><p>{scene.description}</p></figcaption>
- <ScenePlayer scene={scene} experiment={experiment} client:visible />
+<figure id={`scene-${id}`} class="scene scene--pilot" data-ui>
+ <figcaption><h3>{pilot?.title ?? story?.title ?? scene.title}</h3><p>{pilot?.intro ?? story?.takeaway ?? scene.description}</p></figcaption>
+ <CurriculumScene scene={scene} story={story} experiment={experiment} client:visible />
 </figure>

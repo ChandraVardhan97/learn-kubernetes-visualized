@@ -19,7 +19,7 @@ import Scene from '../../../components/Scene.astro';
 
 ## <span id="mental-model-each-controller-needs-a-clear-declaration-boundary" aria-hidden="true" />Declare a WebApp and derive its children
 
-A platform user requests a web page called `m20-platform` with a message and one replica. The user needs a small declaration. The platform supplies a Deployment, Service, and ConfigMap. In this capstone, an apply manager called `kv-gitops` owns the WebApp specification. The operator reads the WebApp and derives the implementation resources. It manages their configuration and uses owner references to link them to that particular WebApp.
+A platform user requests a web page called `m20-platform` with a message and one replica. The user needs a small declaration. The lab reconciler supplies a Deployment and ConfigMap. In this capstone, an apply manager called `kv-gitops` owns the WebApp specification. The operator reads the WebApp and derives the implementation resources. It manages their configuration and uses owner references to link them to that particular WebApp.
 
 Trace the two responsibilities in the first scene. If the message changes, update the WebApp and let the operator propagate it. If a generated ConfigMap is deleted while the WebApp stays present, the operator can recreate it. This keeps the source of intent in a place the platform user can read and change.
 

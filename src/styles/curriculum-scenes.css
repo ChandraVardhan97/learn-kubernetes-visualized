@@ -1,0 +1,167 @@
+.lesson-route, .lesson-reference, .lesson-reference-nodes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.lesson-route {
+  display: grid;
+  gap: 1px;
+}
+.lesson-route-row {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) 54px minmax(0, 1.35fr);
+  gap: 12px;
+  align-items: start;
+  padding: 11px 0;
+  border-top: 1px solid var(--control);
+}
+.lesson-route-row:first-child { border-top: 0; padding-top: 2px; }
+.lesson-route-row:last-child { padding-bottom: 2px; }
+.lesson-route-name { display: block; color: var(--text); font-weight: 600; font-size: 15px; }
+.lesson-route-label, .lesson-route-result {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.lesson-route-connector {
+  position: relative;
+  height: 1px;
+  margin: 10px 3px 0 0;
+  background: var(--control);
+}
+.lesson-route-connector::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-top: 1px solid var(--muted);
+  border-right: 1px solid var(--muted);
+  transform: translateY(-42%) rotate(45deg);
+}
+.lesson-route-row[data-arrived=true] .lesson-route-connector { background: var(--accent); }
+.lesson-route-row[data-arrived=true] .lesson-route-result { color: var(--text); }
+.lesson-route-message {
+  position: absolute;
+  left: calc(var(--position) * 100%);
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 15px;
+  height: 10px;
+  background: var(--accent);
+  border-radius: 3px;
+  border: 1px solid var(--surface);
+}
+.scene--pilot { container: lesson-visual / inline-size; }
+.lesson-reference {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@container lesson-visual (min-width: 620px) {
+  .lesson-reference[data-columns=three] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@container lesson-visual (max-width: 540px) {
+  .lesson-reference { grid-template-columns: minmax(0, 1fr); }
+}
+.lesson-reference-panel {
+  align-content: start;
+  border-top: 2px solid var(--accent);
+  border-radius: 2px 2px 8px 8px;
+  background: color-mix(in srgb, var(--canvas) 55%, var(--surface));
+  padding: 11px 13px 14px;
+}
+.lesson-reference-panel h4 {
+  font-size: 16px;
+  line-height: 1.2;
+  margin: 0 0 10px;
+}
+.lesson-reference-panel dl { margin: 0; }
+.lesson-reference-nodes > li, .lesson-reference-panel dl > div {
+  padding: 5px 0;
+  border-top: 1px solid var(--control);
+}
+.lesson-reference-nodes strong, .lesson-reference-panel dt { font-weight: 600; font-size: 13px; }
+.lesson-reference-nodes li span, .lesson-reference-panel dd { display: block; color: var(--muted); margin: 0; font-size: 12px; }
+.lesson-reference-nodes [data-node-state=ready] strong { color: var(--pilot-ready); }
+.lesson-reference-links {
+  border-top: 1px solid var(--control);
+  margin: 4px 0 0;
+  padding: 4px 0 0;
+  list-style: none;
+}
+.lesson-reference-links li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 5px;
+  font-size: 12px;
+}
+.lesson-reference-arrow { color: var(--accent); }
+.lesson-reference-links li small { color: var(--muted); }
+.lesson-reference-panel .lesson-reference-metrics { margin-top: 8px; }
+.lesson-reference-metrics dd { display: flex; gap: 6px; align-items: center; }
+.lesson-reference-metrics meter { max-width: 76px; width: 44%; }
+.lesson-reference-panel p { color: var(--muted); font-size: 13px; margin: 9px 0 0; }
+.lesson-visual-note { color: var(--muted); font-size: 13px; margin: 13px 0 0; }
+.lesson-visual-extras { margin: 0 clamp(16px, 4vw, 30px) 17px; }
+.lesson-visual-extras > details {
+  border-top: 1px solid var(--border);
+  padding: 9px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.lesson-visual-extras > details + details { margin-top: 8px; }
+.lesson-visual-extras > details summary { cursor: pointer; }
+.lesson-visual-extras > details ul { margin-top: 4px; }
+@container (max-width: 440px) {
+  .lesson-route-row { grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); gap: 7px; }
+  .lesson-route-name { font-size: 13px; }
+  .lesson-route-label, .lesson-route-result { font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lesson-route-message { display: none; }
+}
+.curriculum-exercise {
+  margin: 0 0 16px;
+  background: var(--canvas);
+  border: 1px solid var(--control);
+  border-radius: 9px;
+  padding: 13px;
+}
+.curriculum-exercise label { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 16px; font-weight: 600; }
+.curriculum-exercise input[type=range] { flex: 1; min-width: 110px; min-height: 38px; accent-color: var(--accent); }
+.curriculum-exercise label:has(input[type=checkbox]) { min-height: 44px; gap: 8px; cursor: pointer; }
+.curriculum-exercise input[type=checkbox] { inline-size: 18px; block-size: 18px; margin: 0; accent-color: var(--accent); }
+.curriculum-exercise ul, .curriculum-exercise dl {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+.curriculum-exercise dl > div { border-top: 1px solid var(--control); padding-top: 5px; }
+.curriculum-exercise dt { font-size: 12px; color: var(--muted); }
+.curriculum-exercise small { display: block; color: var(--muted); font-size: 11px; }
+.curriculum-exercise dd { margin: 0; color: var(--accent); font: 500 19px var(--pilot-mono); }
+.curriculum-voters > li { border: 1px solid var(--control); border-radius: 5px; padding: 5px; margin: 0; color: var(--muted); }
+.curriculum-voters > li[data-available=true] { border-color: var(--pilot-ready); color: var(--pilot-ready); }
+.curriculum-voters li span { display: block; font-size: 11px; }
+.curriculum-exercise-outcome { color: var(--text); }
+.curriculum-exercise p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+.lesson-visual-content, .lesson-case-header h4 { scroll-margin-top: 90px; }
+.lesson-case-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 18px;
+}
+.lesson-case-header h4 { margin: 0; color: var(--text); font-size: 19px; }
+.lesson-case-header a { font-size: 13px; }
+.lesson-case-description { margin: 4px 0 14px; color: var(--muted); }
+.lesson-reference-panel[aria-current=step] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

@@ -119,7 +119,7 @@ kubectl get pods -l app=service-demo --show-labels
 kubectl get endpointslices -l kubernetes.io/service-name=service-demo -o yaml
 ```
 
-Check the Service address and compare the Pod IP with the addresses in its slices. Look for `conditions.ready` beside the backend. The forwarding scene shows how these records influence the connection path. On a cluster using kube-proxy, it updates rules used to handle Service traffic. Some network implementations handle that job differently.
+Check the Service address and compare the Pod IP with the addresses in its slices. Look for `conditions.ready` beside the backend. Send a request in the forwarding scene. Follow it from the client to the ready Pod and watch the response return. On a cluster using kube-proxy, it updates rules used to handle Service traffic. Some network implementations handle that job differently.
 
 <Scene id="m06-l01-dataplane" />
 
