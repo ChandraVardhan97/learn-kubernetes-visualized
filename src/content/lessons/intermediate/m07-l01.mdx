@@ -2,7 +2,7 @@
 {
   "lessonId": "m07-l01",
   "title": "Requests, limits, and QoS",
-  "description": "Connect scheduler accounting to CPU throttling, memory failure, and eviction priority.",
+  "description": "Use CPU and memory requests to plan placement, then see what happens when a container reaches each limit.",
   "level": "intermediate",
   "module": "m07",
   "order": 1,
@@ -11,9 +11,9 @@
     "m06-l03"
   ],
   "objectives": [
-    "Predict scheduling from requests rather than observed usage",
-    "Distinguish CPU throttling from memory limit failure",
-    "Classify a Pod using QoS rules and their limits"
+    "Read CPU and memory quantities in a Pod specification.",
+    "Distinguish scheduling based on requests from runtime CPU throttling and memory failure.",
+    "Predict the QoS class of the example Pod and inspect the value Kubernetes assigned."
   ],
   "concepts": [
     {
@@ -50,17 +50,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: admission, placement, and runtime answer different questions
+## <span id="mental-model-admission-placement-and-runtime-answer-different-questions" aria-hidden="true" />How requests and limits affect a Pod
 
-A resource **request** is the amount Kubernetes uses when deciding whether a node has room for a Pod. It is not the Pod's current usage. A resource **limit** constrains consumption at runtime through the node's container runtime and operating system. A Pod requesting 250 millicores can use more CPU when capacity and its limit permit. The scheduler does not continually move it because usage changes. This distinction explains why a mostly idle cluster can still have Pending Pods: existing requests may already account for the allocatable capacity on every suitable node.
+A web container uses little CPU between requests and bursts when a page is loaded. A second container holds a large cache in memory. Kubernetes needs to know how much room to plan for before either container starts. A **resource request** is the amount the scheduler accounts for when it places a Pod. It compares requests already assigned to a node, plus those of the incoming Pod, with the node’s allocatable resources. A node can appear idle and still lack room on that calculation.
 
-CPU is divisible execution time. `250m` means one quarter of one CPU unit; it does not pin a thread to a particular core. Memory quantities such as `128Mi` are bytes with binary suffixes. Node **allocatable** capacity excludes reservations and other node overhead from the capacity available for Pods. For ordinary containers, the scheduler considers their requests together, with additional rules for init containers and Pod overhead. Read the admitted Pod because defaults or admission mutation can change the submitted configuration.
+A **resource limit** constrains what a container can use at runtime. Setting a CPU limit slows the process when it has used its CPU time budget for an interval. This is **throttling**. At a memory limit, the kernel can kill a process that cannot complete an allocation within the memory boundary. The kubelet may restart the container. In the scene, compare the placement decision with the consequences of exceeding the two limits.
 
 <Scene id="m07-l01-accounting" />
 
-## Walkthrough: the same request has two different runtime outcomes
+## <span id="walkthrough-the-same-request-has-two-different-runtime-outcomes" aria-hidden="true" />Read CPU and memory quantities
 
-This complete Pod uses one small container. The image is a training convenience; use an approved immutable image identifier for a reproducible release. Apply it in the disposable namespace created by the module lab.
+Save the manifest as `resource-demo.yaml`. `100m` is 100 millicores, one tenth of a CPU. With a request of `100m` and a limit of `500m`, the scheduler accounts for one tenth and the container can use up to half a CPU on average under its CPU quota. `64Mi` means 64 mebibytes. The memory request affects placement while the `128Mi` limit bounds the container’s memory use.
 
 ```yaml
 apiVersion: v1
@@ -80,13 +80,13 @@ spec:
           memory: 128Mi   # Exceeding available limit can trigger OOM.
 ```
 
-A CPU limit normally causes throttling when the container exhausts its allowed CPU time over an accounting period. Work slows down; the process is not normally killed merely for requesting additional CPU time. A memory limit cannot make memory reclaimable when an application keeps using it. The kernel may kill a process when the cgroup cannot satisfy an allocation within its memory constraints. A terminated container can report `OOMKilled`; inspect termination reason and events before assuming every exit code 137 is the same failure. A restarting process may recreate caches and repeat the failure indefinitely.
-
-**Quality of Service**, or QoS, groups Pods according to resource configuration. In the standard container resource model, Guaranteed requires CPU and memory requests and limits for every container, with each request equal to its corresponding limit. BestEffort has none of those requests or limits. Burstable includes configurations between those extremes. The example is Burstable. Its class is a classification of configuration, not a measured promise of latency or immunity from failure.
+Kubernetes assigns a **Quality of Service (QoS) class**. In the container-level model shown here, `Guaranteed` requires all containers to have positive CPU and memory requests equal to their limits for each resource. `BestEffort` applies when containers have neither CPU nor memory requests or limits, and `Burstable` covers this example because the values differ. Change the fields in the second scene and compare the class.
 
 <Scene id="m07-l01-qos" />
 
-## Practice: observe the admitted object and its boundary
+## <span id="practice-observe-the-admitted-object-and-its-boundary" aria-hidden="true" />Inspect what Kubernetes admitted
+
+Apply the example and inspect the class and accepted spec. `kubectl top` reports recent usage through a separately installed metrics pipeline. If the Metrics API is absent, the request and limit values remain visible on the Pod. Compare them with node allocatable capacity and with usage if metrics are available.
 
 ```bash
 kubectl apply -f resource-demo.yaml
@@ -97,24 +97,21 @@ kubectl get nodes -o custom-columns=NAME:.metadata.name,CPU:.status.allocatable.
 kubectl top pod resource-demo
 ```
 
-Expect the class to be `Burstable`, assuming admission has not changed the Pod. `kubectl top` may fail on a local cluster without Metrics Server; the API object and scheduling events remain useful without that add-on. Compare requested resources to measured consumption without treating either as a substitute for the other. The node description's allocated resources section summarizes requests from assigned Pods, which is closer to scheduler capacity accounting than a single usage sample.
+Follow the [resource and scheduling lab](/labs/#m07) to see how a Pod can stay pending when its request exceeds available capacity.
 
-In a disposable namespace, change both resource pairs to equal values in a new Pod manifest and compare its class. Do not expect editing immutable Pod fields in place to perform a replacement automatically. Create a different named Pod or use a Deployment when practicing configuration changes. Remove the examples after recording their admitted settings and observed status.
+## <span id="pitfalls-qos-is-part-of-a-larger-pressure-story" aria-hidden="true" />Distinguish a memory limit from node pressure
 
-## Pitfalls: QoS is part of a larger pressure story
-
-Node-pressure eviction considers the scarce resource, whether usage exceeds requests, Pod priority, and usage relative to requests. “BestEffort first, Guaranteed never” is an unsafe universal rule. A Guaranteed Pod can still fail from its own memory limit, infrastructure loss, or severe pressure. A high memory request also reduces placement options, so increasing it without measuring a working set may trade restarts for Pending Pods. CPU requests influence relative CPU allocation under contention; they do not buy a dedicated physical processor by themselves.
+QoS is one signal for understanding how Pods behave under pressure. Under node memory pressure, the kubelet considers whether usage exceeds requests, Pod Priority, and the amount by which usage exceeds requests. A container can also hit its own memory limit while the node has ample free memory. Use Pod events and the last container state to tell those failures apart.
 
 ## Check your understanding
 
 <details>
-<summary>A node has 2 allocatable CPUs, 1.9 CPUs already requested, and only 5 percent actual usage. Can a new 200m request fit?</summary>
 
-No. The remaining scheduling budget is 100m, so this node fails the CPU request check even though current usage is low. Lowering the new Pod's CPU limit would not change that request calculation. Investigate overestimated requests or add appropriate capacity, then evaluate runtime behavior under load before settling on new requests.
+<summary>A Pod requests 2 CPUs. A node reports low current CPU usage but has only 1 CPU left after existing requests. Can the Pod fit there?</summary>
+
+The node fails the resource fit check. The scheduler accounts for requests against allocatable capacity. Moving the workload, reducing a justified request, or adding capacity can change the result.
 
 </details>
-
-The [placement and resources lab](/labs/#m07) demonstrates a deliberately impossible node selector and reports the admitted QoS class. Resource exhaustion and runtime throttling are separate extensions using the examples in this lesson. Next, add a placement constraint and predict why a Pod that fits numerically can still remain Pending.
 
 ## Primary documentation
 

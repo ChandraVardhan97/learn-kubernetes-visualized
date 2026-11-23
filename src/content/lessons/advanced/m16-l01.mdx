@@ -1,13 +1,13 @@
 ---
 lessonId: "m16-l01"
 title: "CRDs, schemas, and conversion"
-description: "Define a small API with validation and an explicit version contract."
+description: "Add a WebApp resource to the Kubernetes API and see which rules are enforced before a controller is running."
 level: "advanced"
 module: "m16"
 order: 1
 minutes: 16
 prerequisites: ["m14-l03", "m15-l01"]
-objectives: ["Separate a CRD API registration from an operator implementation.", "Explain structural schemas, pruning, validation and status.", "Plan served/storage version changes without data loss."]
+objectives: ["Distinguish a CustomResourceDefinition from an instance of the type it defines.", "Predict whether an object will be accepted under the example schema.", "Explain served versions, storage versions, and how a controller reports observed generation."]
 concepts: [{"id": "m16-l01-crd-registration", "title": "API registration precedes reconciliation", "scene": "m16-l01-crd-registration"}, {"id": "m16-l01-crd-version-status", "title": "Representation, storage, and observed generation", "scene": "m16-l01-crd-version-status"}]
 sources: [{"title": "Custom resource definitions", "url": "https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/"}, {"title": "CRD versioning and conversion", "url": "https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definition-versioning/"}]
 lab: "m16"
@@ -17,25 +17,17 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: adding an API does not add behavior
+## <span id="mental-model-adding-an-api-does-not-add-behavior" aria-hidden="true" />Add a new object type to the API
 
-A CustomResourceDefinition registers a resource type with the Kubernetes API server. Clients can discover it, validate instances against its schema, and store those instances through normal API mechanisms. The CRD does not itself create Deployments, provision databases or run cleanup code. An operator supplies that behavior by reconciling custom resources. Keeping those responsibilities separate makes it possible to diagnose a rejected specification independently from a controller that cannot fulfill an accepted specification.
+A platform team wants app authors to ask for a web app with a message and replica count. The platform will supply the standard Deployment and Service. A **CustomResourceDefinition (CRD)** registers a new type with the Kubernetes API. After registering `WebApp`, clients can create and watch WebApp objects. Each saved WebApp is an instance of that custom type. A separate controller has to read the object and create the application resources.
 
-The local API is `WebApp` in group `labs.kv.example`, version `v1alpha1`, with namespaced instances addressed as `webapps`. Its spec has a replica count and a page message. The downloadable CRD constrains replicas to a small positive range and limits message length. These checks reject invalid input early; they do not prove enough node capacity exists or that the message is suitable for every possible production application.
+Try registering the type in the scene. Before registration, the API cannot find that resource endpoint. Afterwards, the API can validate and store a WebApp even if no Deployment is created yet. This lets you diagnose the API definition and the controller independently.
 
 <Scene id="m16-l01-crd-registration" />
 
-## Walkthrough: a schema is a compatibility contract
+## <span id="walkthrough-a-schema-is-a-compatibility-contract" aria-hidden="true" />Validate input and manage API versions
 
-A structural OpenAPI schema describes known fields, types and list/map behavior. Unknown fields are generally pruned unless preservation is explicitly configured for the relevant subtree. This can surprise a client that sends a misspelled field and then assumes it was retained. Use strict server-side validation where appropriate and read the stored object back. A nested `required` list applies when its parent exists; require `spec` at the schema root if the controller cannot handle its absence. Defaults and validation rules become part of the API contract, so changing them can alter future writes and the controller's interpretation of existing objects.
-
-The status subresource separates observed state from desired spec. The lab status reports observedGeneration and readyReplicas. observedGeneration tells you which desired generation was processed; it is not automatically a Ready condition. If the controller updates observedGeneration immediately after inspecting an unready Deployment, readiness can still be zero. Production APIs often add conditions with reason, message, status and transition time to describe blocked or progressing states precisely.
-
-<Scene id="m16-l01-crd-version-status" />
-
-Versioning requires a second distinction. Multiple versions may be served, while exactly one version is designated for storage. Conversion maps representations; it does not execute an upgrade of the user's external database. A conversion webhook must preserve information needed to round-trip safely and be available whenever conversion is required. Setting a new storage version does not rewrite all existing stored objects by itself. Plan storage migration and verify storedVersions before removing an old version.
-
-This instance is valid only after applying the lab's complete CRD. The bounds belong to the CRD schema, not to comments in an instance manifest.
+The CRD has a schema specifying the fields, types, and validation rules it accepts. The example WebApp requests one replica and a string message. The teaching CRD accepts values from one to five. In a CRD schema, marking fields inside `spec` as required checks them when `spec` exists. To require `spec` itself, add that requirement at the object root. Try an out-of-range replica count using server-side dry run and look for the field the API rejects.
 
 ```yaml
 apiVersion: labs.kv.example/v1alpha1
@@ -50,6 +42,16 @@ spec:
   message: hello-from-webapp
 ```
 
+A CRD can serve multiple API versions while choosing one as the storage version. Conversion translates different served representations. When representations meaningfully differ, the conversion must preserve the data clients need. Before retiring an old storage version, migrate stored objects and verify the supported versions.
+
+Controllers write **status** to describe what they observed. The API’s `metadata.generation` changes when desired state changes for the resource. A controller can report an `observedGeneration` in status or conditions to indicate which spec it evaluated. Look at the scene and ask whether a previously healthy condition describes the most recent edit.
+
+<Scene id="m16-l01-crd-version-status" />
+
+## <span id="practice-test-the-api-before-the-controller" aria-hidden="true" />Test acceptance before running the controller
+
+Run the commands from the downloaded module directory in the disposable cluster. The `Established` condition means the CRD has been registered. `kubectl explain` reads schema information, and `get` confirms an instance was stored. Verify both successful and rejected dry-run payloads in the [custom resource lab](/labs/#m16) before moving on to the reconciler.
+
 ```bash
 # Run from the downloaded m16 directory.
 kubectl --context kind-kv-lab apply -f crd.yaml
@@ -59,24 +61,16 @@ kubectl --context kind-kv-lab explain webapp.spec
 kubectl --context kind-kv-lab -n kv-lab get webapp m16 -o yaml
 ```
 
-## Practice: test the API before the controller
+## <span id="pitfalls-api-deletion-is-data-deletion" aria-hidden="true" />Protect stored data when changing an API
 
-Open the [m16 local exercise](/labs/#m16). Read `crd.yaml`, then apply only the CRD and custom resource before running the Python operator. Expect the WebApp to exist without a generated Deployment until reconciliation runs. This is direct evidence that API registration and behavior are separate. Try an out-of-range replica count using server-side dry run and expect schema rejection. Restore the valid input before continuing to the next lesson.
-
-Compare the submitted manifest with the object returned by the API. Note apiVersion, generation, UID and the absence or presence of status. Inspect the CRD's versions and storedVersions fields. This single-version example has no conversion webhook and proves no multi-version migration behavior. A production migration needs old-client fixtures and round-trip tests as well as a schema that accepts the new fields.
-
-## Pitfalls: API deletion is data deletion
-
-Removing the operator Deployment leaves custom resources stored but unreconciled. Deleting the CRD removes the API and can delete its stored instances. Treat that as a separate destructive action, not routine controller restart cleanup. Overly broad preserve-unknown-fields settings make validation and field ownership less predictable. Conversely, tightening a schema without examining stored objects can make legitimate updates fail. Review the behavior of both old and new clients before changing a shared API.
+Deleting a CRD deletes the custom objects it manages. For a real API, plan migration and document its data ownership before replacing or retiring it. When making a schema change, test both existing objects and new inputs.
 
 ## Check your understanding
 
 <details>
 
-<summary>The CRD is Established and a WebApp exists. Why is there no web server?</summary>
+<summary>WebApp generation is 4 and status still reports Ready from observedGeneration 3. What can you conclude about generation 4?</summary>
 
-The CRD only registers storage and validation for the custom API. The operator must reconcile the WebApp into a Deployment and ConfigMap, after which normal workload controllers and kubelets still need to make the Pods ready.
+The older condition describes the controller’s observation of generation 3. Wait for or investigate a report that covers generation 4 before calling its new configuration ready.
 
 </details>
-
-Next, run the small controller and inspect exactly which objects it owns. Start with one reconcile pass so partial progress is visible.

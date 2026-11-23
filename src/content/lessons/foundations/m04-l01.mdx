@@ -2,7 +2,7 @@
 {
   "lessonId": "m04-l01",
   "title": "The Pod lifecycle",
-  "description": "Separate Pod identity, container states, restart policy, and shared resources.",
+  "description": "Observe how a Pod groups containers and what changes when a container exits or a Pod is replaced.",
   "level": "foundations",
   "module": "m04",
   "order": 1,
@@ -11,9 +11,9 @@
     "m03-l03"
   ],
   "objectives": [
-    "Explain what a Pod shares and what it does not",
-    "Read phase, conditions, and container termination state",
-    "Predict restart behavior without inventing Pod migration"
+    "Explain what containers inside a Pod can share.",
+    "Read a Pod's phase alongside its container status.",
+    "Predict how a restart policy handles a failed process."
   ],
   "concepts": [
     {
@@ -59,19 +59,19 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: one scheduling and lifecycle unit
+## <span id="mental-model-one-scheduling-and-lifecycle-unit" aria-hidden="true" />What belongs in one Pod
 
-A Pod groups one or more containers that need a shared placement and lifecycle boundary. Kubernetes schedules the Pod to one node; its ordinary containers do not independently land on different workers. Most application replicas use one main container per Pod. Put tightly cooperating helpers together when they need Pod-local sharing, not simply because they belong to the same business application. Independent frontends and databases usually need independent replica counts and release lifecycles.
+An application listens on port 8080 and a helper needs to make a quick local request to it. Both can run in one **Pod**. A Pod is the smallest unit Kubernetes schedules onto a node. It may have one container or several cooperating containers. All containers in a Pod share the Pod network namespace. They can reach one another over `localhost` and they share the port space, so two listeners cannot bind the same address and TCP port there at the same time.
 
-Containers in a Pod share a network namespace, including the Pod IP, interfaces, and port space. They can reach each other over `localhost`. Two containers cannot normally bind the same address and port at once. They do not automatically share their root filesystems. To exchange files, declare a volume and mount it in each container at intentional paths. Process namespace sharing is not implied by ordinary Pod networking; it is a separate setting when required.
+Containers in one Pod can also mount the same volume. Suppose the helper reads a file that the application writes. Each container must mount that volume at a path it can access. A shared `emptyDir` starts out empty and lives with the Pod. The volume can survive a restart of one container inside that Pod. Deleting the Pod ends the volume's lifetime. Persistent claims use a different lifetime, which you will see in the storage module.
 
-An `emptyDir` is created for a Pod's lifetime. It can preserve files across a container restart in that same Pod, while files written solely into a container's writable layer are lost when that container is recreated. Deleting and replacing the Pod removes its emptyDir. Persistent storage is a later topic; naming an emptyDir `data` does not make it durable.
+A Pod object has a name and UID. After a kubelet restarts a container, you can see a higher restart count while the Pod UID stays the same. If a controller replaces the entire Pod, the replacement gets a new UID. That distinction tells you whether you are looking at a fresh process inside the same Pod or a fresh API object.
 
 <Scene id="m04-l01-boundary" />
 
-## Walkthrough: run a finite executable
+## <span id="walkthrough-run-a-finite-executable" aria-hidden="true" />Run a container that finishes
 
-Save this as `lifecycle-demo.yaml` and apply it in a disposable namespace. The command emits one line and exits deliberately with code 7. This is an expected training failure, not an image pull failure.
+The lab below uses a process that prints `deliberate-exit` and exits with code 7. Save it as `lifecycle-demo.yaml` in a disposable cluster. It uses `restartPolicy: Never` so you can read the terminal result without the kubelet retrying the program.
 
 ```yaml
 apiVersion: v1
@@ -94,35 +94,27 @@ kubectl logs lifecycle-demo -c worker
 kubectl get pod lifecycle-demo -o jsonpath='{.status.containerStatuses[0].state.terminated}'
 ```
 
-The terminated state should include exit code 7, and the Pod should eventually be Failed. The failure occurs after successful execution began, so application output is available. If the image cannot be downloaded, the process never starts and those expected logs will not exist.
-
-A container can be Waiting, Running, or Terminated. A Pod's phase is a coarse summary: Pending includes scheduling and preparation, Running describes a started/bound Pod with running or restarting activity, Succeeded indicates successful completion without further restarts, Failed indicates terminal failure, and Unknown indicates unavailable state information. Conditions such as PodScheduled and Ready answer more specific questions. `CrashLoopBackOff` and `Terminating` can appear in kubectl's display column without being Pod phase values.
+The Pod can pass through Pending while getting ready to run. When the process exits, the container's terminated state reports its exit code, reason, and timestamps. The Pod phase summarizes the Pod as a whole. For this example, expect a Failed phase once the nonzero exit completes. If `kubectl get` shows a more specific status string, read the underlying phase and container state to understand both.
 
 <Scene id="m04-l01-restart" />
 
-## Practice: compare restart policies
+## <span id="practice-compare-restart-policies" aria-hidden="true" />Compare container restart policies
 
-For a new named Pod, change the policy to `OnFailure` while retaining exit code 7. Expect the kubelet to attempt container restarts, with backoff for repeated failures. Change the executable to exit 0: `OnFailure` does not restart a successful completion. With `Always`, ordinary app containers restart after either successful or unsuccessful exit. These examples use the basic Pod-level rules without per-container restart overrides; restartable init sidecars have their own behavior introduced next. Deployment and ReplicaSet Pod templates permit only Pod-level `Always`, so perform the `Never` and `OnFailure` comparisons with standalone Pods. Do not assume that changing a policy on an existing Pod is an allowed in-place update; use a new disposable Pod name for comparisons.
+**Restart policy** tells the kubelet when to retry a container after it exits. `Never` leaves the terminal result. `OnFailure` retries exits that failed, while `Always` retries even after a successful exit. Repeated failures usually introduce a delay between retries. To compare outcomes, create a second standalone Pod with a different name and `OnFailure` in the spec. Watch its restart count and read the previous attempt's logs. Deployments manage Pods using `Always`, so keep the finite standalone example separate from Deployment practice.
 
-Record the Pod UID and node name as restart counts rise. A container restart is local supervision inside the same Pod identity. If that Pod is deleted or lost, a workload controller can create a new Pod with a new UID. The scheduler binds that new object. Kubernetes does not take the original Pod UID and migrate it to another worker.
+## <span id="pitfalls" aria-hidden="true" />What lives for the lifetime of a Pod
 
-## Pitfalls
-
-A Pod can be Running while its application repeatedly crashes. Ready is a separate condition, and the application needs meaningful readiness checks to express actual usability. A sidecar that stays alive can also complicate a superficial “some process is running” interpretation. Read per-container state rather than only the top-level display.
-
-Restarting is not a repair for every failure. A bad argument, missing configuration key, or unavailable dependency can reproduce immediately after each restart. Investigate termination reason, exit code, logs, and recent configuration changes before increasing retries or adding aggressive liveness checks.
+If the application appeared to vanish, compare its last container termination with the Pod's UID. A restart normally explains a new process, and a new UID explains a new Pod lifetime. The [module lab](/labs/#m04) also lets you check what containers share and which data survives a restart within the Pod.
 
 ## Check your understanding
 
 <details>
 
-<summary>A container restarts in its Pod after writing to both /tmp and a mounted emptyDir. Which data should you expect to retain?</summary>
+<summary>A helper container crashes and restarts. Will a file it wrote to the Pod's emptyDir disappear?</summary>
 
-Data written into the mounted emptyDir can remain because that volume follows the Pod lifetime. Data written only into the replaced container's writable filesystem does not. If the entire Pod is replaced, its emptyDir is also new. The path string is not enough to predict durability; identify the mounted storage and the lifecycle boundary that owns it.
+The same Pod still owns the volume, so the restart leaves its files in place unless application logic removes them. A replacement Pod gets a new emptyDir. Storage that should survive replacement needs a separate lifetime.
 
 </details>
-
-Use the [module lab](/labs/#m04) to compare finite execution, local restart, and controller replacement. Next, put initialization and tightly coupled helpers into this shared boundary deliberately.
 
 ## Primary documentation
 

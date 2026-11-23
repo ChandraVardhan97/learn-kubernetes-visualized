@@ -1,13 +1,13 @@
 ---
 lessonId: "m14-l03"
 title: "Finalizers, garbage collection, and API evolution"
-description: "Distinguish cleanup barriers, dependent ownership, and versioned representations."
+description: "Trace what keeps a deleting object around, what gets cleaned up with its owner, and what breaks when an API version is removed."
 level: "advanced"
 module: "m14"
 order: 3
 minutes: 16
 prerequisites: ["m14-l02"]
-objectives: ["Explain why a finalizer can hold deletion indefinitely.", "Trace dependent deletion using owner UID and propagation policy.", "Plan API migration without confusing served versions with storage."]
+objectives: ["Explain how deletionTimestamp and finalizers cooperate.", "Predict dependent cleanup from owner references and the deletion propagation policy.", "Identify clients and stored objects that need attention before an API version is removed."]
 concepts: [{"id": "m14-l03-finalizer-hold", "title": "A named barrier requires a controller", "scene": "m14-l03-finalizer-hold"}, {"id": "m14-l03-owner-uid", "title": "Garbage collection follows owner identity", "scene": "m14-l03-owner-uid"}, {"id": "m14-l03-api-evolution", "title": "Migrate consumers before removing an API", "scene": "m14-l03-api-evolution"}]
 sources: [{"title": "Finalizers", "url": "https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/"}, {"title": "Garbage collection", "url": "https://kubernetes.io/docs/concepts/architecture/garbage-collection/"}, {"title": "API deprecation policy", "url": "https://kubernetes.io/docs/reference/deprecation-policy/"}]
 lab: "m14"
@@ -17,27 +17,23 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: deletion is a protocol
+## <span id="mental-model-deletion-is-a-protocol" aria-hidden="true" />What can hold up object deletion
 
-A delete request does not always immediately remove an object. If finalizers are present, the API server records a deletionTimestamp and retains the object while responsible controllers perform cleanup. A finalizer is a named string, not executable code. Adding `labs.kv.example/hold` does not create a controller capable of interpreting it. Without a working implementation that removes the string after cleanup, the object can remain terminating indefinitely.
+An object represents a volume that lives outside Kubernetes. Deleting the API record immediately could leave that storage running with nobody responsible for it. A **finalizer** is a key on an object that keeps it present during deletion. The API server sets `deletionTimestamp`. A controller that understands the finalizer observes the request, performs or verifies external cleanup, and removes its key. The API can finish deleting the object when the finalizers are cleared.
 
-A controller should register its finalizer before creating an external resource whose cleanup must be coordinated. During termination it performs retryable, idempotent cleanup, then removes its own finalizer. Removing someone else's finalizer manually can abandon a cloud resource, release a safety barrier too early, or lose data. Investigate the controller, its permissions, dependency health and cleanup evidence before treating force removal as repair.
+In the scene, delete an object with a finalizer, then follow the controller that removes it. The key is a barrier, and actual cleanup depends on a working controller. If the controller has lost permissions or the external system is unavailable, the object may remain in a deleting state.
 
 <Scene id="m14-l03-finalizer-hold" />
 
-## Walkthrough: ownership identifies the dependent, not a name match
+## <span id="walkthrough-ownership-identifies-the-dependent-not-a-name-match" aria-hidden="true" />How Kubernetes finds dependents
 
-Garbage collection uses ownerReferences to connect a dependent to an owner's UID. A replacement object with the same name has a different identity and is not automatically the old dependent's owner. A Deployment normally owns ReplicaSets, which own Pods. Namespaced owners and dependents have scope rules; a namespaced owner cannot own a dependent in a different namespace. Labels provide selection and grouping, but a matching label alone does not create a garbage-collection relationship.
-
-Deletion propagation changes what the API caller waits for. Background propagation can remove the owner first while garbage collection proceeds. Foreground propagation keeps a deleting owner present while qualifying blocking dependents are removed; behavior depends on owner references and controller observations. Orphan propagation preserves dependents by removing the relevant ownership relationship. Choose deliberately when data or external infrastructure is involved. An owner reference does not execute database backups before a PVC disappears.
+**Garbage collection** deals with dependencies between Kubernetes objects. An owner reference records the owning object’s identity, including its UID. A ReplicaSet can disappear and another object can be created under the same name, but the replacement has a different UID. The old dependents do not acquire a new owner just by matching its name. Deletion propagation controls whether dependents are cleaned up in the background, deleted before a foreground owner deletion completes when they block it, or left as orphans.
 
 <Scene id="m14-l03-owner-uid" />
 
-API evolution is another lifecycle protocol. A served version is a representation clients can request; storage version is how objects are persisted. Deprecating or removing an API endpoint does not automatically update Git manifests, controllers, admission webhook matching rules or stored custom-resource versions. Discover consumers, migrate requests, test conversion and update stored objects before disabling an old representation. Kubernetes' deprecation policy distinguishes stability levels: GA API versions may be deprecated but cannot be removed within a Kubernetes major version; beta and alpha versions have different removal rules. Check the exact resource and release path, and define a separate version policy for your own CRDs.
+## <span id="practice-prove-which-lifecycle-is-active" aria-hidden="true" />Inspect an object held by a finalizer
 
-<Scene id="m14-l03-api-evolution" />
-
-This isolated ConfigMap demonstrates a hold with no cleanup code. Its finalizer is intentionally artificial, so removing it after observation is the completion of this exercise, not a production recovery recommendation.
+Save the ConfigMap as `held.yaml` and try it only in the disposable cluster. The exercise adds a finalizer deliberately left without a controller. With `--wait=false`, the delete command returns while the finalizer still holds the object. Inspect the timestamp and key. The final patch removes the artificial hold. In a real cluster, identify which cleanup the controller owes before considering manual removal.
 
 ```yaml
 apiVersion: v1
@@ -62,24 +58,20 @@ kubectl --context kind-kv-lab -n kv-lab patch configmap m14-held --type=merge -p
 kubectl --context kind-kv-lab -n kv-lab wait --for=delete configmap/m14-held --timeout=30s
 ```
 
-## Practice: prove which lifecycle is active
+Use the [API mechanics lab](/labs/#m14) to inspect the delete request, then confirm the object has actually gone.
 
-Run the [m14 local exercise](/labs/#m14), which includes a similar explicit hold. Expect deletionTimestamp to appear while the ConfigMap can still be fetched. Compare this with a ReplicaSet owner reference from an earlier Deployment lab. Record the owner's kind, namespace, name and UID, then compare that UID with the current owner. These observations distinguish a deletion barrier from a dependent relationship and from an unrelated label.
+## <span id="pitfalls-a-shorter-object-list-can-hide-damage" aria-hidden="true" />Prepare to retire an API version
 
-For migration practice, inspect `kubectl api-resources` and the apiVersion in your committed manifest. Discuss a migration checklist before changing a cluster version: request compatibility, webhook compatibility, storage conversion, controller behavior and rollback boundaries. The local finalizer demonstration does not validate all of those contracts.
+An API version also has a lifecycle. A newer version can serve objects under a different representation while old clients still send requests to the old endpoint. Before removing a version, identify manifests, scripts, and controllers using it. Update their requests and check how existing objects are stored. For a custom resource, migrate persistence and check the CRD’s stored versions as part of retiring a storage version. Follow the API evolution scene to distinguish serving a version from storing data in that version.
 
-## Pitfalls: a shorter object list can hide damage
-
-Force removal can make a terminating object vanish while its external obligations remain. Deleting a CRD can remove all objects of that custom type, which is far more consequential than stopping an operator process. A status field saying cleanup succeeded is only meaningful if the controller correctly owns and updates it. Keep durable cleanup evidence for destructive operations and avoid making safety depend on a single ephemeral log line.
+<Scene id="m14-l03-api-evolution" />
 
 ## Check your understanding
 
 <details>
 
-<summary>A new parent has the same name as the deleted parent. Does it own the old child?</summary>
+<summary>A deleting object disappeared after someone removed its only finalizer. What has actually been confirmed?</summary>
 
-No. Garbage collection follows owner identity, including UID, rather than names alone. The replacement parent's UID differs. Inspect and intentionally repair ownership only after establishing which controller and resource should be responsible.
+The API object has been deleted. Verify the state of the storage or other external resource separately. The key was removed manually, so the recorded object’s disappearance does not prove that its controller performed cleanup.
 
 </details>
-
-Next, build a controller that treats repeated observations and partial cleanup as expected operating conditions. Deletion correctness requires the same reconciliation discipline as creation.

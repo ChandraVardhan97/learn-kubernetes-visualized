@@ -1,13 +1,13 @@
 ---
 lessonId: "m20-l03"
 title: "Capstone: GitOps and an operator"
-description: "Keep custom-resource intent and generated-child ownership separate."
+description: "Put a custom resource under declarative management and verify the operator’s separate ownership of its children."
 level: "advanced"
 module: "m20"
 order: 3
 minutes: 16
 prerequisites: ["m16-l03", "m19-l01", "m20-l02"]
-objectives: ["Identify the GitOps and operator field-management boundaries.", "Demonstrate conflict, repeated reconciliation and drift repair.", "Verify child removal through parent ownership."]
+objectives: ["Identify the fields owned by the declarative manager and the objects managed by the operator.", "Explain an intentional field conflict using managed fields.", "Prove repeatability, missing-child repair, and dependent cleanup in the same exercise."]
 concepts: [{"id": "m20-l03-platform-ownership", "title": "GitOps owns intention; operator owns implementation", "scene": "m20-l03-platform-ownership"}, {"id": "m20-l03-platform-recovery", "title": "Repeat, repair, then collect owned children", "scene": "m20-l03-platform-recovery"}]
 sources: [{"title": "Server-side apply conflicts", "url": "https://kubernetes.io/docs/reference/using-api/server-side-apply/"}, {"title": "Operator pattern", "url": "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"}, {"title": "Owner references and garbage collection", "url": "https://kubernetes.io/docs/concepts/architecture/garbage-collection/"}, {"title": "Argo CD automated sync", "url": "https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/"}]
 lab: "m20"
@@ -17,23 +17,17 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: each controller needs a clear declaration boundary
+## <span id="mental-model-each-controller-needs-a-clear-declaration-boundary" aria-hidden="true" />Declare a WebApp and derive its children
 
-The final capstone has two declarative roles. GitOps, modeled locally by the `kv-gitops` field manager, owns the WebApp spec. The Python operator reads that intention and owns fields on the generated ConfigMap and Deployment as `kv-webapp-operator`. The operator also reports observed status on the WebApp's status subresource. GitOps should not independently declare the generated children's replica count or page contents, because doing so would create competing sources of intent.
+A platform user requests a web page called `m20-platform` with a message and one replica. The user needs a small declaration. The platform supplies a Deployment, Service, and ConfigMap. In this capstone, an apply manager called `kv-gitops` owns the WebApp specification. The operator reads the WebApp and derives the implementation resources. It manages their configuration and uses owner references to link them to that particular WebApp.
 
-These are different forms of ownership. managedFields records which actor manages particular API fields. ownerReferences records the lifecycle relationship between each generated child and the WebApp UID. Neither is a universal permission grant; RBAC and admission still govern requests. A controller can be authorized yet encounter a field conflict, or own fields on a child whose lifecycle owner is a separate parent object. Name each boundary when explaining a failure.
+Trace the two responsibilities in the first scene. If the message changes, update the WebApp and let the operator propagate it. If a generated ConfigMap is deleted while the WebApp stays present, the operator can recreate it. This keeps the source of intent in a place the platform user can read and change.
 
 <Scene id="m20-l03-platform-ownership" />
 
-## Walkthrough: the conflict is an expected result
+## <span id="walkthrough-the-conflict-is-an-expected-result" aria-hidden="true" />Reproduce a field ownership conflict
 
-Read `platform.yaml`, `platform-conflict.yaml` and `capstone-platform.sh` from the m20 download. The script installs the same WebApp API used in m16, applies the parent with `kv-gitops`, runs the operator and waits for the generated Deployment. It then attempts a second SSA declaration using `kv-human` with a different page message. The expected result is a conflict on a field managed by the declarative owner. The script fails if that conflicting apply unexpectedly succeeds.
-
-Next, the script captures the Deployment UID, repeats reconciliation and checks that UID remains stable. It deletes the generated ConfigMap, runs another pass, and verifies the recovered page data. Finally, it deletes the WebApp and waits for the generated Deployment and ConfigMap to disappear through garbage collection. Each assertion targets a different property: field coordination, idempotent identity, drift repair and lifecycle ownership. Passing one does not imply the others automatically hold.
-
-<Scene id="m20-l03-platform-recovery" />
-
-This is the actual desired parent. The provided conflict file uses the same object identity and a different message; it is not a new independent application.
+The WebApp manifest is the declaration for this exercise. After applying it with `kv-gitops`, another apply manager called `kv-human` attempts to set a different value in an owned field. It should get a conflict. Inspect the management record and locate the field and owner. The chosen policy is to leave the original declaration in place.
 
 ```yaml
 apiVersion: labs.kv.example/v1alpha1
@@ -48,6 +42,10 @@ spec:
   message: gitops-declared-page
 ```
 
+## <span id="practice-report-four-independent-observations" aria-hidden="true" />Verify repeated reconciliation, repair, and deletion
+
+Use a disposable cluster. The [platform capstone](/labs/#m20-platform) script installs the CRD, applies the WebApp, runs the reconciler, checks the conflict and stable Deployment UID, deletes and repairs the ConfigMap, and finally deletes the parent. If you want to inspect the live resources, run the manual early steps after installing the CRD and before the script’s final delete. Record four observations: the conflict, stable UID during repeated passes, the recreated ConfigMap’s content, and disappearance of generated dependents after parent deletion.
+
 ```bash
 # Run only the platform investigation from the downloaded m20 directory.
 bash capstone-platform.sh
@@ -58,26 +56,18 @@ kubectl --context kind-kv-lab -n kv-lab get webapp m20-platform -o yaml --show-m
 kubectl --context kind-kv-lab -n kv-lab get deployment m20-platform -o yaml --show-managed-fields
 ```
 
-## Practice: report four independent observations
+<Scene id="m20-l03-platform-recovery" />
 
-Run the [m20 local exercise](/labs/#m20). Keep the parent apply conflict as a successful diagnostic observation rather than adding force-conflicts. Inspect which manager owns spec.message and compare the child's owner UID with the WebApp UID. Record the Deployment UID before and after repeated reconciliation, the new ConfigMap UID after repair, and the absence of both children after parent deletion. These observations explain precisely what the minimal controller demonstrated.
+## <span id="pitfalls-this-is-not-a-hidden-production-platform" aria-hidden="true" />Connect the exercise to production controllers
 
-If you use the manual inspection commands after the full script, they recreate the parent and children for inspection. Delete that parent again when finished so garbage collection can clean them up. The CRD is shared with m16; do not delete it while either module's resources are still needed. Cleanup of a CRD is a separate cluster-scoped destructive step, even though the host Python process has already exited.
-
-## Pitfalls: this is not a hidden production platform
-
-The mandatory capstone does not install Argo CD, provision remote Git credentials, implement external-resource finalizers, run leader election or provide an informer-backed queue. It models the relevant declaration boundary with real SSA and a working small polling controller. A production version needs least-privilege service-account permissions, per-resource error isolation, backoff, conditions, metrics, tested upgrade behavior and appropriate leadership or fencing for its side effects.
-
-For a deliberate extension, connect an optional Argo CD Application to the parent manifest while keeping child resources out of its desired set. Configure self-heal and prune intentionally, then observe what happens when the operator is stopped or the parent changes. GitOps may accept the WebApp while the generated application is unavailable; expose status that lets a user distinguish accepted intent from readiness. Preserve data retention policy before extending this pattern to stateful children.
+This capstone runs server-side apply and a local script. A production GitOps controller adds repository monitoring and policy, and a deployed operator needs watches, reliable retries, scoped permissions, and observability. The lab lets you verify the ownership model without needing either production component. Before adding persistent storage or external services, decide which parts of application state should remain when the WebApp is removed.
 
 ## Check your understanding
 
 <details>
 
-<summary>GitOps manages WebApp.spec.message. Should it also force the generated ConfigMap data to the same value?</summary>
+<summary>The Deployment UID remained stable after several passes. Then the ConfigMap got a new UID after deletion. Can both outcomes be correct?</summary>
 
-Usually no. The operator derives that ConfigMap from the parent intention and owns the child fields. Declaring both creates redundant competing control. Keep GitOps on the parent API and let the operator reconcile its implementation, with explicit exceptions only when the platform contract requires them.
+Yes. Repeated reconciliation left the existing Deployment in place. When the ConfigMap was missing, the operator created a new object for the same WebApp. Its data and owner reference show that the new child represents the current declaration.
 
 </details>
-
-Your final recovery record should connect cause, ownership, minimal action and verification for all three capstones. Add new failure scenarios one at a time, keeping the evidence and limitations specific to the mechanism actually exercised.

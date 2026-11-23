@@ -2,7 +2,7 @@
 {
   "lessonId": "m06-l02",
   "title": "DNS and service exposure",
-  "description": "Separate in-cluster names, virtual addresses, node entry points, and provider load balancers.",
+  "description": "Find a Service by name inside Kubernetes and choose how callers outside the cluster can connect.",
   "level": "foundations",
   "module": "m06",
   "order": 2,
@@ -11,9 +11,9 @@
     "m06-l01"
   ],
   "objectives": [
-    "Resolve namespace-aware Service names",
-    "Distinguish ClusterIP, NodePort, and LoadBalancer reachability",
-    "Explain local-cluster exposure limitations without assuming a cloud provider"
+    "Read a client Pod’s DNS search domains and resolve a Service in its namespace.",
+    "Connect the front door of a ClusterIP, NodePort, or LoadBalancer Service to the intended caller.",
+    "Recognize what a port-forward proves when diagnosing a backend."
   ],
   "concepts": [
     {
@@ -59,19 +59,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a name is not an exposure rule
+## <span id="mental-model-a-name-is-not-an-exposure-rule" aria-hidden="true" />Which callers can resolve a Service name
 
-Cluster DNS gives Services stable names so clients can avoid hard-coding allocated IP addresses. A normal Service named `catalog` in namespace `training` has a DNS name shaped like `catalog.training.svc.cluster.local` when the cluster domain is `cluster.local`. That domain is configurable; inspect your cluster rather than assuming every cluster uses it. A normal ClusterIP Service's address records resolve to its virtual IP, not directly to every Pod address. Headless Services use different discovery semantics and appear later.
+The catalog frontend can reach `service-demo` from a Pod, but typing the same name on your laptop does not open the catalog. Those callers are in different networks and use different DNS settings. **Service DNS** gives clients inside the cluster a name for a Service. A typical fully qualified name is `service-demo.default.svc.cluster.local`, with the Service name, namespace, and configured cluster domain. From the same namespace, a client can usually use `service-demo` because the Pod’s resolver searches there.
 
-A client Pod's resolver configuration usually includes namespace-aware search domains. The short name `catalog` naturally looks in the caller's namespace. `catalog.training` makes the intended namespace explicit, and the full service name identifies the complete domain. A Pod in another namespace should not assume the same short name reaches the same application. DNS can resolve a Service even when it has no ready backends; naming and backend health are distinct boundaries.
-
-Service DNS is normally intended for cluster workloads. Your laptop's resolver does not automatically know the cluster's private DNS zone or route to its ClusterIP range. A name that resolves inside a Pod may fail outside the cluster without indicating a cluster DNS fault. First establish where the caller runs.
+A normal ClusterIP Service resolves to its cluster IP. Once your client knows the address, it still needs a viable network path, the right port, and a ready backend. Switch the caller in the scene to see how the same Service name is treated from inside and outside the cluster.
 
 <Scene id="m06-l02-dns" />
 
-## Walkthrough: inspect the caller's resolver
+## <span id="walkthrough-inspect-the-callers-resolver" aria-hidden="true" />Check DNS from a client Pod
 
-Use the existing `service-demo` workload from the previous lesson, in the same dedicated namespace. The following long-running debug Pod supplies tools for repeated tests. BusyBox is a training image; use an approved equivalent where image policies require one.
+Use the `service-demo` Service and Deployment from the previous lesson. The client created here stays running long enough to execute several commands. Inside it, `/etc/resolv.conf` shows the search suffixes and the resolver address. Compare the result of `nslookup` with `wget`. A DNS answer tells you the name resolved. A successful HTTP response proves that the connection also reached a backend that could answer.
 
 ```bash
 kubectl run discovery-client --image=busybox:1.36.1 --restart=Never \
@@ -82,15 +80,9 @@ kubectl exec discovery-client -- nslookup service-demo
 kubectl exec discovery-client -- wget -qO- http://service-demo:8080/
 ```
 
-Expect the short name to resolve when the client and Service share a namespace and cluster DNS is working. Use `kubectl get service service-demo` to compare the returned address with the allocated ClusterIP. A successful lookup followed by failed HTTP requests shifts the investigation toward ports, endpoints, network policy, forwarding, or the application rather than proving DNS is the only suspect.
+## <span id="choose-the-external-entry-point" aria-hidden="true" />Choose an entry point for external callers
 
-## Choose the external entry point
-
-`ClusterIP` exposes a virtual frontend within the cluster network. `NodePort` adds a port on eligible node addresses, using the implementation's Service forwarding to reach backends. Clients need network reachability to a node address and permission through relevant firewalls. A NodePort on a containerized local-cluster node may be inside a VM or container network, so “localhost plus nodePort” is not universally reachable from the host.
-
-`LoadBalancer` asks a configured implementation to provision or integrate an external load-balancing frontend. It usually builds on NodePort behavior, although implementations can route directly to Pods and support configurations that avoid allocating node ports. Cloud providers or installed local/bare-metal controllers supply the implementation. The Service API type alone cannot create a public load balancer on an arbitrary laptop.
-
-<Scene id="m06-l02-exposure" />
+A **NodePort** Service opens a chosen port across eligible node addresses in addition to providing an internal ClusterIP. A caller with network access to a node can connect to that node’s IP and the allocated port. A **LoadBalancer** Service requests a front door from a supporting cloud provider or cluster add-on. On a basic kind cluster, that external address can stay pending because no implementation is providing it.
 
 ```yaml
 apiVersion: v1
@@ -108,6 +100,10 @@ spec:
       # Omit nodePort: the API allocates from its configured range.
 ```
 
+<Scene id="m06-l02-exposure" />
+
+Save the file as `node-entry-demo.yaml`. Look for the allocated NodePort and the node IPs. In kind, the nodes are containers. Whether your laptop can reach a node address or NodePort depends on its network and any configured host port mappings. For a local debug connection, `kubectl port-forward` listens on your laptop and forwards through the Kubernetes API path to a selected Pod. Leave the command running and try `http://localhost:8080` in another terminal or browser tab.
+
 ```bash
 kubectl apply -f node-entry-demo.yaml
 kubectl get service node-entry-demo
@@ -116,23 +112,19 @@ kubectl get nodes -o wide
 kubectl port-forward service/service-demo 8080:8080
 ```
 
-For Service port-forward, kubectl selects a matching Pod and forwards to its target port. It does not test the ordinary ClusterIP forwarding path or every replica, and the session depends on that selected Pod. Stop the tunnel when finished. A LoadBalancer frontend being pending in an environment without a controller is expected missing infrastructure, not proof that nginx cannot listen.
+## <span id="practice-and-pitfalls" aria-hidden="true" />Test the actual path your client uses
 
-## Practice and pitfalls
-
-For each access method, write the caller location, destination name or IP, client-facing port, and final Pod listener. Keep TLS and application authorization separate from raw reachability: a TCP Service does not automatically terminate HTTPS, issue certificates, or authenticate users. NodePort and LoadBalancer exposure also require deliberate network and security configuration. Do not expose a training workload to an untrusted network merely to make a request test convenient.
+Compare a request from inside the cluster and a request from your machine in the [local Service networking lab](/labs/#m06). If a port-forward works while in-cluster requests fail, keep debugging the Service and client path. Stop the forward when finished, and clean up `discovery-client` after completing the next lesson or its practice.
 
 ## Check your understanding
 
 <details>
 
-<summary>A LoadBalancer Service stays pending on a local cluster while in-cluster HTTP succeeds. What does that evidence suggest?</summary>
+<summary>Port-forward works from your laptop. Does that tell you an application in another namespace can resolve the Service and reach it?</summary>
 
-The Pod, internal Service path, and tested DNS lookup can be healthy while external load-balancer provisioning is unavailable. Inspect whether the local environment supplies a compatible controller and external network integration. Use the documented local access method or a temporary port-forward for the exercise; restarting healthy Pods will not install a load-balancer implementation.
+The forward gives your laptop a working tunnel to one selected backend. Test from a client in the other namespace using the namespace-qualified Service name to check its DNS settings, network policy, Service routing, and backend availability.
 
 </details>
-
-Practice caller-aware DNS and exposure inspection in the [module lab](/labs/#m06). Next, combine these boundaries into a repeatable debugging workflow.
 
 ## Primary documentation
 

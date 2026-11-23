@@ -2,7 +2,7 @@
 {
   "lessonId": "m05-l01",
   "title": "Deployments and ReplicaSets",
-  "description": "Express replica intent at the Deployment and trace ownership down to disposable Pods.",
+  "description": "Run several copies of an application and trace which controller replaces a missing Pod.",
   "level": "foundations",
   "module": "m05",
   "order": 1,
@@ -11,9 +11,9 @@
     "m04-l03"
   ],
   "objectives": [
-    "Explain the Deployment to ReplicaSet to Pod ownership chain",
-    "Distinguish replica counts from availability and capacity",
-    "Predict which controller replaces a missing Pod"
+    "Trace ownership from a Deployment through a ReplicaSet to a Pod.",
+    "Explain what a change to the replica count asks the controllers to do.",
+    "Use Pod status to distinguish having enough copies from having enough ready copies."
   ],
   "concepts": [
     {
@@ -54,19 +54,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a release recipe above a replica counter
+## <span id="mental-model-a-release-recipe-above-a-replica-counter" aria-hidden="true" />How Deployments, ReplicaSets, and Pods fit together
 
-A Deployment manages the release of a replicated application through ReplicaSets. Its Pod template describes the intended containers and Pod configuration. A ReplicaSet maintains a requested number of matching active managed Pods; terminal or deleting Pods do not fill that target. The ownership chain is Deployment → ReplicaSet → Pod. Keeping these layers distinct prevents an easy misconception: the Deployment controller coordinates ReplicaSets, while the ReplicaSet controller creates replacement Pod objects when its count is short.
+Suppose a small shop serves its product catalog from one web Pod. The shop wants three copies so a single Pod can disappear without removing every backend. It also needs somewhere to record which image the next copy should run. A **Deployment** manages interchangeable copies of an application. Its Pod template describes each copy, and its replica count states how many copies the shop wants.
 
-This pattern suits applications whose replicas can be treated as interchangeable. It does not automatically solve durable per-replica identity, ordered startup, or database consistency. A web API can usually start another process and use external state; a database replica may need stable identity and coordinated membership. Choosing a workload is about the application's requirements, not merely which YAML example is shortest.
-
-Replica count is a target for managed instances, not a guarantee of usable capacity. Three Pods can all be unready, share one vulnerable node, or depend on the same failed database. Kubernetes will not infer your desired failure-domain distribution or business throughput from `replicas: 3`. Placement, resource requests, probes, dependencies, and measured application behavior complete that design.
+A Deployment creates a **ReplicaSet** for a version of that template. The ReplicaSet creates and removes Pods to reach its assigned count. In a stable Deployment with three replicas, one ReplicaSet normally manages three Pods. During an update the Deployment can divide the desired copies between two ReplicaSets. Each ReplicaSet keeps track of the Pods it controls, while the Deployment coordinates the release.
 
 <Scene id="m05-l01-ownership" />
 
-## Walkthrough: author the parent workload
+## <span id="walkthrough-author-the-parent-workload" aria-hidden="true" />Write a Deployment for three copies
 
-Save this as `replicas-demo.yaml` and apply it in a dedicated lab namespace. The selector and Pod template labels must agree. Their `app` value is intentionally specific so this exercise does not overlap another workload's replica selector.
+Save the YAML as `replicas-demo.yaml`. The top-level `metadata.name` names the Deployment. Under `spec.template` is a recipe for each Pod, including the nginx container image and its port. The template label `app: replicas-demo` matches `spec.selector.matchLabels`. The API rejects a Deployment when its selector and its template labels disagree. Choose a label that identifies this workload so that separate controllers do not match the same Pods.
 
 ```yaml
 apiVersion: apps/v1
@@ -91,6 +89,8 @@ spec:
               containerPort: 80
 ```
 
+Apply the manifest in your lab namespace. The rollout command waits for the Deployment to report success, so give it time to download the image and start the copies. Look for three ready Pods. The ReplicaSet and Pod names include generated suffixes. Record two of the Pod names before experimenting.
+
 ```bash
 kubectl apply -f replicas-demo.yaml
 kubectl rollout status deployment/replicas-demo --timeout=120s
@@ -99,7 +99,9 @@ kubectl get rs -l app=replicas-demo
 kubectl get pods -l app=replicas-demo -o wide
 ```
 
-If the cluster can schedule the Pods and pull the image, expect one active ReplicaSet and three started Pods. The Deployment-generated ReplicaSet and Pod names include generated suffixes. Do not script against a suffix copied from a screenshot. Discover the current objects through labels and owner references.
+## <span id="practice-scale-delete-and-observe-the-right-repair" aria-hidden="true" />Scale the Deployment and delete a Pod
+
+Read one Pod’s owner reference. It identifies a ReplicaSet. On the ReplicaSet, look for `Controlled By` to find the Deployment. Scale the Deployment to four in the scene and see which object creates the extra Pod. Deleting a managed Pod leaves the assigned count at four, so the ReplicaSet makes a replacement. The replacement has its own name and UID.
 
 ```bash
 # Replace the placeholder with one real Pod name from the listing above.
@@ -108,35 +110,25 @@ kubectl get pod ACTUAL_POD_NAME -o jsonpath='{.metadata.ownerReferences}'
 kubectl describe rs ACTUAL_REPLICASET_NAME
 ```
 
-You should find that the Pod's immediate controller owner is the ReplicaSet, and the ReplicaSet's owner is the Deployment. Owner references use UIDs as well as names so deleting and recreating a parent does not silently turn a new object into the identical old owner.
-
 <Scene id="m05-l01-scale" />
 
-## Practice: scale, delete, and observe the right repair
+Try both operations in the [Deployments and recovery lab](/labs/#m05). Compare the resulting Pod names and ready replica counts. The older copies can keep running while the newest Pod starts.
 
-Scale to two with `kubectl scale deployment replicas-demo --replicas=2`, then watch the Pod set. The Deployment adjusts the ReplicaSet target, and excess Pods are terminated through the managed lifecycle. Scaling does not modify the image. Changing replica count alone is not a new application-template revision.
+## <span id="pitfalls" aria-hidden="true" />Count ready replicas and check their placement
 
-Delete one actual Pod from this disposable Deployment and watch for a new one. The ReplicaSet controller creates a replacement with a new UID. The scheduler binds it, and the kubelet starts it. It may land on the same node or another eligible node. No component promises to preserve the deleted Pod's IP or its process memory.
+Three Pods in the list can include a Pod waiting for a node or one failing to pull its image. To understand what can handle requests, look at readiness and verify the Service endpoints as well. Three copies can also land on the same node unless you configure placement. They protect against some Pod failures but still share that node as a possible point of failure.
 
-Now compare `READY`, desired replicas, updated replicas, and available replicas in the Deployment output. A count that exists in the API may not yet be ready or available. Later, `minReadySeconds` can require a replica to stay ready for an interval before it counts as available for Deployment progress. Use these signals to understand rollout safety rather than treating every count as a synonym.
-
-## Pitfalls
-
-Do not directly scale a Deployment-owned ReplicaSet as a routine release operation. The Deployment controller is another writer and can reconcile it back toward its own plan. Do not change an individual managed Pod as a durable configuration strategy: its replacement is built from the workload template. Edit the parent workload and keep your source manifest consistent with intentional changes.
-
-Avoid overlapping selectors across independent ReplicaSets. Matching labels and owner references interact with acquisition rules, and ambiguous selectors make ownership harder to reason about. Keep stable identity labels for the application and separate them from labels that distinguish a release version. A Service can select the stable application label while a Deployment manages different template versions.
+After changing the replica count interactively, update the manifest if you want that count to persist the next time somebody applies the file.
 
 ## Check your understanding
 
 <details>
 
-<summary>You delete a Pod and a different one appears. Did the scheduler recreate it?</summary>
+<summary>One of three Pods is stuck in ImagePullBackOff. Will its ReplicaSet create a fourth Pod to replace it?</summary>
 
-The ReplicaSet controller created the replacement object because its observed count fell below the desired count. The scheduler then selected a node for that new Pod. The kubelet and runtime performed local startup. Reading the event sources and owner references lets you verify this chain rather than assigning every repair to “Kubernetes” as one actor.
+The stuck Pod still counts as an active Pod controlled by the ReplicaSet. The kubelet retries pulling the image for that Pod. The Deployment can have three replicas and only two ready copies, so investigate the image reference or pull credentials before expecting the ready count to rise.
 
 </details>
-
-Practice ownership inspection and scaling in the [module lab](/labs/#m05). Next, change the Pod template and follow a controlled transition between ReplicaSets.
 
 ## Primary documentation
 

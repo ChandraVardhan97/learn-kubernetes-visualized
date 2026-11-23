@@ -2,7 +2,7 @@
 {
   "lessonId": "m07-l03",
   "title": "Topology and resource governance",
-  "description": "Spread replicas across failure domains and make namespace budgets visible before admission.",
+  "description": "Spread replicas across failure domains and make room in the namespace budget for releases.",
   "level": "intermediate",
   "module": "m07",
   "order": 3,
@@ -11,9 +11,9 @@
     "m07-l02"
   ],
   "objectives": [
-    "Calculate topology skew across eligible domains",
-    "Explain ResourceQuota admission versus scheduling capacity",
-    "Use LimitRange defaults without hiding the admitted requests"
+    "Explain how a topology key and a label selector determine which copies count toward spread.",
+    "Use ResourceQuota to reason about how many requested copies admission will accept.",
+    "Explain how a LimitRange changes the values on Pods that omit resources."
   ],
   "concepts": [
     {
@@ -54,17 +54,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: distribute replicas, then budget their promises
+## <span id="mental-model-distribute-replicas-then-budget-their-promises" aria-hidden="true" />How Kubernetes spreads replicas across zones
 
-A Deployment's replica count says how many copies should exist; it does not by itself say which machines or zones should host them. **Topology spread constraints** compare the number of matching Pods across eligible topology domains. The `topologyKey` names a node label such as `kubernetes.io/hostname` or `topology.kubernetes.io/zone`. The `labelSelector` names the Pods in the incoming Pod's namespace whose distribution should be counted. These are different label sets on different object kinds.
+Imagine a six-Pod API spread over three zones. If the zones have three, two, and one copy, some callers lose more capacity if the busiest zone fails. A **topology spread constraint** asks the scheduler to balance selected Pods across groups of nodes called topology domains. A node label might identify a zone, or the hostname label could make each node a separate domain. The selector tells the scheduler which Pods belong in the count.
 
-The **skew** measures an imbalance relative to the eligible domain counts under the constraint's rules. With two eligible zones containing two and one matching Pods, placing the next Pod in the second zone yields two and two. `maxSkew: 1` with `DoNotSchedule` makes excessive imbalance a hard scheduling constraint. `ScheduleAnyway` keeps distribution as a scoring preference, subject to other scheduling constraints. Domain counting follows topology labels and the `nodeAffinityPolicy` and `nodeTaintsPolicy` inclusion rules; by default affinity is honored and taints are ignored for that count. Resource fit is a separate check: a domain can count even when none of its nodes has room for the new Pod. Do not infer placement availability from the number of zone names in a diagram alone.
+In a simplified three-zone example with counts of two, two, and one, another Pod could bring them to two, two, and two. If the incoming Pod were placed in a zone already at two, its new count of three would differ from the minimum of one by two. A rule with `maxSkew: 1` and `DoNotSchedule` would reject that placement in this example. Look for eligible domains in the scene before doing the arithmetic. Kubernetes accounts for options such as `minDomains` and which domains qualify under the rule.
 
 <Scene id="m07-l03-spread" />
 
-## Walkthrough: a spread rule belongs to the Pod template
+## <span id="walkthrough-a-spread-rule-belongs-to-the-pod-template" aria-hidden="true" />Add a spread rule to a Deployment
 
-This fragment belongs under a Deployment's `spec.template.spec`. The Deployment selector and template labels must also include `app: api`. Multiple constraints are combined, so a hostname constraint and zone constraint must both be satisfiable when both are hard rules.
+Place the first fragment inside an existing Deployment’s `spec.template.spec`. Its own Pod template should carry `app: api` so that each new copy counts toward the distribution. Check the labels on the actual nodes first. The rule in the example uses zone labels, which may be missing in a small local cluster. For a local exercise, a comparable rule can reason about hostnames instead.
 
 ```yaml
 # Fragment: spec.template.spec of a Deployment labeled app=api
@@ -83,15 +83,9 @@ This fragment belongs under a Deployment's `spec.template.spec`. The Deployment 
        limits: {cpu: 500m, memory: 128Mi}
 ```
 
-Use actual zone labels only on nodes representing those domains. Labeling three local containers as three “zones” is useful for scheduler experiments, but it creates no protection against losing the laptop. Spread also does not continuously rebalance existing Pods after a node is added. The scheduler places newly unscheduled Pods; controllers or separate rebalancing tooling may cause new placement opportunities later.
+## <span id="practice-calculate-a-rollout-before-admitting-it" aria-hidden="true" />Budget for a rollout
 
-A **ResourceQuota** is a namespace admission budget. It can cap aggregate CPU requests, memory limits, storage requests and object counts. Admission rejects a new object that would exceed the relevant budget. This is different from Pending: a rejected object may never be persisted, while a Pending Pod has already entered the API and is waiting for placement or startup. Quota does not reserve physical node capacity for a namespace. Several namespaces can be below their quotas while competing for the same exhausted nodes.
-
-A **LimitRange** can set default requests and limits and require minimums, maximums or request-to-limit ratios. Its defaults apply when objects are admitted, not as a live rewrite of every existing Pod. Defaults make behavior safer only when they are understood. A surprising default CPU request can exhaust quota or scheduler capacity even if the submitted manifest omitted the field.
-
-<Scene id="m07-l03-budget" />
-
-## Practice: calculate a rollout before admitting it
+A **ResourceQuota** limits aggregate quantities in a namespace. The example allows requests of one CPU and 1 GiB of memory, and up to ten counted Pods. A **LimitRange** can supply defaults and enforce per-object bounds. In this example it adds a request of `100m` and `64Mi` to a container that does not specify them. Apply quota and defaults in a disposable namespace so other workloads do not consume your budget.
 
 ```yaml
 apiVersion: v1
@@ -115,24 +109,23 @@ spec:
       default: {cpu: 500m, memory: 256Mi}
 ```
 
-Apply these only inside the training namespace. Inspect `kubectl describe resourcequota team-budget` and `kubectl get limitrange container-defaults -o yaml`. Then create a small Pod with no resource fields and read the admitted Pod back. Expect defaulted values, subject to any other admission rules installed on the cluster. Describe the owning ReplicaSet if a Deployment cannot create its next Pod; quota rejection events often appear on the controller that attempted creation.
+Ten copies at `100m` use the full CPU budget. A Deployment trying to add an eleventh copy during a surge can be blocked by admission, even with room left on a node. Check ResourceQuota usage and ReplicaSet events to distinguish a rejected create from a Pod that exists but could not schedule. Try both constraints in the budget scene and the [scheduling and quota lab](/labs/#m07).
 
-Before scaling, multiply replica count by per-Pod requests and include rolling-update surge. Eight 100m Pods plus three overlapping surge Pods request 1.1 CPUs, exceeding this quota even though the final eight-Pod state would fit. Compute the budget for termination overlap and other workloads too. These quota and spread exercises are extensions to the module's [local practice](/labs/#m07); its baseline demonstrates selector-based placement without installing these governance objects.
+<Scene id="m07-l03-budget" />
 
-## Pitfalls: governance is not physical isolation
+## <span id="pitfalls-governance-is-not-physical-isolation" aria-hidden="true" />Check quota and node capacity
 
-Quotas control API consumption, not per-tenant network access or dedicated hardware. Namespace boundaries require additional RBAC, admission and network controls when tenants are untrusted. Likewise, raising quota cannot make a too-small node fit a large Pod, and loosening topology spread cannot bypass a missing volume zone. Diagnose admission, scheduling and runtime separately, then change the policy responsible for the actual constraint.
+Quotas govern the resources admitted in a namespace. Requests still need to fit physical nodes, and spread or affinity rules can further restrict the eligible nodes. Plan capacity for old and new replicas to overlap when a rollout needs a surge. Adjust tight budgets deliberately rather than relying on an idle usage chart.
 
 ## Check your understanding
 
 <details>
-<summary>A namespace has unused quota, but a new Pod requests more memory than any eligible node provides. Does admission guarantee it will run?</summary>
 
-No. Quota admission can succeed while every node fails the scheduler's fit check. The Pod should exist in Pending state with scheduling events. Quota answers whether this namespace may declare more demand; scheduling answers whether an actual eligible node can currently satisfy that demand.
+<summary>A rollout stalls at ten Pods. There is no eleventh Pod to describe. Which object helps you discover why?</summary>
+
+Inspect the new ReplicaSet’s events. If admission rejected its attempt to create the Pod, the event can report which quota the request exceeded. Compare that with namespace quota usage and any LimitRange defaults.
 
 </details>
-
-Next, trace a packet between two placed Pods. Correct placement provides capacity and failure-domain choices; connectivity needs its own implementation and policies.
 
 ## Primary documentation
 

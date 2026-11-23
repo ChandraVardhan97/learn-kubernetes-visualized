@@ -2,7 +2,7 @@
 {
   "lessonId": "m08-l02",
   "title": "NetworkPolicy and isolation",
-  "description": "Design additive ingress and egress allow rules and verify actual data-plane enforcement.",
+  "description": "Restrict which clients can connect to an API and prove the policy using allowed and blocked requests.",
   "level": "intermediate",
   "module": "m08",
   "order": 2,
@@ -11,9 +11,9 @@
     "m08-l01"
   ],
   "objectives": [
-    "Calculate allowed traffic from selected ingress and egress policies",
-    "Distinguish selector AND logic from alternative peers",
-    "Verify enforcement before trusting isolation"
+    "Identify which Pods a NetworkPolicy isolates and in which directions.",
+    "Read namespace and Pod selectors within each peer entry.",
+    "Verify a working baseline and both outcomes after applying a rule."
   ],
   "concepts": [
     {
@@ -55,17 +55,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: policies add allowed edges to an isolated direction
+## <span id="mental-model-policies-add-allowed-edges-to-an-isolated-direction" aria-hidden="true" />When a NetworkPolicy blocks a connection
 
-A **NetworkPolicy** selects Pods in its own namespace. For each selected direction, it changes those Pods from non-isolated to isolated, then allows the union of traffic described by all policies applying in that direction. There is no ordered list where a later deny rule overrides an earlier allow rule. An empty ingress list with `policyTypes: [Ingress]` isolates selected Pods for ingress without adding inbound permissions through that policy. Another policy can still allow a subset, or even all, of that traffic. This isolation has defined exceptions: a Pod cannot block access to itself, and traffic to or from its own node remains allowed.
+An API should accept requests from the shop frontend, but another application in the cluster can currently call it. A **NetworkPolicy** lets you describe allowed connections to or from selected Pods. A compatible network implementation has to enforce the policy. Creating the object alone does not prove traffic changed.
 
-Ingress and egress are evaluated independently. For a connection from a client to a server, the client's egress policy and the server's ingress policy must both permit the connection if those respective directions are isolated. Return traffic for an allowed connection is normally allowed implicitly. NetworkPolicy is principally a layer 3 and layer 4 contract over addresses, peers, protocols and ports. HTTP paths, user identities and arbitrary domain names require other mechanisms or provider-specific extensions.
+Policies select Pods in their own namespace. A Pod becomes isolated for **ingress** when an ingress policy selects it, and for **egress** when an egress policy selects it. A new connection between two Pods must satisfy the source’s egress rules if it is egress-isolated, and the destination’s ingress rules if it is ingress-isolated. Reply traffic for an allowed connection is implicitly allowed. Toggle each direction in the scene and check both ends before predicting the outcome.
 
 <Scene id="m08-l02-directions" />
 
-## Walkthrough: select a server, then select its clients
+## <span id="walkthrough-select-a-server-then-select-its-clients" aria-hidden="true" />Allow the shop frontend to call the API
 
-The following policy isolates ingress to `app: api` Pods and allows TCP 8080 only from Pods labeled `role: frontend` in namespaces labeled `team: shop`. The namespace and Pod selectors occur inside the **same peer**, which means both must match. Two separate peers would mean either may match, a much broader permission.
+The example selects Pods labeled `app: api` in the policy’s namespace. Its one peer entry lists both a `namespaceSelector` and a `podSelector`, so a client must satisfy both. It needs `role: frontend` and its namespace needs `team: shop`. The rule applies to TCP port 8080 on the backend. A separate Service might expose port 80 to the caller and forward it to 8080.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -87,13 +87,13 @@ spec:
           port: 8080
 ```
 
-An empty `podSelector` at the top selects all Pods in the policy's namespace. A peer `podSelector` without a `namespaceSelector` selects Pods in that same namespace, not across the entire cluster. The built-in namespace label `kubernetes.io/metadata.name` can identify a particular namespace, while custom labels can define a managed group. If users may freely change namespace labels that policies trust, they may expand access; label ownership is part of the boundary.
-
-Egress isolation often surprises operators because it also affects DNS. Allowing a Service port does not automatically permit DNS lookups needed to discover it. Identify the cluster's DNS Pods and namespace labels and allow the required UDP and TCP DNS traffic as appropriate for that implementation. Avoid a universally copied DNS rule with labels that do not exist in your cluster. Address translation and `ipBlock` behavior around node and Service addresses can vary with implementation, so validate the exact traffic path.
+Indentation matters. Putting the two selectors in separate list entries would allow either group. A Pod selector by itself refers to Pods in the policy’s namespace. NetworkPolicy permissions are additive across the policies that select a Pod in a direction. A second policy granting broader access can permit a connection excluded by the first policy’s peer list. Inspect the selector scene and predict which clients pass.
 
 <Scene id="m08-l02-selectors" />
 
-## Practice: baseline, deny, then allow
+## <span id="practice-baseline-deny-then-allow" aria-hidden="true" />Test before and after the policy
+
+Start with a successful request from each test client. Record its namespace labels, Pod labels, and the Service port. Apply the policy, then open a fresh connection from the permitted frontend and another from a client outside the allowed set. A successful baseline helps rule out a bad hostname or a missing endpoint. Enforcement can take time after the API accepts the policy.
 
 ```bash
 kubectl get networkpolicies
@@ -107,24 +107,21 @@ kubectl describe networkpolicy api-from-shop-frontend
 # Repeat from one permitted and one deliberately unpermitted client.
 ```
 
-The downloadable baseline uses `m08`, `m08-client` and port 80 for both the Service and backend; the `api` and `frontend` names here describe a separate selector exercise. Use the Service port actually configured for your client URL and the backend port for the ingress rule. Probe direct Pod traffic as well when separating Service translation from policy behavior. A connection timeout may be consistent with a drop, but a timeout alone does not prove policy caused it. First show the same request succeeds before isolation, then fails for an unallowed source, then succeeds again after adding the intended allow rule.
+Use the [networking lab](/labs/#m08) to inspect the environment. Follow the policy experiment only after confirming your cluster has a policy-capable network implementation. A basic kind setup may require an additional network setup for enforcement.
 
-The API server can accept a NetworkPolicy even when the network implementation does not enforce it. Current local distributions and versions differ, including changes in bundled network providers. Inspect and test the chosen cluster instead of assuming every kind cluster has the same capability. Record provider, version and deny/allow observations in your lab notes. Do not install a second CNI onto an existing cluster casually; use the documented installation path for a clean disposable cluster.
+## <span id="pitfalls-one-broad-allow-can-defeat-a-careful-default" aria-hidden="true" />Check for other rules and DNS failures
 
-## Pitfalls: one broad allow can defeat a careful default
-
-A namespace-wide allow-all policy remains effective alongside a default-deny policy because permissions are additive. Review every policy selecting the Pods when the effective result seems broader than expected. Host networking, traffic involving nodes and protocol support have additional implementation details. Treat NetworkPolicy as one layer alongside application authentication and authorization, and test both positive and negative cases whenever the allowed peer set changes.
+A policy that isolates egress can block DNS, so separate name lookup from the application request. Existing connections and traffic involving nodes can have implementation-specific behavior or exceptions. Start fresh connections from known clients and make one change at a time. That gives you a reproducible result to explain.
 
 ## Check your understanding
 
 <details>
-<summary>A default-deny ingress policy and an allow-from-frontend policy both select the API. Which policy wins?</summary>
 
-Neither replaces the other. The selected ingress direction is isolated and its permissions are the union of all matching policies. Frontend traffic allowed by the specific policy can connect, while other new ingress remains disallowed unless another matching policy permits it. Review the complete selected policy set to calculate effective access.
+<summary>A frontend Pod has the right role label, but is in a namespace with team: payments. Does the example allow it?</summary>
+
+The namespace does not match `team: shop`, so the peer entry does not allow that client. Inspect other policies that select the API as well, since permissions from an additional policy are added to this one.
 
 </details>
-
-Use the [policy lab](/labs/#m08) to test selector AND versus OR behavior. Next, expose a permitted application through an HTTP routing controller and distinguish that route from the internal network policy.
 
 ## Primary documentation
 

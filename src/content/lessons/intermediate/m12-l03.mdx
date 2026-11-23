@@ -2,7 +2,7 @@
 {
   "lessonId": "m12-l03",
   "title": "Metrics, logs, and traces",
-  "description": "Choose telemetry by question, then connect collection, correlation, retention and sensitive-data boundaries.",
+  "description": "Connect a latency spike to affected requests using metrics, logs, and traces.",
   "level": "intermediate",
   "module": "m12",
   "order": 3,
@@ -11,9 +11,9 @@
     "m12-l02"
   ],
   "objectives": [
-    "Distinguish resource metrics from application and request telemetry",
-    "Explain Prometheus scraping and Grafana visualization",
-    "Trace OpenTelemetry context across services without exposing sensitive data"
+    "Choose a metric for a symptom and avoid labels that create a series per request.",
+    "Explain the roles of Prometheus, Grafana, and OpenTelemetry in the example.",
+    "Use a trace ID and a time window to connect related evidence safely."
   ],
   "concepts": [
     {
@@ -73,19 +73,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: ask three related questions with three different signals
+## <span id="mental-model-ask-three-related-questions-with-three-different-signals" aria-hidden="true" />Choose the right signal for the symptom
 
-**Metrics** summarize behavior as measurements over time: request counts, latency distributions, queue depth and memory use. **Logs** record discrete events with contextual fields. **Traces** connect spans representing operations across a distributed request. They overlap but do not replace one another. A latency metric can reveal that a problem affects many requests, a trace can show which dependency consumed time in a sampled request, and a log can explain the application decision at that point.
+Checkout requests have become slower for the last ten minutes. You want to know how many requests are affected, which operation is slow, and what happened during one of those requests. **Metrics** are numerical measurements over time. They can show higher latency for a particular service. **Logs** are event records. Structured logs include fields you can filter, such as timestamp, route, status, and trace ID. **Traces** follow one request through its operations, represented as spans, so you can see how long checkout spent calling inventory or waiting for a database.
 
-Kubernetes resource metrics, commonly exposed through Metrics Server for `kubectl top` and resource autoscaling, are not a complete observability system. They do not automatically provide application request rates, durable log retention or request traces. Production collection usually combines additional agents, backends and instrumentation. Name the signal, collection interval, retention period and expected coverage before claiming that the system is observable.
+One slow example may explain a particular request. Aggregate metrics help establish how widespread the problem is. Try the metrics pipeline scene to see what happens when a scraper cannot reach the app or the app has yet to expose a metric.
 
 <Scene id="m12-l03-metrics-pipeline" />
 
-## Walkthrough: scrape useful measurements and label them carefully
+## <span id="walkthrough-scrape-useful-measurements-and-label-them-carefully" aria-hidden="true" />Collect and label application metrics
 
-**Prometheus** commonly discovers targets and scrapes their metrics endpoints. A counter increases over time except for resets, while a gauge represents a current value that may rise or fall. A histogram records a distribution through buckets and related values; a single average can hide a slow tail. Query the appropriate rate or distribution rather than comparing raw cumulative counts across processes with different start times.
-
-This training Prometheus configuration scrapes one endpoint. It is a Prometheus server configuration fragment, not a Kubernetes resource; a production deployment needs installation, service discovery, security and retention configuration.
+**Prometheus** typically scrapes instrumented endpoints on a schedule, stores samples as time series, and supports queries over their values. The example scrapes an application metrics endpoint on port 9090 inside the cluster. Save it as part of a Prometheus configuration only after you have a reachable `api` Service and a metrics endpoint.
 
 ```yaml
 scrape_configs:
@@ -97,7 +95,7 @@ scrape_configs:
           environment: training
 ```
 
-PromQL expressions:
+A metric name and its label values identify a series. Using a request ID or email address as a label makes a new series for each value and can become expensive. Label by bounded dimensions such as service and operation, and keep request-specific IDs in logs and traces. The first query shows requests per second by service using a five-minute window if that counter and label exist. The second measures CPU consumption by Pod when a collector exposes the named metric. **Grafana** can plot the results from a configured data source.
 
 ```text
 # Example application metric: only works if instrumentation exports it.
@@ -106,13 +104,11 @@ sum by (service) (rate(http_requests_total[5m]))
 sum by (pod) (rate(container_cpu_usage_seconds_total[5m]))
 ```
 
-Every unique metric name and label set creates a time series. Labels such as service, method and a normalized route template often support useful aggregation. User IDs, request IDs, full URLs and arbitrary error messages can create unbounded **cardinality**, memory cost and sensitive-data exposure. Put a request identifier in logs or trace correlation fields rather than making it a metric label. Even apparently bounded labels need review when teams can supply arbitrary values.
+## <span id="practice-correlate-one-request-without-collecting-its-payload" aria-hidden="true" />Follow a slow request across services
 
-**Grafana** queries configured data sources and visualizes their results; it is not automatically the collector or storage engine. A blank panel may reflect a wrong time range, missing label filter, unavailable source or absent instrumentation. Compare a panel with the raw backend query and its target health before concluding the application is idle. An alert should link to a user-visible symptom and a useful investigation, rather than firing on every harmless restart.
+Find the time range of the checkout spike. Pick a slow request from a trace and follow its spans to the slow dependency. If the app records the trace ID in structured logs, search that ID to find the matching error. **OpenTelemetry** provides instrumentation and context propagation so spans can share a trace across services. An OpenTelemetry Collector can receive, process, and export telemetry to the destination you configure. The second scene shows why carrying trace context across a request matters.
 
 <Scene id="m12-l03-request-context" />
-
-## Practice: correlate one request without collecting its payload
 
 ```bash
 kubectl top pods -n learning
@@ -122,24 +118,21 @@ kubectl get events -n learning --sort-by=.metadata.creationTimestamp
 kubectl get pods -A
 ```
 
-The [observability lab](/labs/#m12) distinguishes baseline kubectl evidence from optional Prometheus, Grafana and OpenTelemetry installations. Do not expect the sample metric names to exist without their exporters or application instrumentation. First send one known request and confirm that its counter changes, its structured log appears and its trace is exported where those systems are installed.
+Begin with the [debugging and observability lab](/labs/#m12). Use logs and Events on the baseline, and run `kubectl top` only if a resource metrics pipeline is installed. Prometheus and tracing require their own components and app instrumentation.
 
-**OpenTelemetry** defines vendor-neutral instrumentation and signal handling, including SDKs and a Collector that can receive, process and export telemetry. Instrumentation creates spans and propagates context across calls; a Collector does not magically infer missing application spans. Correlate structured logs with trace and span IDs and stable resource attributes such as service name. Preserve context across asynchronous boundaries deliberately. Sampling reduces trace volume but means the absence of a trace is not proof the request never happened.
+## <span id="pitfalls-telemetry-has-its-own-failure-and-trust-boundaries" aria-hidden="true" />Check whether the telemetry pipeline works
 
-## Pitfalls: telemetry has its own failure and trust boundaries
-
-A saturated collector or unavailable backend can drop or delay evidence while the application continues serving. Set bounded queues and retention appropriate to the operational need. Redact credentials and avoid recording raw authorization headers, personal data or full prompts by default. Limit access to telemetry because it can expose tenant names, resource identifiers and infrastructure details even without payloads. During an incident, compare signal freshness with wall-clock time before trusting a reassuring stale chart.
+Missing spans can mean sampling or missing propagation. Missing metric samples can mean a failed scrape. Inspect the telemetry pipeline before treating a blank graph as a healthy system. Keep credentials and personal data out of application output, labels, and trace attributes.
 
 ## Check your understanding
 
 <details>
-<summary>The dashboard shows no requests, but an application log contains a fresh successful request. Is the log necessarily wrong?</summary>
 
-No. The metrics path may be missing instrumentation, failing its scrape, using a mismatched query label or showing the wrong time range. Compare the raw metrics endpoint, target health and backend query. Different signals have different collection paths, and disagreement is a reason to test those paths rather than discard inconvenient evidence.
+<summary>Error rate doubled after a release. Which signal can help find the failing operation without reading the request payload?</summary>
+
+Use metrics to locate the affected service and time range. Then find a representative failed trace or structured log entry and inspect operation names, response codes, and trace IDs. Those fields usually narrow the question without capturing the body.
 
 </details>
-
-Next, package deployment configuration reproducibly and use these signals to decide whether scaling or a release change actually improves the application.
 
 ## Primary documentation
 

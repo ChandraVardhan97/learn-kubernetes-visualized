@@ -2,7 +2,7 @@
 {
   "lessonId": "m08-l01",
   "title": "Pod networks and service routing",
-  "description": "Trace Pod addressing, CNI setup, EndpointSlice readiness, and implementation-dependent service routing.",
+  "description": "Trace a direct Pod connection across nodes and a Service connection through an eligible backend.",
   "level": "intermediate",
   "module": "m08",
   "order": 1,
@@ -11,9 +11,9 @@
     "m07-l03"
   ],
   "objectives": [
-    "Separate Pod network setup from Service virtual addressing",
-    "Trace a request through ready EndpointSlices",
-    "Explain why kube-proxy and eBPF are implementation choices"
+    "Describe what CNI plugins configure when a Pod joins the network.",
+    "Follow Pod-to-Pod routing and identify where an implementation may use routing or encapsulation.",
+    "Explain how kube-proxy or an alternative implementation uses Service and EndpointSlice information."
   ],
   "concepts": [
     {
@@ -77,17 +77,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: an address is useful only with a forwarding path
+## <span id="mental-model-an-address-is-useful-only-with-a-forwarding-path" aria-hidden="true" />How Pods communicate across nodes
 
-Kubernetes expects ordinary Pods to communicate through a cluster network with distinct addresses. Containers within one Pod share a network namespace, so they can communicate using localhost and must avoid binding the same port. Containers in different Pods use their Pod addresses or a Service. A Pod address is tied to that Pod's lifetime, and replacing the Pod commonly produces a different address. A Service supplies a stable discovery abstraction over a changing set of backends.
+A frontend Pod on one node opens a connection to an API Pod on another. First the Pods need working interfaces and addresses. Then the network needs a route for the packets. A **Container Network Interface (CNI)** plugin follows an interface used by runtimes to configure container networking. In a Kubernetes cluster, the network implementation commonly uses plugins to give Pods addresses and connect them to the node’s network, and may run agents to arrange routes and policy across nodes.
 
-The **Container Network Interface**, or CNI, is a plugin interface used by the runtime's network integration to configure container networking. A network implementation can create interfaces, allocate addresses and arrange routes. Implementations differ: some route natively using the underlying network, some encapsulate traffic in overlays, and some use eBPF for parts of forwarding or policy. “Uses CNI” does not specify its encapsulation, network-policy support, encryption or Service implementation. Check the selected provider's configuration and documentation rather than inferring those properties from the interface name.
+From the frontend’s point of view, the direct connection is addressed to the API Pod’s IP. The packet leaves the frontend’s network namespace and travels through the network to the backend. One implementation might route the Pod IP ranges directly. Another might wrap the packet for transport between nodes and unwrap it on arrival. The Pod-path scene focuses on the visible hops, which you can use to ask where a packet could be lost.
 
 <Scene id="m08-l01-pod-path" />
 
-## Walkthrough: a Service is an API object plus a data plane
+## <span id="walkthrough-a-service-is-an-api-object-plus-a-data-plane" aria-hidden="true" />How a Service forwards a connection
 
-For a selector-based Service, controllers publish matching backend information into **EndpointSlices**. Each endpoint includes conditions such as readiness. Normal Service routing uses ready endpoints; an unready Pod should ordinarily stop receiving new Service traffic. Options such as `publishNotReadyAddresses`, and handling of terminating endpoints, alter the details. A Pod showing Running does not prove it is ready for Service traffic: Running is a Pod phase, while readiness reflects whether the application should receive requests.
+A Service gives the frontend a stable IP and port as the backend Pods come and go. In the manifest, clients connect to port 80 and the service data plane forwards to port 8080 on a selected backend. Pods must already exist with `app: api`, and their app must listen on 8080. EndpointSlices identify the current addresses and include readiness conditions. A backend can still appear in a slice when it is unready.
 
 ```yaml
 apiVersion: v1
@@ -103,11 +103,13 @@ spec:
       targetPort: 8080   # Port the selected backend actually listens on.
 ```
 
-A ClusterIP is normally a virtual address, not an ordinary application process accepting a connection at that address. With kube-proxy, rules installed on nodes implement forwarding to endpoints using the configured proxy mode. Other providers can implement equivalent Service semantics through an eBPF data plane, potentially replacing kube-proxy. Kube-proxy is a control process that watches API state and programs its chosen forwarding mechanism; it is not a mandatory userspace relay for every application packet. On Linux, rule-based modes such as iptables or nftables delegate forwarding decisions to the kernel. An eBPF-based implementation can instead load verified programs at supported kernel networking hooks and maintain backend information in maps. That changes implementation mechanics without removing the need to synchronize Service and endpoint state. Some providers replace Service proxying; others use eBPF for selected functions alongside different components. The exact hook, packet translation and source-address behavior depend on the implementation, traffic direction and Service configuration. An educational arrow from “Service” to “Pod” represents that forwarding behavior, not a mandatory network hop through a central Service server.
+**kube-proxy** watches Services and EndpointSlices and programs forwarding rules on nodes. The packet path typically goes through the rules it installs. Some CNI implementations replace kube-proxy and use **eBPF**, which runs programs at kernel hooks, to handle Service forwarding. The details differ by cluster, but in both cases a client that contacts the Service address needs a route to a usable endpoint. Follow the paths in the second scene.
 
 <Scene id="m08-l01-service-path" />
 
-## Practice: prove discovery, selection, and reachability separately
+## <span id="practice-prove-discovery-selection-and-reachability-separately" aria-hidden="true" />Compare direct and Service requests
+
+From your test client, check DNS first. Then compare the selected Pod and EndpointSlice addresses, ports, and conditions. Try the request via the Service and, where policy allows, directly to a known ready Pod’s IP and listening port. A working Pod IP with a failing Service narrows the investigation toward selector, endpoint conditions, or Service forwarding. The example names assume you created `api` and `client`. Use the exercise’s actual names and port in the [networking lab](/labs/#m08).
 
 ```bash
 kubectl get service api -o wide
@@ -119,26 +121,19 @@ kubectl exec client -- nslookup api
 kubectl exec client -- wget -qO- http://api:80
 ```
 
-First compare the Service selector with actual Pod labels. Then inspect the slice addresses and their `ready` conditions. If there are no ready endpoints, test the backend's readiness probe and application port before investigating node routing. A mismatched `targetPort` can leave selection correct while connections fail at the chosen backend. Port names can improve maintainability, but they must match the container port names expected by the Service.
+## <span id="pitfalls-local-networks-can-conceal-production-differences" aria-hidden="true" />Test across nodes in the target cluster
 
-Next, send a request to a ready Pod address from the same client, using its actual application port. If direct Pod traffic works and the Service virtual address fails, focus on Service forwarding and its implementation. If both fail, inspect policy, routing, the backend listener and node reachability. A successful DNS lookup proves name resolution, not that the returned virtual address can forward traffic. Record source Pod, source node, destination address, protocol and port; omitting these makes a networking report hard to reproduce.
-
-## Pitfalls: local networks can conceal production differences
-
-A local cluster can implement all its worker nodes as containers on one host. Its apparent cross-node path may differ substantially from a cloud VPC or overlay. A LoadBalancer Service also needs a provider implementation; it does not guarantee an external address on every local installation. NetworkPolicy enforcement is another separate capability. Some current local network implementations enforce it, while others do not; inspect and test the exact cluster rather than relying on an old generalization about its distribution.
-
-When a Pod is deleted, API readiness changes and data-plane updates are asynchronous. Existing connections and application shutdown have their own lifetimes. Use readiness and graceful termination together instead of assuming removing an EndpointSlice entry instantly cancels every request in flight.
+Two Pods on one node can communicate even if routing between nodes is broken. Repeat the test from another node when investigating cross-node failures. For a connection that reaches the Service with no ready backend, implementations can differ in whether a caller sees a refusal or timeout. Inspect the objects and run a controlled request before inferring the cause from one error string.
 
 ## Check your understanding
 
 <details>
-<summary>DNS returns the correct ClusterIP and one ready endpoint exists, but the request fails. Has Kubernetes networking been proved healthy?</summary>
 
-No. Discovery and endpoint selection have passed useful checks, but the packet still needs a working forwarding path, allowed policy and a listening application port. Compare direct endpoint traffic with Service traffic from the same source to narrow the failure boundary. Readiness can itself be misconfigured, so test the actual serving port as well.
+<summary>A Service resolves in DNS and you can reach its ready Pod IP directly. The Service request still fails. Where would you look next?</summary>
+
+Check the Service port and target port, then the EndpointSlice ready condition and which backend address it publishes. If those are correct, investigate the cluster’s Service forwarding implementation on the caller’s node.
 
 </details>
-
-Use the [networking lab](/labs/#m08) to compare Pod IP, ClusterIP and DNS requests. Next, deliberately remove connectivity using an enforced policy and then restore only the required edge.
 
 ## Primary documentation
 

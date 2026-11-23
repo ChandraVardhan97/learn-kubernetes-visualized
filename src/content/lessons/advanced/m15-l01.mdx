@@ -1,13 +1,13 @@
 ---
 lessonId: "m15-l01"
 title: "Informers, caches, and workqueues"
-description: "Build convergence from imperfect observations and repeatable work."
+description: "Follow a change from an API watch to a controller worker that can retry safely."
 level: "advanced"
 module: "m15"
 order: 1
 minutes: 16
 prerequisites: ["m14-l02"]
-objectives: ["Trace a shared informer from list and watch to cache handlers.", "Explain key deduplication and rate-limited reconciliation.", "Design retries that recover from partial success."]
+objectives: ["Explain what a shared informer keeps in its cache and how handlers use it.", "Trace why multiple events for a single object can result in one queued key.", "Reason about a controller crash after it performs a write."]
 concepts: [{"id": "m15-l01-informer-cache", "title": "Observation feeds a cache and a queue", "scene": "m15-l01-informer-cache"}, {"id": "m15-l01-queue-retries", "title": "Dedupe, delay, and retry safely", "scene": "m15-l01-queue-retries"}]
 sources: [{"title": "client-go informer and workqueue example", "url": "https://github.com/kubernetes/client-go/tree/master/examples/workqueue"}, {"title": "Controller pattern", "url": "https://kubernetes.io/docs/concepts/architecture/controller/"}, {"title": "API watch semantics", "url": "https://kubernetes.io/docs/reference/using-api/api-concepts/"}]
 lab: "m15"
@@ -17,23 +17,25 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: events schedule a question, not a command
+## <span id="mental-model-events-schedule-a-question-not-a-command" aria-hidden="true" />How a watch feeds the controller’s cache
 
-An informer combines list/watch observation with a local object cache and event handlers. A shared informer lets multiple consumers share that observation machinery. Handlers usually enqueue a resource key such as `kv-lab/m16`, rather than perform long network calls immediately. A worker later asks: given the desired object and observed dependents now, what must change? This separates API event delivery from expensive reconciliation and keeps the system responsive during bursts.
+You maintain a controller that generates a ConfigMap for each application. Three changes to the same app arrive while a worker is busy. Processing each event as an instruction can lead to unnecessary intermediate writes. Instead, controllers usually arrange to reconcile one object key, then read the current state when a worker takes it. The key commonly contains a namespace and name. The worker can compare the latest requested config with what already exists.
 
-The cache is eventually consistent with the API server. A worker may successfully create a child and then briefly read a cached parent or child that predates that write. Reconciliation must tolerate that window. It should also tolerate an object disappearing between enqueue and processing. A missing parent often means no creation work is needed; it is not automatically a retryable outage. Do not derive correctness from receiving exactly one event in exactly the sequence you expected.
+A **shared informer** uses API lists and watches to maintain a local cache of selected objects and notify handlers about changes. Multiple consumers in a controller can use the same cache and watch. A controller can wait for the initial cache sync before starting workers. The view can still lag a fresh API read, so the worker should tolerate missing objects and updates made since its read. Step through the cache scene to see the gap between an API write and the local update.
 
 <Scene id="m15-l01-informer-cache" />
 
-## Walkthrough: one key may represent many changes
+## <span id="walkthrough-one-key-may-represent-many-changes" aria-hidden="true" />Why a queue can combine multiple changes
 
-A workqueue can deduplicate pending keys and coordinate processing of a key so workers do not repeatedly execute the same pending item concurrently. If another change arrives while a key is being processed, the queue can arrange another pass after the current one finishes. This reduces unnecessary work but means an event stream is not a transaction log. Reconcile the current object's desired replica count, rather than attempting to replay every historical increase and decrease.
-
-Rate-limited queues let failures re-enter with delay. On success, a typical client-go worker forgets accumulated failure history; it always marks the item done after processing. On transient errors it adds the key with rate limiting. On permanent invalid input it records a useful condition and waits for a relevant change rather than retrying rapidly forever. Per-item backoff and overall throughput limits reduce pressure, but neither grants capacity to an overloaded downstream API.
+A **workqueue** holds keys that need attention. If a key is already waiting, later changes can be combined with it. A change while the same key is being processed can mark it for another pass. When the worker completes, it clears the processing state and handles any queued repeat. If processing fails, a rate-limited queue can delay retries so a persistent problem does not keep the worker hammering the API. Common queue state is in memory, so a restarted controller rebuilds work from current objects and its watches.
 
 <Scene id="m15-l01-queue-retries" />
 
-The following configuration is used by the local mechanism exercise. The ConfigMap illustrates stable desired input, while the Lease is inspected separately in the leadership lesson. Reapplying a declaration is not a production informer implementation; it demonstrates why repeating an intention should preserve object identity.
+## <span id="practice-reason-about-the-crash-boundary" aria-hidden="true" />Recover when a write survives a crash
+
+Ask what happens if the controller writes the generated ConfigMap, then crashes before reporting success. On restart it can reconcile the source again. A safe worker finds the surviving object and decides whether it needs another change. It should avoid replacing it or producing a second external result solely because the earlier status update was missed.
+
+Save the example as `repeat.yaml`. Apply it twice and compare UIDs. Same-account repeated apply demonstrates updating or leaving an object in place under the same identity. The commands do not run an informer. Use them as an API-side practice step in the [controller internals lab](/labs/#m15).
 
 ```yaml
 apiVersion: v1
@@ -56,24 +58,16 @@ kubectl --context kind-kv-lab -n kv-lab get configmap m15-repeat -o jsonpath='{.
 kubectl --context kind-kv-lab -n kv-lab get configmap m15-repeat --watch --request-timeout=5s
 ```
 
-## Practice: reason about the crash boundary
+## <span id="pitfalls-retries-are-a-load-generator" aria-hidden="true" />Avoid repeating unsafe operations on retry
 
-Run the [m15 local exercise](/labs/#m15), then connect it to the polling operator in m16. Draw a reconcile attempt that creates a ConfigMap, creates a Deployment, and updates status. Place a process crash after each write. The next attempt must discover and reuse an already-created object, finish missing work, and avoid inventing a new child name on every attempt. This is idempotence across partial progress, not merely making a function return the same string twice.
-
-Inspect the example operator's deliberately limited polling loop. Polling is useful for exposing the state comparison, but it does not provide shared informer efficiency, queue fairness or rate-limited retry machinery. A production conversion would use maintained client libraries, wait for required caches to synchronize, handle deleted objects, and measure queue depth, queue wait time, reconcile duration and error categories. Choose observations that distinguish a slow worker from an unhealthy API dependency.
-
-## Pitfalls: retries are a load generator
-
-Do not retry every exception with no delay. A rejected schema, missing authorization, exhausted quota and temporary timeout require different remedies. If an external request timed out after the external system committed it, retrying a blind create can duplicate resources. Use a stable external identity, an idempotency key where available, and discovery before replacement. Cap concurrency so a short API outage does not produce an uncontrolled recovery surge. Logging every retry at maximum detail can itself consume storage and hide the first useful failure.
+A retry expected to succeed after a transient timeout is different from endlessly retrying invalid input. Record the failure and use backoff where another attempt may help. If the controller writes to an external system, use that system’s support for idempotency or record a stable operation identity so retries do not repeat irreversible work.
 
 ## Check your understanding
 
 <details>
 
-<summary>Ten updates enqueue the same object before a worker runs. Must reconciliation execute ten times?</summary>
+<summary>Two updates arrived while a single key waited in the queue. What value should the worker converge on?</summary>
 
-No. A deduplicating key queue may collapse pending work. The worker should read the latest desired state and converge toward it. If every individual transition matters to a business workflow, that workflow needs a durable event or transaction design beyond a controller workqueue.
+Read the current desired value when the key is processed and compare it with the current child. If the cache has not caught up, another update can enqueue a later pass. The intended result is convergence on current state.
 
 </details>
-
-Next, trace a specific controller that consumes unscheduled Pods. Its queue feeds a scheduling framework with feasibility checks, scoring and a separate binding outcome.

@@ -1,13 +1,13 @@
 ---
 lessonId: "m15-l02"
 title: "Scheduler internals"
-description: "Separate feasible placement from preferences and binding."
+description: "Follow the scheduler from eligible nodes to a selected node and a successful binding."
 level: "advanced"
 module: "m15"
 order: 2
 minutes: 16
 prerequisites: ["m15-l01", "m07-l03"]
-objectives: ["Distinguish scheduler filtering from scoring.", "Trace reservation, permit, and binding outcomes.", "Explain why preemption cannot solve every Pending Pod."]
+objectives: ["Trace a Pod through scheduling queue, filters, scores, and binding.", "Distinguish an unsatisfied hard requirement from losing to a higher scoring node.", "Identify the events or status that show progress past scheduling."]
 concepts: [{"id": "m15-l02-filter-score", "title": "Feasibility precedes preference", "scene": "m15-l02-filter-score"}, {"id": "m15-l02-bind-cycle", "title": "A chosen node still needs binding", "scene": "m15-l02-bind-cycle"}]
 sources: [{"title": "Scheduling framework", "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/"}, {"title": "Pod priority and preemption", "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/"}, {"title": "Node assignment", "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/"}]
 lab: "m15"
@@ -17,23 +17,23 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: rank only nodes that can run the Pod
+## <span id="mental-model-rank-only-nodes-that-can-run-the-pod" aria-hidden="true" />How Kubernetes compares nodes
 
-The scheduler observes Pods without a node assignment and attempts placement. Filtering asks whether a node is feasible under hard constraints: resource requests, required affinity, taints and tolerations, topology, volumes and other configured checks. Scoring then compares feasible nodes using preferences and weighted plugin results. A node with a very attractive score cannot win if it failed a required filter. This distinction is the foundation of useful Pending-Pod diagnosis.
+A Pod needs a node with a training label and enough CPU. Of three candidate nodes, one lacks the label, one has no room, and one meets both requirements. The **scheduler** watches for Pods without an assigned node and selects nodes for them. Its **filter** phase removes nodes that cannot satisfy hard requirements. Its **score** phase ranks the feasible candidates based on preferences and configured plugins. A high score cannot make up for a failed filter.
 
-Scheduling uses resource requests and scheduler accounting, not merely a live CPU utilization graph. A node can look quiet while its requested capacity is allocated. Conversely, a node can be busy because applications exceed their requests. The scheduler must also account for Pods assumed during scheduling while their bindings are still being completed. Placement decisions coordinate with concurrent activity; they are not an instantaneous global optimization of every Pod in the cluster.
+Change the candidates in the scene. A node can pass the required rules even if it ranks below another. An event saying no node is available means you should look at feasibility before adjusting scoring preferences. A scheduler may try a later placement after new Pods finish, labels change, or other conditions improve.
 
 <Scene id="m15-l02-filter-score" />
 
-## Walkthrough: scheduling and binding have separate failure points
+## <span id="walkthrough-scheduling-and-binding-have-separate-failure-points" aria-hidden="true" />What happens after the scheduler chooses a node
 
-The scheduling framework exposes extension points. PreFilter and Filter establish feasibility, then scoring-related plugins rank candidates. Reserve can hold provisional state; Permit can delay or reject progress. PreBind performs required work before binding, and Bind assigns the Pod through the API. If later work fails, Unreserve releases reservations so an abandoned attempt does not permanently consume plugin state. PostBind is notification after a successful bind, not a second scheduling decision.
-
-Scheduling cycles and binding cycles have different concurrency characteristics: the scheduling cycle selects a node, while subsequent binding work can overlap for different Pods. Volume binding is a common reason a placement path includes coordination beyond CPU and memory. A selected node still needs a functioning kubelet, image access, mounted volumes and readiness success. The `PodScheduled` condition proves a scheduling boundary, not an application health boundary.
+After selecting a node, the scheduler must record the binding. In the scheduling framework, plugins can participate in stages such as reserving resources, waiting for permission to bind, and recording the association. If a later stage fails, the scheduler can undo reservations and retry. Once the binding is stored, the node’s kubelet still needs to fetch the image, prepare networking and storage, and start the containers. Inspect `spec.nodeName` and the `PodScheduled` condition before diagnosing why a container has not run yet.
 
 <Scene id="m15-l02-bind-cycle" />
 
-This small Pod is intentionally unschedulable on an ordinary kind cluster unless you add the matching node label. The label represents a hard requirement rather than a preference. Save it as `placement.yaml`; changing the label key is safer than changing arbitrary node configuration during diagnosis.
+## <span id="practice-separate-a-failed-filter-from-a-low-score" aria-hidden="true" />Reproduce a failed placement
+
+Save the example as `placement.yaml` and check node labels first. The Pod requires `training.kv.example/accelerator=present`. Apply it in your lab without that label and inspect the resulting event and condition. Its small CPU and memory requests leave the label as the intended failure. Delete the test Pod, remove the selector from the file, and apply again. Compare the condition and the assigned node. That retry is also part of the [controller and scheduling lab](/labs/#m15).
 
 ```yaml
 apiVersion: v1
@@ -64,26 +64,16 @@ kubectl --context kind-kv-lab -n kv-lab get pod m15-placement -o jsonpath='{.sta
 kubectl --context kind-kv-lab -n kv-lab delete pod m15-placement
 ```
 
-## Practice: separate a failed filter from a low score
+## <span id="pitfalls-configuration-can-encode-impossible-combinations" aria-hidden="true" />Check labels and requested devices separately
 
-Use the [m15 local exercise](/labs/#m15) to inspect control-loop behavior, and optionally apply the isolated Pod above. Expect Pending with FailedScheduling evidence mentioning the selector mismatch. There is no winning feasible node to score in this case. A lower CPU request would not repair a missing required label. Rewrite the manifest without the selector and reapply if you want to observe scheduling; inspect `spec.nodeName` and the PodScheduled condition before checking container readiness.
-
-Now predict preemption. If insufficient requested capacity is the obstacle and suitable lower-priority victims exist, preemption may create room. If every node fails an incompatible node selector or required topology constraint, removing other Pods does not make those nodes satisfy the selector. A nominated node is an intermediate scheduling intention and does not guarantee the eventual binding succeeds.
-
-## Pitfalls: configuration can encode impossible combinations
-
-Required anti-affinity, a single available zone, a restrictive volume topology and a small node pool can leave no feasible placement. Adding replicas may then increase Pending count without increasing service capacity. Soft preferences are appropriate when violating the preference is better than remaining unavailable; hard requirements are appropriate when placement would be invalid. Document that product decision before converting constraints. Avoid setting `spec.nodeName` merely to bypass a confusing scheduler event: direct assignment changes which scheduler checks execute and can place the Pod somewhere the intended policy would have rejected.
-
-When reading FailedScheduling events, separate each reported filter failure. The event summarizes rejected candidates; its counts do not establish that every node failed for the same reason. Compare node labels, taints and requested resources before choosing a configuration change.
+A node label is useful for choosing a class of machines. It does not tell the scheduler how many devices are free. If a real Pod needs a GPU, it generally requests an advertised resource from the device integration as well as any desired node selection. More nodes without a required label, storage topology, or device can leave the same Pod pending.
 
 ## Check your understanding
 
 <details>
 
-<summary>A node has the highest preferred-affinity score but lacks a required label. Can it win?</summary>
+<summary>The Pod has PodScheduled=True but is still Pending. Should you remove its placement constraints?</summary>
 
-No. Required constraints remove it from the feasible candidate set before scoring. Diagnose the failed hard condition first; adjusting score weights cannot revive a node that does not pass Filter.
+It already has an assignment. Check its container and volume states and the kubelet’s events. Image pulls, volume attachment, and networking can keep startup waiting after scheduling succeeded.
 
 </details>
-
-Next, examine how scheduler replicas coordinate leadership. Multiple control-plane processes improve availability only when their coordination and failure assumptions are explicit.

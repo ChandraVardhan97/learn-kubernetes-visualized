@@ -1,13 +1,13 @@
 ---
 lessonId: "m20-l01"
 title: "Capstone: recover a stateless app"
-description: "Find the broken selector through evidence and restore the request path."
+description: "Recover a stateless app by identifying the failed link between a Service and its ready Pods."
 level: "advanced"
 module: "m20"
 order: 1
 minutes: 16
 prerequisites: ["m11-l03", "m17-l03", "m19-l03"]
-objectives: ["Trace DNS, Service selection, EndpointSlices and application reachability.", "Repair the smallest proven cause without restarting healthy replicas.", "Verify recovery with both control-plane state and a real client request."]
+objectives: ["Collect Pod, Service, and endpoint evidence for the same request.", "Repair the selector that excludes the intended healthy backends.", "Demonstrate recovery from the original client and record what changed."]
 concepts: [{"id": "m20-l01-stateless-failure", "title": "Ready Pods can sit outside a Service selector", "scene": "m20-l01-stateless-failure"}, {"id": "m20-l01-stateless-recovery", "title": "Repair one relationship, then verify a real request", "scene": "m20-l01-stateless-recovery"}]
 sources: [{"title": "Debug Services", "url": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/"}, {"title": "EndpointSlices", "url": "https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/"}, {"title": "Service selectors", "url": "https://kubernetes.io/docs/concepts/services-networking/service/"}]
 lab: "m20"
@@ -17,23 +17,17 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a healthy Pod is one link in the request path
+## <span id="mental-model-a-healthy-pod-is-one-link-in-the-request-path" aria-hidden="true" />Investigate a healthy app that clients cannot reach
 
-This capstone deploys two nginx replicas, a Service and a BusyBox client. The application Pods are healthy, but the Service intentionally selects the wrong label. DNS can resolve the Service name and the Service can have a stable virtual IP while no matching backends are available. The failure is therefore neither proof that DNS is broken nor proof that nginx needs restarting. The task is to identify the first broken relationship using evidence.
+You are on call for a small web app. The Deployment reports ready Pods, but a client in the same namespace cannot load the page. Your task is to find the first failed link in the request path, change only what is needed, and prove the page is reachable again. You will use the Pod and Service concepts from foundations together with the evidence-gathering workflow from the debugging modules.
 
-The path to examine is client name resolution, Service configuration, selector-to-Pod matching, EndpointSlice contents, target port and application response. Different networking implementations realize Service forwarding differently, so avoid assuming every node always uses a particular iptables chain. EndpointSlices and the declared Service/Pod relationship are the portable control-plane evidence. A request from the actual client confirms whether the assembled path works in this environment.
+Start by checking that you are in the disposable cluster and using the `kv-lab` namespace. Use the failure scene to predict which evidence shows whether the Pods are ready and whether the Service routes to them. In this incident, a DNS answer can succeed because the Service exists. The request can still fail because its backend set is empty.
 
 <Scene id="m20-l01-stateless-failure" />
 
-## Walkthrough: narrow the investigation before changing state
+## <span id="walkthrough-narrow-the-investigation-before-changing-state" aria-hidden="true" />Find and repair the selector mismatch
 
-Read `stateless.yaml` from the m20 download. The Deployment template labels Pods `app=m20-web`, while the Service selector initially uses `app=broken-selector`. The EndpointSlice controller therefore has no matching ready application backends for that Service. A request can fail with a timeout or another network error depending on implementation; the specific client error is less useful than the selector and backend evidence. Readiness and endpoint publication still matter after the selector is corrected.
-
-The script first waits for the Deployment rollout and the client Pod, then prints Pod, Service and EndpointSlice observations. It confirms the request does not succeed, patches only the Service selector, and retries the client request for a bounded period. This separation captures before-and-after behavior and allows normal controller and networking propagation. The loop's budget is a local test bound, not a measured recovery objective or guarantee for other clusters.
-
-<Scene id="m20-l01-stateless-recovery" />
-
-This is the intentionally broken Service from the exercise. Save and inspect the complete provided files rather than applying only this object without its Pods and client.
+The example Service is intentionally broken. It selects `app: broken-selector`. The Deployment’s Pods carry `app: m20-web`. Inspect the labels and the Service selector together, and use EndpointSlices to check which eligible addresses are actually published. Try the request from `m20-client` using `http://m20-web`. Note the result rather than relying only on status columns.
 
 ```yaml
 apiVersion: v1
@@ -51,6 +45,14 @@ spec:
       targetPort: 80
 ```
 
+Predict what will change after replacing the Service selector with `app: m20-web`. The Service name and existing healthy Pods can stay in place. The endpoint controller can publish matching backend addresses. Wait for those endpoints to be eligible, then repeat the original request. Trace the change in the recovery scene.
+
+<Scene id="m20-l01-stateless-recovery" />
+
+## <span id="practice-produce-a-short-recovery-record" aria-hidden="true" />Record the recovered request path
+
+Download all module files and follow the [stateless capstone](/labs/#m20-stateless). This script sets up the deliberate failure, proves the request fails, repairs the selector, and verifies the response. Pause to predict before following the solution, or run the guided stages described in the lab. Keep a short record of the original symptom, the Pods’ actual labels, the correction, the EndpointSlice evidence, and the response seen by the same client.
+
 ```bash
 # Download all m20 files first, then run only this investigation.
 bash capstone-stateless.sh
@@ -61,26 +63,16 @@ kubectl --context kind-kv-lab -n kv-lab get endpointslices -l kubernetes.io/serv
 kubectl --context kind-kv-lab -n kv-lab exec m20-client -- wget -qO- -T 3 http://m20-web
 ```
 
-## Practice: produce a short recovery record
+## <span id="pitfalls-avoid-fixing-the-symptom-by-changing-unrelated-layers" aria-hidden="true" />Fix the resource that owns the setting
 
-Run the [m20 local exercise](/labs/#m20) using `capstone-stateless.sh` if you want this investigation independently; `run.sh` runs all three capstones. Record the initial Pod readiness, the incorrect selector, absence of usable selected backends, the failed request, the corrected selector and the successful request. These facts support a precise conclusion: this failure came from a Service-to-Pod selection mismatch and was repaired by aligning that relationship.
-
-For a second investigation, discuss a different failure without mixing it into the primary result. A wrong targetPort can leave endpoints present while traffic fails. A readiness failure can remove otherwise matching Pods from usable backends. A NetworkPolicy can block an otherwise correct Service path if the networking implementation enforces it. Use a new hypothesis and evidence set for each change; applying several repairs at once makes the cause ambiguous.
-
-## Pitfalls: avoid fixing the symptom by changing unrelated layers
-
-Restarting healthy Pods may accidentally change timing but leaves the wrong selector wrong. Deleting the Service can change its assigned identity and disrupt clients unnecessarily. Replacing an image does not repair a label mismatch. A direct Pod-IP request can help isolate the application, but success on that path does not prove Service DNS or forwarding works. Preserve enough evidence to explain why the selected repair follows from the observed failure.
-
-The lab uses a disposable cluster and does not validate external ingress, cloud load balancers, production DNS, TLS termination or multi-zone failover. Do not generalize a successful BusyBox request into a platform availability claim. If you extend the exercise, add one boundary at a time and define what its health observation proves.
+Restarting already-ready Pods would leave the wrong selector in place. Relabeling those Pods by hand could produce a temporary match and leave the Deployment template wrong for future Pods. Fix the configuration relationship that caused the incident, and check that it still works after a healthy copy is replaced if you want to go further.
 
 ## Check your understanding
 
 <details>
 
-<summary>DNS resolves and both nginx Pods are Ready, but the Service has no usable endpoints. What relationship should you inspect first?</summary>
+<summary>The repaired Service now has endpoint addresses. What is the strongest final check?</summary>
 
-Compare the Service selector with actual Pod labels and readiness evidence. DNS resolution identifies the Service, while Pod readiness describes the Pods; neither proves the Service selected those Pods. The intentional mismatch in this exercise is visible directly in those fields.
+Request the original URL from `m20-client` and verify the expected content. Endpoint addresses show that the mapping recovered. The same client’s response exercises DNS, forwarding, and the backend together.
 
 </details>
-
-Next, recover data rather than connectivity. The stateful capstone requires a backup outside the cluster and a deliberate delete-and-restore sequence before Pod replacement can prove persistence.

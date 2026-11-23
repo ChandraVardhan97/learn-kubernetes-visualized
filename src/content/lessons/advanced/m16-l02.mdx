@@ -1,13 +1,13 @@
 ---
 lessonId: "m16-l02"
 title: "Build an idempotent operator"
-description: "Reconcile WebApp intent into stable children and honest status."
+description: "Reconcile one WebApp into ordinary Kubernetes resources and verify that repeated runs preserve identity."
 level: "advanced"
 module: "m16"
 order: 2
 minutes: 16
 prerequisites: ["m16-l01"]
-objectives: ["Trace the host Python operator through each child write.", "Explain why repeating reconciliation preserves identity.", "Distinguish processed generation from workload readiness."]
+objectives: ["Derive child resources from the current WebApp specification.", "Explain why reconciliation must tolerate a crash between writes.", "Verify generated resource identity and status across repeated passes."]
 concepts: [{"id": "m16-l02-operator-derive", "title": "WebApp intent becomes ordinary resources", "scene": "m16-l02-operator-derive"}, {"id": "m16-l02-operator-status", "title": "Identity is stable while observation advances", "scene": "m16-l02-operator-status"}]
 sources: [{"title": "Operator pattern", "url": "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"}, {"title": "Controllers", "url": "https://kubernetes.io/docs/concepts/architecture/controller/"}, {"title": "Server-side apply", "url": "https://kubernetes.io/docs/reference/using-api/server-side-apply/"}]
 lab: "m16"
@@ -17,23 +17,17 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: write a comparison, not an installation script
+## <span id="mental-model-write-a-comparison-not-an-installation-script" aria-hidden="true" />How a WebApp becomes running resources
 
-The teaching operator reads WebApps in the named disposable namespace and derives a ConfigMap plus a Deployment for each one. The ConfigMap contains `index.html` from spec.message; the Deployment uses spec.replicas and mounts that ConfigMap into nginx's document directory. Stable child names come from the WebApp name. A second reconcile pass finds the same intended children rather than creating another uniquely named web server.
+A user changes a WebApp from one replica to two. They expect that edit to become a Deployment change, and they expect recovery if a managed child is deleted. An **operator** combines Kubernetes APIs and controller logic to manage an application or operational process. Its **reconcile loop** reads desired and observed state and makes changes that move the system toward the goal.
 
-Idempotence means repeated reconciliation converges to the same intended resource relationships despite retries and partial success. It does not require every HTTP request to be absent or every resourceVersion to remain unchanged. The useful identity check is that a Deployment UID stays stable when no replacement is required. Status updates and field-management metadata can still change. A controller should avoid unnecessary writes where practical, but correctness cannot depend on receiving exactly one trigger.
+In this lab the WebApp holds a replica count and a message. The reconciler derives a Deployment, Service, and ConfigMap from those fields and its conventions. A **repeatable or idempotent** reconciliation can run again and reach the same intended state. It can find an existing object, check ownership, and update the relevant fields instead of creating duplicates. The scene shows which child changes when you edit the parent’s specification.
 
 <Scene id="m16-l02-operator-derive" />
 
-## Walkthrough: each write is its own commit boundary
+## <span id="walkthrough-each-write-is-its-own-commit-boundary" aria-hidden="true" />Recover after writing only some children
 
-Read `webapp-reconciler.py` from the m16 download before running it. It calls kubectl with an explicit context and namespace, verifies the disposable cluster, lists WebApps, computes desired child objects, refuses to adopt an existing unrelated child, and applies each child using manager `kv-webapp-operator`. It then reads the Deployment and patches the WebApp status subresource with observedGeneration and readyReplicas. Authentication and TLS are delegated to kubectl rather than reimplemented in Python.
-
-These operations are not one transaction. A crash can leave the ConfigMap created before the Deployment exists, or both children present before status is updated. The next pass must reuse the successful partial work. When a child exists under the expected name, the operator checks owner identity before applying it; equal names do not establish permission to take over somebody else's resource. SSA conflicts also remain visible because the example deliberately does not force ownership.
-
-<Scene id="m16-l02-operator-status" />
-
-The custom resource is a compact API for desired behavior. Normal Kubernetes controllers still implement Deployment rollout, replica replacement and Pod startup. This is why the operator can stay small while the application lifecycle remains asynchronous.
+Each Kubernetes object write has its own outcome. Suppose the reconciler writes the ConfigMap and Deployment, then exits before writing the Service. The next pass can discover both surviving children and complete the missing write. Status tells the reader what the reconciler observed at a point in time. A successful change to desired replicas can precede the availability of the new Pods.
 
 ```yaml
 apiVersion: labs.kv.example/v1alpha1
@@ -48,6 +42,12 @@ spec:
   message: repeated-reconcile-is-safe
 ```
 
+<Scene id="m16-l02-operator-status" />
+
+## <span id="practice-observe-convergence-twice" aria-hidden="true" />Run reconciliation again and compare UIDs
+
+Start with the module resources applied. Use the example WebApp spec for a change to two replicas. Run the lab script once and wait for the generated Deployment. Record its UID. Then run three more passes and read the UID and WebApp status again. An unchanged UID supports that the Deployment was kept in place during reconciliation. Inspect the replica count and the child resources too, since UID alone cannot establish that every desired field was applied.
+
 ```bash
 # Run after installing the m16 CRD and resources.
 python3 webapp-reconciler.py --once
@@ -58,26 +58,18 @@ kubectl --context kind-kv-lab -n kv-lab get deployment m16 -o jsonpath='{.metada
 kubectl --context kind-kv-lab -n kv-lab get webapp m16 -o yaml
 ```
 
-## Practice: observe convergence twice
+In the [operator lab](/labs/#m16), deliberately remove a generated object after a good run. Run the reconciler again to check that the missing child returns while existing children stay owned and intact.
 
-Run the [m16 local exercise](/labs/#m16). Expect a ConfigMap and Deployment owned by the WebApp, then ready nginx Pods after normal rollout. Compare the child UID before and after repeated reconciliation. Change spec.replicas to two, run the operator again, and wait for the Deployment's rollout before checking WebApp status. Because status is sampled during a reconcile pass, run one more pass after readiness if you want its readyReplicas observation to catch up.
+## <span id="pitfalls-understand-the-deliberate-omissions" aria-hidden="true" />What a deployed operator needs beyond the lab
 
-Inspect the actual mounted page with a request from a Pod or a local port-forward. ConfigMap volume updates propagate asynchronously; this example does not restart Pods by hashing the ConfigMap into the Pod template. A successful API patch therefore does not prove every server has already observed new content. Document the intended refresh behavior if you extend the API to applications that read configuration only once at startup.
-
-## Pitfalls: understand the deliberate omissions
-
-This operator is a host-run, dependency-free polling demonstration. It does not provide informer caches, a rate-limited workqueue, multi-replica leader election, rich conditions, admission defaulting or external-resource finalizers. It uses the host's Kubernetes credentials, so its safety checks are not a substitute for production least-privilege RBAC. It exits on an error rather than isolating every resource failure into a robust queue. These boundaries make the mechanism inspectable and identify the engineering needed before operating a shared platform.
-
-Inspect status after the final reconcile pass rather than treating the first printed success line as a readiness assertion. The process can successfully apply both children while the Deployment controller is still starting its first Pod. Its sampled readyReplicas can also describe Pods from an earlier Deployment generation. A production Ready condition must check the child's observed generation and relevant rollout conditions as well as the parent generation; this minimal status does not prove current-revision readiness.
+The lab script is a polling exercise you run from your machine. A deployed operator usually needs stable API permissions, proper watches, retries, pacing, concurrent update handling, and observable conditions. If it calls an external service, test what happens when the service fulfills a request but the controller times out before seeing the reply. Stable ownership and idempotent operations matter more than the number of loop iterations.
 
 ## Check your understanding
 
 <details>
 
-<summary>The operator crashes after creating the ConfigMap. Should the next run delete it and start over?</summary>
+<summary>The reconciler wrote two children before a crash. Should its next pass delete them and replay the original installation?</summary>
 
-No. With a stable name and matching owner UID, the next pass can reuse or update it, create the missing Deployment, and refresh status. Deleting successful partial work creates unnecessary disruption and can be unsafe for resources holding data.
+It can read the current WebApp and each surviving child, update any owned fields that differ, and create the remaining child. That keeps working resources stable and recovers from a partial pass.
 
 </details>
-
-Next, delete a generated child and observe repair. Then delete the parent and distinguish garbage collection from active operator cleanup.

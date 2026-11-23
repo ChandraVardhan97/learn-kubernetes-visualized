@@ -2,7 +2,7 @@
 {
   "lessonId": "m10-l02",
   "title": "DaemonSets, Jobs, and CronJobs",
-  "description": "Choose per-node presence or finite completion, then design retries and schedules for duplicate execution.",
+  "description": "Choose between a system agent on each node, a one-off task, and a scheduled batch task.",
   "level": "intermediate",
   "module": "m10",
   "order": 2,
@@ -11,9 +11,9 @@
     "m10-l01"
   ],
   "objectives": [
-    "Explain DaemonSet coverage on eligible nodes",
-    "Configure bounded Job retries and cleanup",
-    "Design CronJob work for missed or duplicate schedules"
+    "Explain how a DaemonSet responds when an eligible node joins the cluster.",
+    "Read Job completion, retry, and deadline behavior.",
+    "Explain how CronJob timing and concurrency affect the application code."
   ],
   "concepts": [
     {
@@ -54,17 +54,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: a replica can mean a node agent or a unit of completed work
+## <span id="mental-model-a-replica-can-mean-a-node-agent-or-a-unit-of-completed-work" aria-hidden="true" />Match the controller to the work
 
-A Deployment maintains a desired number of interchangeable long-running Pods. A **DaemonSet** instead maintains a Pod on each eligible node, commonly for log collection, network agents or node monitoring. Adding an eligible worker creates another placement opportunity; removing a worker removes that instance. Node selectors, affinity and taints determine eligibility, so “every node” is shorthand for every node the DaemonSet is configured and allowed to use.
+A cluster needs a log collector on every worker, a report generated once today, and a fresh report every morning. Each is a workload, but success means something different for each.
 
-DaemonSet Pods are still Pods with requests, security settings and lifecycle behavior. They consume node capacity, can fail probes and can be updated. The controller can automatically add certain tolerations appropriate to daemon workloads, but that does not justify making every node agent privileged. A log collector that needs host files has a different access boundary from an application metrics exporter that only needs an API. State exactly what host access the agent requires before choosing mounts and privileges.
+A **DaemonSet** aims to run a Pod on every eligible node, or on a subset selected by labels and other constraints. A log collector often needs one copy per node because it reads that node’s logs. When a new eligible node joins, the DaemonSet controller creates a Pod for it. Use the node coverage scene to see why adding a node can create a new Pod even though no replica number was edited.
 
 <Scene id="m10-l02-daemon" />
 
-## Walkthrough: completion needs a different controller
+## <span id="walkthrough-completion-needs-a-different-controller" aria-hidden="true" />Run one report to completion
 
-A **Job** manages finite work until the requested completions are achieved or failure criteria end it. `restartPolicy: Never` makes failed containers visible as failed Pods, while the Job controller can create replacements within its retry policy. `OnFailure` allows container restart within a Pod for suitable workloads. Neither option gives exactly-once business execution. A process can write to an external system, lose connectivity before acknowledging completion, and then be retried.
+A **Job** runs a task to completion. It creates Pods, tracks their successful completions, and can retry failures within its policy. The following Job runs a command, writes a timestamp and marker, then exits successfully. `restartPolicy: Never` lets you see separate Pods for retry attempts. `backoffLimit` bounds retries, `activeDeadlineSeconds` bounds the Job’s running time, and the TTL cleans up finished work after 600 seconds. For a real report, store the output where it will still be available after the Pod is gone.
 
 ```yaml
 apiVersion: batch/v1
@@ -84,13 +84,11 @@ spec:
           command: ["sh", "-c", "date -u; echo report-complete"]
 ```
 
-For parallel work, Job `parallelism` controls concurrent Pods and `completions` controls required successful completions under the chosen completion mode. Indexed Jobs give each completion an index, useful for partitioned datasets. Partition identity still needs idempotent writes or deduplication in the destination. Logging a completion message is not a durable business transaction record, and the controller cannot infer whether an external side effect happened before a crash.
-
-A **CronJob** creates Jobs according to a schedule. Its `jobTemplate` describes the Job, while `concurrencyPolicy` controls overlap among Jobs from that CronJob. `Allow` permits overlap, `Forbid` skips new work when a previous Job is still active, and `Replace` replaces the active run. This policy does not coordinate unrelated CronJobs. `startingDeadlineSeconds` limits how late a missed run may start, and `.spec.timeZone` makes the intended timezone explicit. Suspension pauses future scheduling but does not automatically erase active work.
-
 <Scene id="m10-l02-completion" />
 
-## Practice: inspect ownership and durable results
+## <span id="practice-inspect-ownership-and-durable-results" aria-hidden="true" />Check Job results and node coverage
+
+Save the file as `report-once.yaml`. Compare the Job’s completion status with the Pod’s phase and read the output. Then list a DaemonSet already in the cluster and compare its assigned Pods with eligible nodes. For an exercise that uses both ownership and workload status, use the [workload management lab](/labs/#m10).
 
 ```bash
 kubectl apply -f report-once.yaml
@@ -102,24 +100,21 @@ kubectl get daemonsets -A
 kubectl get pods -A -o wide
 ```
 
-Expect the Job's succeeded count to reach one for this finite command. The Pod can show Completed rather than Running; that is healthy for a successful Job. For a failure exercise, create a separate Job whose command exits with status 1 and observe its bounded retries and eventual failure. Do not repeatedly reapply the same completed Job expecting another run; create a new named Job or use `kubectl create job --from=cronjob/NAME RUN_NAME` for an installed CronJob.
+## <span id="pitfalls-schedules-are-approximate-triggers" aria-hidden="true" />Plan for missed or overlapping scheduled runs
 
-Use the [workload lab](/labs/#m10) to compare a finite Pod with a managed Job. For a scheduling extension, write down what should happen if a one-minute CronJob takes three minutes with `Forbid`: not every scheduled time will become a completed report. Decide whether the business requirement is “latest result,” “one result per interval,” or “process every queued item,” then design durable work tracking accordingly.
+A **CronJob** creates Jobs according to a schedule. If a new run comes due while the previous one is active, `Allow` permits overlap, `Forbid` skips a concurrent run, and `Replace` replaces the active Job with a new one. These policies apply to Jobs created by the same CronJob. Check the time zone used for the schedule and decide how late a missed run may start.
 
-## Pitfalls: schedules are approximate triggers
-
-Controller downtime, clock assumptions and long work duration can produce missed or duplicate scheduling situations. CronJob documentation explicitly calls for idempotent Jobs. Use a stable work key such as a reporting interval and a destination transaction or deduplication record. A node agent also needs bounded resources: a crashing log collector should not consume the entire worker while attempting to report another application's failure.
+A CronJob can miss a run or create more than one Job for a scheduled time in some conditions. Job retries can also repeat work after a partial failure. Make the task safe to repeat. One report generator might write to a path keyed by the report’s date and replace the completed file atomically after a successful run.
 
 ## Check your understanding
 
 <details>
-<summary>A Job writes a payment record, crashes before exiting successfully, and is retried. Does backoffLimit prevent a duplicate payment?</summary>
 
-No. Backoff limits retry count; it does not make the external side effect atomic with Kubernetes completion status. Use an idempotency key or transactional application protocol so repeating the unit of work has the intended single business effect. The controller manages execution attempts rather than business exactly-once semantics.
+<summary>A daily report usually takes 10 minutes but sometimes runs past the next scheduled time. What does Forbid protect, and what do you still need to handle?</summary>
+
+It prevents the same CronJob from starting an overlapping run. That can mean skipping a report at its scheduled time. The report code still needs to handle retries and partial results safely, and the operator needs a way to see missing outputs.
 
 </details>
-
-Next, terminate long-running workloads deliberately and distinguish an ordinary retry from a voluntary maintenance disruption.
 
 ## Primary documentation
 

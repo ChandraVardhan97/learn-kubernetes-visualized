@@ -2,7 +2,7 @@
 {
   "lessonId": "m11-l01",
   "title": "Authentication, RBAC, and ServiceAccounts",
-  "description": "Trace an API identity through short-lived workload credentials and additive authorization rules.",
+  "description": "Give a workload its own Kubernetes identity and verify which API actions it can perform.",
   "level": "intermediate",
   "module": "m11",
   "order": 1,
@@ -11,9 +11,9 @@
     "m10-l03"
   ],
   "objectives": [
-    "Separate authentication from authorization and admission",
-    "Grant narrow namespace permissions through RBAC bindings",
-    "Explain projected ServiceAccount token audience, lifetime and rotation"
+    "Follow a workload credential through authentication to a ServiceAccount identity.",
+    "Build a namespaced Role and bind it to the intended subject.",
+    "Check allowed and denied operations without displaying the token."
   ],
   "concepts": [
     {
@@ -64,19 +64,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: establish identity, then evaluate the requested action
+## <span id="mental-model-establish-identity-then-evaluate-the-requested-action" aria-hidden="true" />How the API identifies and authorizes a caller
 
-**Authentication** answers who is making an API request. A cluster can accept client certificates, bearer tokens or integrations with identity providers, depending on configuration. Human access commonly uses kubeconfig credentials or an exec-based login integration. Workloads should use a purpose-specific **ServiceAccount**, a namespaced identity represented as `system:serviceaccount:NAMESPACE:NAME`. The ServiceAccount object is not itself a human login and does not automatically grant application administration privileges.
+A reporting app needs to list Pods in the `learning` namespace. It should be able to read their status, and that is the extent of its job. When it sends a request, the API server first authenticates it. **Authentication** establishes who is calling using a credential the server trusts. **Authorization** evaluates what that identity is allowed to do for this particular request.
 
-**Authorization** evaluates whether that authenticated identity may perform a particular action on a particular API resource. **Admission** then validates or mutates permitted object operations according to cluster rules. A request can authenticate successfully, pass RBAC and still fail admission because the proposed Pod is forbidden by security policy. Conversely, no amount of correct Pod YAML repairs an identity lacking permission to create Pods. Keep these failure boundaries distinct when reading an API error.
-
-By default, eligible Pods receive projected ServiceAccount credentials. Modern **bound tokens** are time-limited, audience-bound and associated with the relevant workload identity and object binding. The kubelet refreshes projected credentials; applications reading a token file must tolerate rotation instead of caching the first contents forever. Audience determines which relying service should accept the token. A token for the Kubernetes API is not automatically suitable for an external cloud API; workload identity integrations require explicit trust and audience configuration.
+A **ServiceAccount** is a namespaced Kubernetes identity that a Pod can use. The Pod chooses it with `spec.serviceAccountName`. In a modern cluster, a Pod that mounts the standard API credentials receives a projected, time-limited token. The kubelet refreshes it before expiration. Projected tokens have an intended audience and are typically bound to the Pod. In the first scene, trace the credential to the resulting name `system:serviceaccount:learning:pod-reader`.
 
 <Scene id="m11-l01-identity" />
 
-## Walkthrough: bind one narrow role to one workload identity
+## <span id="walkthrough-bind-one-narrow-role-to-one-workload-identity" aria-hidden="true" />Grant read access in one namespace
 
-A **Role** describes namespaced permissions, and a **RoleBinding** grants those permissions to subjects in the binding's namespace. A ClusterRole can describe reusable permissions, including cluster-scoped resources. Referencing a ClusterRole from a RoleBinding grants its applicable namespaced permissions in that binding namespace; a ClusterRoleBinding grants at cluster scope. Names and locations matter as much as the verb list.
+**Role-based access control**, or RBAC, describes permitted API actions. The example Role allows `get`, `list`, and `watch` on `pods` in its namespace. The empty API group means the core API. The RoleBinding grants those rules to the `pod-reader` ServiceAccount in `learning`. A ClusterRole can describe permissions for cluster-scoped resources or be reused via bindings. A RoleBinding limits the grant to its own namespace. A ClusterRoleBinding can grant applicable permissions cluster-wide.
 
 ```yaml
 apiVersion: v1
@@ -107,11 +105,13 @@ roleRef:
   name: read-pod-state
 ```
 
-Apply all three resources in `learning` or change the subject namespace and command namespace together. A workload selects this identity using `spec.serviceAccountName: pod-reader`. The role grants Pod observation, not Pod deletion, Secrets access or container exec. Subresources such as `pods/log` and `pods/exec` are distinct resource permissions and should be granted only when needed.
+RBAC permissions are additive. A second binding can grant an action that this Role omits. In the scene, try listing Pods, deleting one, and accessing a resource governed by a different rule. Check the verb, resource, namespace, and identity for every request.
 
 <Scene id="m11-l01-authorization" />
 
-## Practice: verify permissions without printing credentials
+## <span id="practice-verify-permissions-without-printing-credentials" aria-hidden="true" />Test allowed and denied operations
+
+Create `learning` if needed in your disposable cluster. Save the manifest as `pod-reader-rbac.yaml` and run the checks with a lab user allowed to impersonate the ServiceAccount. Expect listing Pods to succeed, deletion to be denied, and reading Secrets to be denied with only the grant shown. If an action returns an unexpected answer, inspect other bindings and check that the command targets the right identity and namespace.
 
 ```bash
 kubectl apply -n learning -f pod-reader-rbac.yaml
@@ -124,24 +124,21 @@ kubectl auth can-i get secrets -n learning \
   --as=system:serviceaccount:learning:pod-reader
 ```
 
-Expect yes for list Pods and no for deletion or Secrets, assuming no other bindings grant those actions. An impersonation-forbidden error means your current identity cannot run that check; it is not the same as the ServiceAccount being denied the requested resource action. Use an administrator-provided access review or an actual restricted workload test in that situation. Avoid placing bearer tokens into logs, command transcripts or source files to make the experiment easier.
+In the [permissions lab](/labs/#m11), record the allowed and denied results. Add only a documented permission if the application needs a new API operation, then repeat the original checks.
 
-RBAC permissions are **additive**. A second RoleBinding can add deletion permission, and a narrow role cannot subtract it. There is no RBAC deny rule that overrides an existing allow. When observed access is broader than expected, examine group membership, all matching bindings and cluster-wide grants. Wildcards and binding-management permissions can have effects beyond the obvious resource list, so prefer explicit verbs and resources.
+## <span id="pitfalls-unnecessary-credentials-enlarge-the-boundary" aria-hidden="true" />Mount credentials only where needed
 
-## Pitfalls: unnecessary credentials enlarge the boundary
-
-A workload that never calls the Kubernetes API generally does not need an automatically mounted API token. Set `automountServiceAccountToken: false` where appropriate, then verify the Pod spec and filesystem. That setting reduces automatic credential exposure; it does not constrain every other credential a workload can acquire. Access to create Pods can also allow indirect access to namespace resources through chosen ServiceAccounts or mounted Secrets unless admission and RBAC are designed together.
+If a Pod only serves HTTP and never calls the Kubernetes API, set `automountServiceAccountToken: false` where appropriate. The app still runs under its workload configuration and no default API token is mounted. Keep credentials out of diagnostic output. Authorization checks can demonstrate the grant without reading the token.
 
 ## Check your understanding
 
 <details>
-<summary>A read-only Role is bound to a ServiceAccount that also has an administrator ClusterRoleBinding. Does the read-only role restrict it?</summary>
 
-No. The effective permissions include the administrator grant because RBAC unions allowed actions from applicable bindings. Remove or narrow the broad binding if it is unintended, then verify the effective permissions again. Adding a restrictive-looking role cannot negate an existing allow.
+<summary>The reporting job moves to a namespace called reports and uses a ServiceAccount also named pod-reader. Does the existing binding apply?</summary>
+
+The namespace is part of the identity. `system:serviceaccount:reports:pod-reader` differs from the existing subject in `learning`. If the job still needs to list Pods in `learning`, bind the new subject to the intended Role in that namespace.
 
 </details>
-
-Use the [security lab](/labs/#m11) to verify the identity and namespace boundary. Next, constrain what an authorized Pod creator may ask the node to execute.
 
 ## Primary documentation
 

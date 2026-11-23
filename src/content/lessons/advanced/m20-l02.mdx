@@ -1,13 +1,13 @@
 ---
 lessonId: "m20-l02"
 title: "Capstone: recover stateful data"
-description: "Back up a quiescent file, delete it, restore it, and prove persistence."
+description: "Restore a deliberately deleted file and prove that the restored data persists after the consumer Pod is replaced."
 level: "advanced"
 module: "m20"
 order: 2
 minutes: 16
 prerequisites: ["m10-l03", "m18-l03", "m20-l01"]
-objectives: ["Separate Pod replacement from restoration of deleted records.", "Verify an external backup and restored contents.", "State the consistency boundary and limits of the file-based exercise."]
+objectives: ["Distinguish deletion inside a persistent volume from loss of a Pod.", "Validate a host-side backup before copying it back.", "Compare the recovered bytes through the original and replacement Pods."]
 concepts: [{"id": "m20-l02-stateful-loss", "title": "Persistence preserves deletion as well as data", "scene": "m20-l02-stateful-loss"}, {"id": "m20-l02-stateful-restore", "title": "Restore bytes, then prove a new Pod sees them", "scene": "m20-l02-stateful-restore"}]
 sources: [{"title": "Persistent volume lifecycle", "url": "https://kubernetes.io/docs/concepts/storage/persistent-volumes/"}, {"title": "Volumes and persistence", "url": "https://kubernetes.io/docs/concepts/storage/volumes/"}, {"title": "Volume snapshots", "url": "https://kubernetes.io/docs/concepts/storage/volume-snapshots/"}]
 lab: "m20"
@@ -17,23 +17,13 @@ kubernetesVersion: "1.37"
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: persistence also preserves mistakes
+## <span id="mental-model-persistence-also-preserves-mistakes" aria-hidden="true" />Distinguish Pod replacement from a deleted file
 
-A PersistentVolumeClaim lets a replacement Pod reconnect to storage beyond the old Pod's lifetime. This preserves useful files, but it also preserves an accidental deletion. Deleting and recreating the consumer Pod does not recreate a file removed from its mounted filesystem. Recovery needs a retained copy from before the loss and a procedure that restores it. This distinction is the central failure boundary of the stateful capstone.
+A worker writes an order record to `/data/orders.csv` on a persistent volume. Later the file is deleted by mistake. Recreating the Pod with the same claim leaves the data in its current state, including the missing file. Your task is to take a small backup before the loss, restore the data, and prove that a new Pod sees the recovered bytes. Crash and replacement recovery exercise different mechanisms from recovering an application record deleted on disk.
 
-The exercise writes one small CSV record to a PVC, captures a backup in the private host directory selected by `backup-path.py`, deliberately deletes the file, restores it with `kubectl cp`, and checks exact contents. It then replaces the Pod and checks the restored record again. The backup exists outside the cluster so destruction of the disposable cluster would not automatically remove that host file. Protect and clean up the host copy intentionally as part of the exercise lifecycle.
+The PVC below requests 64 MiB. The lab’s writer mounts that claim and writes a known fixture. The first scene lets you compare replacement with deletion inside the volume. Before running the loss step, record the expected value and the backup’s checksum.
 
 <Scene id="m20-l02-stateful-loss" />
-
-## Walkthrough: consistency is an explicit assumption
-
-The single writer completes its write before backup, and no concurrent writer changes the file during capture. That quiescent-file assumption makes a byte copy meaningful for this example. A database with concurrent transactions, multiple files, write-ahead logs and caches needs its supported backup or quiescing procedure. A storage snapshot may be crash-consistent without being application-consistent; the required guarantees depend on the application and snapshot implementation. Do not describe this CSV copy as a database backup.
-
-Read `capstone-stateful.sh`. It writes `order-42,confirmed`, verifies the captured backup bytes against that fixture before deleting the in-cluster file, confirms absence, then copies the backup into the mounted volume with `kubectl cp`. It compares exact restored content before and after Pod replacement, reporting byte counts and SHA-256 digests. The PVC remains while the consumer Pod is deleted and recreated from `data-consumer.yaml`. The data survives because the new Pod mounts the same claim, not because Kubernetes knows how to regenerate the order record.
-
-<Scene id="m20-l02-stateful-restore" />
-
-The PVC below requests a small dynamically provisioned volume using the environment's default StorageClass. ReadWriteOnce describes a supported access mode; it is not an application-level transaction lock or a guarantee of cross-node portability for local storage.
 
 ```yaml
 apiVersion: v1
@@ -50,6 +40,18 @@ spec:
       storage: 64Mi
 ```
 
+## <span id="walkthrough-consistency-is-an-explicit-assumption" aria-hidden="true" />Restore known bytes from a host backup
+
+The lab uses a single small fixture with no concurrent writer while the backup is captured. The script copies it out to a private host directory and checks the exact expected bytes. It deletes the file only after that check. A real database can have open transactions and internal buffers, so choose a database-supported backup procedure and test the recovery point before relying on it.
+
+The restore uses `kubectl cp` with a container image that has `tar`. It verifies the copied bytes against the host backup before removing the original Pod. The replacement mounts the same PVC, and the script reads the file again from inside that Pod, comparing length and checksum. Follow both checkpoints in the restore scene.
+
+<Scene id="m20-l02-stateful-restore" />
+
+## <span id="practice-make-each-recovery-claim-testable" aria-hidden="true" />Verify the file before and after replacement
+
+Use all files from the [stateful capstone](/labs/#m20-stateful). Run the staged procedure if you want to observe and diagnose each boundary. Record the original Pod UID and the recovered Pod UID, confirm the claim stayed bound, and compare file bytes at both checkpoints. The read-only follow-up commands display the synthetic fixture. In a real incident, prefer integrity evidence you can safely share over exposing private records.
+
 ```bash
 # Run in the downloaded m20 directory.
 bash capstone-stateful.sh
@@ -61,28 +63,16 @@ kubectl --context kind-kv-lab -n kv-lab get pvc m20 -o wide
 kubectl --context kind-kv-lab -n kv-lab get pod m20-data -o jsonpath='{.metadata.uid}{"\n"}'
 ```
 
-## Practice: make each recovery claim testable
+## <span id="pitfalls-data-integrity-needs-application-knowledge" aria-hidden="true" />Test the recovery your application needs
 
-Run the [m20 local exercise](/labs/#m20) using `capstone-stateful.sh`. Record five observations: the original record, the host backup, file absence after deliberate deletion, exact restored content, and the same content after a new Pod UID mounts the PVC. The script performs these assertions so a green result has a clear meaning. It does not measure restore throughput, loss under concurrent writes, database consistency or recovery from a failed storage node.
-
-The script restores this bounded fixture with `kubectl cp`, which requires `tar` inside the container; the pinned BusyBox image provides it. It compares byte counts and SHA-256 digests before and after Pod replacement. Its private host output defaults to an operating-system temporary directory outside the website assets. Move real backups to durable protected storage with a defined retention policy.
-
-Read the StorageClass, bound PV and reclaim policy before cleanup. A local provisioner can tie volume data to a particular node or container filesystem. Preserving a PVC while restarting its Pod tests a different failure than losing the node that stores its bytes. Deleting the PVC may trigger backend deletion according to reclaim policy and implementation. Keep the backup outside that deletion scope before removing storage resources.
-
-## Pitfalls: data integrity needs application knowledge
-
-A nonempty backup can still contain incomplete records. Checksums prove correspondence between bytes being compared, not that those bytes form a valid application state. For a real database, verify catalog integrity, transaction recovery, record counts or business invariants using its supported tools. Define whether restore overwrites existing records, merges them, or requires an empty target. Rehearse credentials and access to encrypted backups before an incident removes the original key service.
-
-An etcd restore can reconstruct the PVC object without reconstructing the volume's CSV file. Conversely, the host CSV backup cannot recreate RBAC, Service configuration or control-plane trust. Recovery is the assembly of several asset classes under a tested order. Keep the operator or GitOps controller from immediately reapplying conflicting old intent while that assembly is incomplete.
+A new Pod name or a ready status does not tell you whether it restored the intended data. Verify records that matter to the application and the time period you need. This exercise gives direct evidence for file recovery and persistence on the same claim. Recovering from a lost node, a lost volume, or an inconsistent database requires additional scenarios.
 
 ## Check your understanding
 
 <details>
 
-<summary>The CSV is deleted from the PVC, and the Pod is replaced. Why is the CSV still missing until restoration?</summary>
+<summary>The checksum matched in the first Pod just after restore. What does the second check add?</summary>
 
-The replacement mounts the same persistent filesystem, including its deletion. Persistence preserves current bytes and metadata; it does not keep an automatic historical version of every file. The external backup supplies the earlier record that the restore procedure writes back.
+It proves that a newly started consumer can mount the same claim and read the restored bytes. That helps catch a copy sent to the wrong directory or a value that existed only in the original container’s writable layer.
 
 </details>
-
-Next, recover declarative ownership itself. The final capstone coordinates GitOps intent, an operator's generated resources, conflict handling and garbage collection without making two controllers own the same field.

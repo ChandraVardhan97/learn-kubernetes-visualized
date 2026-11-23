@@ -2,7 +2,7 @@
 {
   "lessonId": "m13-l01",
   "title": "Kustomize and Helm",
-  "description": "Render reusable configuration into reviewable Kubernetes objects before creating a release.",
+  "description": "Render environment-specific Kubernetes objects and understand how Helm tracks a release.",
   "level": "intermediate",
   "module": "m13",
   "order": 1,
@@ -11,9 +11,9 @@
     "m12-l03"
   ],
   "objectives": [
-    "Choose overlays or chart values for a concrete configuration problem",
-    "Inspect rendered manifests before applying them",
-    "Explain Helm release history without treating templates as runtime controllers"
+    "Read a Kustomize overlay and identify the changes it makes to its base.",
+    "Explain how a Helm chart and values become Kubernetes objects.",
+    "Review the rendered manifests before submitting them to the API."
   ],
   "concepts": [
     {
@@ -63,19 +63,17 @@
 
 import Scene from '../../../components/Scene.astro';
 
-## Mental model: Kubernetes reconciles rendered objects, not your packaging intent
+## <span id="mental-model-kubernetes-reconciles-rendered-objects-not-your-packaging-intent" aria-hidden="true" />Make environment changes without copying manifests
 
-Plain manifests become difficult to maintain when staging and production share most fields but differ in replicas, configuration and image versions. **Kustomize** composes resources and applies structured transformations without turning the whole manifest into a text template. A base contains reusable Kubernetes objects; overlays reference that base and declare deliberate differences. `kubectl kustomize` renders the result, and `kubectl apply -k` sends the rendered objects to the API.
+You run the same API in a training namespace and in production. The two environments share a Deployment and Service, but production needs more replicas and a different approved image. Copying both YAML files starts out easy. Over time, a change may make it into only one copy. **Kustomize** lets you keep shared manifests in a base and apply a set of deliberate differences in each environment’s **overlay**.
 
-**Helm** packages templates and defaults into a chart, combines them with supplied values, and manages a named release. Template logic can generate several related resources for a configurable application. A chart is useful for distributing an application with an explicit configuration interface, while an overlay can be simpler for modifying a known set of manifests. They can be combined deliberately, but layering tools without a clear owner for each field can make the final configuration harder to explain.
-
-Neither Kustomize nor a rendered Helm template changes how the scheduler, Deployment controller or Service data plane works. The API receives ordinary resources. A syntactically valid rendering can still contain a broken selector, unsafe security settings or a Service targetPort that no process uses. Review the actual output rather than assuming a successful render proves application correctness.
+Kustomize reads resources and applies transformations such as a namespace change, image substitution, or patch. It produces ordinary Kubernetes manifests. Kubernetes receives those objects after rendering. In the first scene, trace which fields come from the base and which change when you pick the training overlay.
 
 <Scene id="m13-l01-overlay" />
 
-## Walkthrough: express a small environment change visibly
+## <span id="walkthrough-express-a-small-environment-change-visibly" aria-hidden="true" />Render and review a Kustomize overlay
 
-This `kustomization.yaml` assumes a base directory containing the module lab's `api` Deployment and Service. The patch target identifies the intended Deployment, and the image transformation identifies the original image name.
+This example expects an `api` Deployment in `base` and a training overlay under `overlays/training`. The image transformation changes the `nginx` tag. The patch replaces the existing `spec.replicas` field on the `api` Deployment with three. Render the final result first and inspect the changes. Server-side dry run checks what the API would accept for the current identity and policy. `kubectl diff` compares the proposed configuration with live resources and exits with code 1 when it finds changes.
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -104,13 +102,13 @@ kubectl apply -k overlays/training
 kubectl rollout status deployment/api -n learning --timeout=120s
 ```
 
-`kubectl diff` normally exits with status 1 when it finds differences; that is a meaningful review result rather than automatically a command failure. Server dry-run exercises available validation and admission, but it does not schedule Pods or prove an external dependency will respond. Inspect selectors, image identifiers, resource settings and generated configuration references in the rendered file. Keep rendered artifacts free of real Secret values before saving them to an ordinary build log.
+## <span id="practice-make-a-charts-configuration-contract-explicit" aria-hidden="true" />Install a Helm chart and inspect the release
+
+**Helm** packages templates and default values into a **chart**. Environment-specific values fill in parts of the templates, such as the replica count or image. An installed chart instance is a **release**. Helm records release revisions, which you can inspect after an install or upgrade. Try changing a value in the second scene and compare the rendered object with the chart input.
 
 <Scene id="m13-l01-chart-release" />
 
-## Practice: make a chart's configuration contract explicit
-
-A Helm chart typically includes `Chart.yaml`, default `values.yaml`, templates and optional dependencies. The chart version and application version describe different things: the package can change without changing the application binary. Values are inputs to templates, and supplied files or command-line settings can override defaults. Read the final values and rendered manifests for a release rather than assuming a committed default file is the effective configuration.
+The optional example needs your own local chart and `values-training.yaml`. `helm lint` checks the chart, `helm template` renders it for inspection, and `helm upgrade --install` creates or updates the release. Look at the rendered manifests as carefully as you would look at handwritten YAML. Examine the effective values and recorded manifest to confirm the release used the configuration you intended.
 
 ```bash
 # Optional extension: supply a local chart and values file first.
@@ -124,22 +122,19 @@ helm get values api -n learning --all
 helm get manifest api -n learning
 ```
 
-`helm get values --all` includes computed defaults as well as supplied overrides; without `--all`, the command normally shows supplied values. Review this output securely because values can contain credentials. Helm's wait behavior checks configured resource readiness according to the installed Helm version and options; waiting for ordinary Job completion also requires `--wait-for-jobs`. It is not a substitute for a user-facing smoke test. A release revision records deployment history, but a Helm rollback cannot reverse external side effects or make an incompatible database migration safe. Hooks and CRDs have additional lifecycle behavior, so inspect charts before installing them with broad permissions. Dependencies should be pinned and reviewed, including lock information where applicable.
+## <span id="pitfalls-multiple-writers-make-reproducibility-fragile" aria-hidden="true" />Track the inputs that produced the release
 
-## Pitfalls: multiple writers make reproducibility fragile
-
-A live manual edit can drift from the source overlay or chart values. Reapplying the source can overwrite that edit, while another controller such as an HPA can legitimately own replica count. Avoid forcing a fixed replicas value on every delivery when an autoscaler should manage it. Record one configuration source and field-ownership policy, then inspect diffs before reconciliation. A secret passed through `--set` can appear in command history and release metadata; use the approved credential workflow instead.
+The [application delivery lab](/labs/#m13) includes a runnable Kustomize baseline. Use a different environment or workload name for Helm practice so the tools do not both manage the same fields on the same objects. Pin the chart and image versions for real releases, and record the base and values used to produce them. A release name by itself cannot tell a teammate what was deployed.
 
 ## Check your understanding
 
 <details>
-<summary>Helm rendered successfully and the release command returned success. Has the API's real customer flow been verified?</summary>
 
-No. Rendering proves template evaluation, and release status covers particular resource checks. A wrong backend URL, missing permission or semantically broken application can still pass those boundaries. Run a targeted end-to-end smoke test and inspect the relevant telemetry before promoting the release.
+<summary>You change the training overlay to three replicas, but the running Deployment still shows two. What should you verify?</summary>
+
+Render the training overlay and check that it targets the correct Deployment and namespace. Then confirm it was applied. Rendering alone makes a local manifest and leaves the running object as it was.
 
 </details>
-
-Use the [delivery lab](/labs/#m13) to compare an overlay's rendered diff with the live resources. Next, scale replica count and node supply without introducing conflicting configuration writers.
 
 ## Primary documentation
 
