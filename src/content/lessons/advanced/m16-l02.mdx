@@ -21,13 +21,13 @@ import Scene from '../../../components/Scene.astro';
 
 A user changes a WebApp from one replica to two. They expect that edit to become a Deployment change, and they expect recovery if a managed child is deleted. An **operator** combines Kubernetes APIs and controller logic to manage an application or operational process. Its **reconcile loop** reads desired and observed state and makes changes that move the system toward the goal.
 
-In this lab the WebApp holds a replica count and a message. The reconciler derives a Deployment, Service, and ConfigMap from those fields and its conventions. A **repeatable or idempotent** reconciliation can run again and reach the same intended state. It can find an existing object, check ownership, and update the relevant fields instead of creating duplicates. The scene shows which child changes when you edit the parent’s specification.
+In this lab the WebApp holds a replica count and a message. The lab reconciler writes a ConfigMap for the page content and a Deployment for the requested replicas. A **repeatable or idempotent** reconciliation can run again and reach the same intended state. It can find an existing object, check ownership, and update the relevant fields instead of creating duplicates. The scene shows which child changes when you edit the parent’s specification.
 
 <Scene id="m16-l02-operator-derive" />
 
 ## <span id="walkthrough-each-write-is-its-own-commit-boundary" aria-hidden="true" />Recover after writing only some children
 
-Each Kubernetes object write has its own outcome. Suppose the reconciler writes the ConfigMap and Deployment, then exits before writing the Service. The next pass can discover both surviving children and complete the missing write. Status tells the reader what the reconciler observed at a point in time. A successful change to desired replicas can precede the availability of the new Pods.
+Each Kubernetes object write has its own outcome. Suppose the reconciler writes the ConfigMap and then exits before writing the Deployment. The next pass can find the existing ConfigMap and create the missing Deployment. Status tells the reader what the reconciler observed at a point in time. A successful change to desired replicas can precede the availability of the new Pods.
 
 ```yaml
 apiVersion: labs.kv.example/v1alpha1
@@ -68,8 +68,8 @@ The lab script is a polling exercise you run from your machine. A deployed opera
 
 <details>
 
-<summary>The reconciler wrote two children before a crash. Should its next pass delete them and replay the original installation?</summary>
+<summary>The reconciler wrote the ConfigMap but crashed before writing the Deployment. What should its next pass do?</summary>
 
-It can read the current WebApp and each surviving child, update any owned fields that differ, and create the remaining child. That keeps working resources stable and recovers from a partial pass.
+It can read the current WebApp and the existing ConfigMap, update owned fields if needed, and create the missing Deployment. That keeps working resources stable and recovers from a partial pass.
 
 </details>
