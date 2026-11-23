@@ -53,7 +53,7 @@ kubectl --context kind-kv-lab -n kv-lab get webapp m16 -o jsonpath='{.metadata.u
 kubectl --context kind-kv-lab -n kv-lab get configmap m16 -o jsonpath='{.metadata.ownerReferences}{"\n"}'
 # Delete only this generated, disposable ConfigMap.
 kubectl --context kind-kv-lab -n kv-lab delete configmap m16
-python3 operator.py --once
+python3 webapp-reconciler.py --once
 kubectl --context kind-kv-lab -n kv-lab get configmap m16 -o yaml
 ```
 

@@ -144,7 +144,8 @@ test('lab deep link keeps the solution closed until requested and copies the rep
  await expect(code).toBeVisible();
  await solution.getByRole('button', {name:'Copy code', exact:true}).press('Enter');
  await expect(solution.getByRole('status')).toHaveText('Copied');
- expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await code.textContent());
+ const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+ expect(clipboard.replaceAll('\r\n', '\n')).toBe((await code.textContent())?.replaceAll('\r\n', '\n'));
  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
  const download = page.waitForEvent('download');
@@ -164,11 +165,13 @@ test('copy preserves static commands and current interactive YAML', async ({page
   const snippet = pre.locator('..');
   await snippet.getByRole('button', {name: 'Copy code', exact: true}).press('Enter');
   await expect(snippet.getByRole('status')).toHaveText('Copied');
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
+  // Windows clipboard APIs can return CRLF for the same copied lines.
+  const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+  expect(clipboard.replaceAll('\r\n', '\n')).toBe(text?.replaceAll('\r\n', '\n'));
  }
 
  await page.goto('/labs/#setup');
- await copyBlock(page.locator('#setup pre').filter({hasText: 'kind create cluster'}));
+ await copyBlock(page.locator('#setup pre').filter({hasText: 'bash setup.sh && source ./lab-env.sh'}));
 
  await page.goto('/learn/intermediate/m07-l01/');
  await copyBlock(page.locator('pre.astro-code').first());

@@ -64,10 +64,10 @@ The WebApp CRD is established and WebApp m16 declares one replica. The reconcile
    ```bash
    (
      set -euo pipefail
-     python3 operator.py --once
+     python3 webapp-reconciler.py --once
      kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m16 --timeout=180s
      before=$(kubectl --context kind-kv-lab -n kv-lab get deployment m16 -o jsonpath='{.metadata.uid}:{.metadata.generation}')
-     python3 operator.py --iterations 2 --interval 1
+     python3 webapp-reconciler.py --iterations 2 --interval 1
      test "$(kubectl --context kind-kv-lab -n kv-lab get deployment m16 -o jsonpath='{.metadata.uid}:{.metadata.generation}')" = "$before"
      test "$(kubectl --context kind-kv-lab -n kv-lab get deployment m16 -o jsonpath='{.metadata.ownerReferences[0].uid}')" = "$(kubectl --context kind-kv-lab -n kv-lab get webapp m16 -o jsonpath='{.metadata.uid}')"
    )
@@ -80,7 +80,7 @@ The WebApp CRD is established and WebApp m16 declares one replica. The reconcile
      set -euo pipefail
      kubectl --context kind-kv-lab -n kv-lab delete configmap m16
      kubectl --context kind-kv-lab -n kv-lab patch webapp m16 --type merge -p '{"spec":{"replicas":2}}'
-     python3 operator.py --once
+     python3 webapp-reconciler.py --once
      kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m16 --timeout=180s
    )
    ```

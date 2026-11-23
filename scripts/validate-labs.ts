@@ -21,6 +21,11 @@ function run(command: string, args: string[], label: string, input?: string) {
 }
 
 for (const lab of labs) {
+  const labDirectory = join(root, lab.id);
+  const imports = spawnSync('python3', ['-B', '-c', 'import json, operator; assert operator.eq(1, 1)'], {
+    cwd: labDirectory, encoding: 'utf8',
+  });
+  assert.equal(imports.status, 0, lab.id + ': standard Python imports fail from the lab directory: ' + (imports.error?.message ?? imports.stderr));
   assert(modules.some(module => module.id === lab.moduleId), lab.id + ': unknown module');
   assert.equal(readFileSync(join(root, lab.id, 'README.md'), 'utf8'), labReadme(lab), lab.id + ': generated README is stale');
   assert(lab.files.includes('_common.sh') && lab.files.includes('cleanup.sh'), lab.id + ': missing scoped helpers');
@@ -67,6 +72,7 @@ for (const lab of labs) {
   }
 }
 assert.equal(parseAllDocuments(readFileSync(join(root, 'kind.yaml'), 'utf8'))[0].errors.length, 0);
+run('bash', ['scripts/test-lab-setup.sh'], 'Setup and activation guards');
 
 const zipCheck = [
   'from pathlib import Path',

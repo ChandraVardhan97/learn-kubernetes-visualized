@@ -4,25 +4,36 @@ This bundle contains 20 module labs, three capstones in m20, a separate offline 
 
 ## Prepare your machine
 
-- **macOS:** Start [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/) and open Terminal. Use the Darwin builds of kind and kubectl for your Apple Silicon (ARM64) or Intel (AMD64) Mac. Install Python 3 if needed.
-- **Windows:** Set up [Ubuntu on WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) and [enable Docker Desktop's WSL integration](https://docs.docker.com/desktop/features/wsl/) for Ubuntu in Linux containers mode. Install Python 3 and the Linux builds of kind and kubectl inside Ubuntu. Extract this bundle in your Ubuntu home directory and run the lab commands from Ubuntu's Bash shell. An end-to-end run on Windows WSL 2 is pending.
+- **macOS:** Start [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), install [Python 3](https://www.python.org/downloads/macos/) if needed, and enter Bash by running `bash` in Terminal.
+- **Windows:** Set up [Ubuntu on WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) and [enable Docker Desktop's WSL integration](https://docs.docker.com/desktop/features/wsl/) for Ubuntu in Linux containers mode. In Ubuntu, run `sudo apt update` and `sudo apt install curl python3 unzip`. Extract the bundle inside your Ubuntu home directory and run the lab commands from Ubuntu's Bash shell.
 
-Use the version-pinned tools above. Confirm Docker is running with `docker version` and check the CLI versions with `kind version`, `kubectl version --client`, and `python3 --version`. See the [website setup guide](https://k8s-visualized.pages.dev/labs/#setup) for installation links and expected results.
+Setup uses the same bundle for both platforms and installs the pinned tools in its private `.kv-lab/bin` directory. It checks the downloads against the official release checksums. You need internet access for the first setup and several GiB of free disk space for the cluster and images. See the [website setup guide](https://k8s-visualized.pages.dev/labs/#setup).
 
 ## Setup
 
 ```bash
-# From this extracted bundle directory. Keep this shell's KUBECONFIG set for the labs.
-export KUBECONFIG="$PWD/kv-lab.kubeconfig"
-kind create cluster --name kv-lab --config kind.yaml --wait 180s
-kubectl --context kind-kv-lab wait --for=condition=Ready nodes --all --timeout=180s
-kubectl --context kind-kv-lab get nodes
+# From the extracted bundle in Bash:
+bash setup.sh && source ./lab-env.sh
 (
   cd m02 && bash run.sh && bash cleanup.sh
 )
 ```
 
-Every module requires all files in its directory. Run scripts with Bash; executable permission is not required. The runner never changes your active context. Cluster creation writes only the kubeconfig selected above.
+Setup requires one control plane and two workers to be Ready and checks CoreDNS. The activation command selects `.kv-lab/kubeconfig` for this shell. In a new Bash session, move back to the extracted directory and run `source ./lab-env.sh`. Every module requires all files in its directory. Run scripts with Bash.
+
+## Troubleshooting setup
+
+- If Docker is unavailable in Ubuntu, confirm the distribution is running under WSL 2 with `wsl -l -v` from PowerShell. Check Docker Desktop's Ubuntu integration and Linux containers mode, then run `docker version` from Ubuntu. It should show a Server section.
+- If an image pull fails, try `docker pull busybox:1.37.0` from the same shell. Check the registry connection and Docker Desktop sign-in when relevant. If Ubuntu reports an error getting credentials from `desktop.exe`, a shell-scoped config can test public pulls without that helper. Use it only with local Docker Desktop on WSL 2 through the default Unix socket and when anonymous public pulls are available:
+
+  ```bash
+  export DOCKER_CONFIG="$(mktemp -d)"
+  printf '{"auths":{}}\n' > "$DOCKER_CONFIG/config.json"
+  bash setup.sh && source ./lab-env.sh
+  ```
+
+  Keep that setting in the lab shell until cleanup. Then remove the temporary config directory and unset `DOCKER_CONFIG` or close the shell. Your usual Docker settings are stored separately.
+- If WSL or Docker Desktop itself hangs, save other work before restarting the affected software. After it responds, check `docker version` and `kind get clusters` from the lab shell. Setup refuses to overwrite an existing `kv-lab`. Use its original bundle and kubeconfig to inspect or clean it up before retrying.
 
 m08 measures real NetworkPolicy enforcement. If deny traffic still succeeds, install a compatible enforcing CNI/policy controller; accepting the policy object proves nothing about isolation. Modern kind includes policy support, so do not assume all kind versions ignore policies.
 
@@ -39,11 +50,12 @@ m19's Argo CD extension is compatibility research, not a runnable install recipe
 Follow the Clean up steps in each exercise README before moving on. Keep any wanted data backup outside the cluster. m16/m20 share a CRD; delete it only after both are done. When all labs are finished:
 
 ```bash
-kind delete cluster --name kv-lab
-# If you ran the optional recovery procedure, from the m18 directory:
-bash cleanup-recovery.sh
+# From the extracted bundle:
+source ./lab-env.sh && kind delete cluster --name kv-lab
+# If the optional recovery cluster still exists:
+bash m18/cleanup-recovery.sh
 ```
 
 The node image digest is from the official v0.33.0 release: https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0 . Application image version tags can be republished; use resolved image digests for production delivery.
 
-All common lab runners, the standalone WebApp operator and offline recovery now fail before cluster actions unless the invoked client is kubectl v1.37.x, matching the pinned server minor version. In this checkout, place the checksum-verified runtime first with `export PATH="$PWD/.runtime/bin:$PATH"` from the repository root. Downloaded bundles require the documented client installation on PATH.
+All common lab runners, the standalone WebApp operator and offline recovery require a kubectl v1.37.x client. The bundle setup installs v1.37.0.

@@ -27,7 +27,7 @@ Idempotence means repeated reconciliation converges to the same intended resourc
 
 ## Walkthrough: each write is its own commit boundary
 
-Read `operator.py` from the m16 download before running it. It calls kubectl with an explicit context and namespace, verifies the disposable cluster, lists WebApps, computes desired child objects, refuses to adopt an existing unrelated child, and applies each child using manager `kv-webapp-operator`. It then reads the Deployment and patches the WebApp status subresource with observedGeneration and readyReplicas. Authentication and TLS are delegated to kubectl rather than reimplemented in Python.
+Read `webapp-reconciler.py` from the m16 download before running it. It calls kubectl with an explicit context and namespace, verifies the disposable cluster, lists WebApps, computes desired child objects, refuses to adopt an existing unrelated child, and applies each child using manager `kv-webapp-operator`. It then reads the Deployment and patches the WebApp status subresource with observedGeneration and readyReplicas. Authentication and TLS are delegated to kubectl rather than reimplemented in Python.
 
 These operations are not one transaction. A crash can leave the ConfigMap created before the Deployment exists, or both children present before status is updated. The next pass must reuse the successful partial work. When a child exists under the expected name, the operator checks owner identity before applying it; equal names do not establish permission to take over somebody else's resource. SSA conflicts also remain visible because the example deliberately does not force ownership.
 
@@ -50,10 +50,10 @@ spec:
 
 ```bash
 # Run after installing the m16 CRD and resources.
-python3 operator.py --once
+python3 webapp-reconciler.py --once
 kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m16 --timeout=180s
 kubectl --context kind-kv-lab -n kv-lab get deployment m16 -o jsonpath='{.metadata.uid}{"\n"}'
-python3 operator.py --iterations 3 --interval 1
+python3 webapp-reconciler.py --iterations 3 --interval 1
 kubectl --context kind-kv-lab -n kv-lab get deployment m16 -o jsonpath='{.metadata.uid}{"\n"}'
 kubectl --context kind-kv-lab -n kv-lab get webapp m16 -o yaml
 ```
