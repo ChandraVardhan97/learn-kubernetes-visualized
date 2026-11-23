@@ -16,20 +16,20 @@ then
   exit 1
 fi
 k apply -f resources.yaml
-python3 operator.py --once
+python3 webapp-reconciler.py --once
 k rollout status deployment/m16 --timeout=180s
 uid=$(k get deployment m16 -o jsonpath='{.metadata.uid}')
 generation=$(k get deployment m16 -o jsonpath='{.metadata.generation}')
-python3 operator.py --iterations 3 --interval 1
+python3 webapp-reconciler.py --iterations 3 --interval 1
 [ "$(k get deployment m16 -o jsonpath='{.metadata.uid}')" = "$uid" ]
 [ "$(k get deployment m16 -o jsonpath='{.metadata.generation}')" = "$generation" ]
 [ "$(k get deployment m16 -o jsonpath='{.metadata.ownerReferences[0].uid}')" = "$(k get webapp m16 -o jsonpath='{.metadata.uid}')" ]
 k delete configmap m16
-python3 operator.py --once
+python3 webapp-reconciler.py --once
 k get configmap m16
 k patch webapp m16 --type merge -p '{"spec":{"replicas":2}}'
-python3 operator.py --iterations 2 --interval 1
+python3 webapp-reconciler.py --iterations 2 --interval 1
 k rollout status deployment/m16 --timeout=180s
 [ "$(k get deployment m16 -o jsonpath='{.status.readyReplicas}')" = 2 ]
-python3 operator.py --once
+python3 webapp-reconciler.py --once
 k get webapp m16 -o yaml

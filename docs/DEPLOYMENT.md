@@ -23,6 +23,8 @@ For an existing Worker created from a dashboard template, connect GitHub and mer
 
 Keep the build checks in the repository’s CI. Preview builds should exercise the same static output; do not introduce an adapter or API just for deployment.
 
+For changes to the lab bundle or setup flow, complete the [Windows and macOS release check](LABS.md#release-check-for-the-shared-zip) before merging into the branch that deploys to production.
+
 ## Verified platform boundaries
 
 As researched for this project: static asset requests are free and unlimited, Free has 20,000 files and 25 MiB/file, and Workers Builds includes 3,000 minutes/month. Plan limits can change; verify official pages before changing infrastructure.

@@ -7,7 +7,8 @@ import type { Exercise, LabStep } from '../src/data/lab-format';
 const mode = process.argv[2] ?? 'smoke';
 const root = process.env.KV_TEST_BUNDLE;
 const scratch = process.env.KV_TEST_ROOT;
-assert(root && scratch && resolve(process.env.KUBECONFIG ?? '') === resolve(scratch, 'lab.kubeconfig'), 'Use scripts/run-labs.sh with an isolated cluster');
+assert(root && scratch && resolve(root) === resolve(scratch, 'downloads') &&
+  resolve(process.env.KUBECONFIG ?? '') === resolve(root, '.kv-lab', 'kubeconfig'), 'Use scripts/run-labs.sh with an isolated cluster');
 const smoke = new Set(['m02', 'm05', 'm06', 'm07', 'm09', 'm11', 'm16', 'm20']);
 const catalog = labs.flatMap(lab => lab.exercises.map(exercise => ({ lab, exercise })));
 const exact = catalog.some(({ exercise }) => exercise.id === mode);
@@ -27,12 +28,12 @@ function nodeFixture(): string {
   return JSON.stringify({ marker: metadata.annotations?.['labs.kv.example/p02'], taints: spec.taints ?? [] });
 }
 
-function runSteps(steps: LabStep[], cwd: string, env: NodeJS.ProcessEnv): void {
+function runSteps(steps: LabStep[], cwd: string, env: NodeJS.ProcessEnv, timeout = 360_000): void {
   for (const step of steps) {
     console.log(step.text);
     if (!step.command) continue;
-    const result = spawnSync('bash', ['-c', step.command], { cwd, env, stdio: 'inherit', timeout: 360_000 });
-    assert.equal(result.status, 0, result.error?.message ?? ('Command exited ' + result.status + ': ' + step.command));
+    const result = spawnSync('bash', ['-c', step.command], { cwd, env, stdio: 'inherit', timeout });
+    assert.equal(result.status, 0, (result.error?.message ?? ('Command exited ' + result.status)) + ': ' + step.command);
   }
 }
 
@@ -75,7 +76,8 @@ for (const { lab, exercise } of selected) {
   try {
     for (const phase of ['setup', 'diagnose', 'solution', 'verify'] as const) {
       console.log('--- ' + phase + ' ---');
-      runSteps(exercise[phase], cwd, env);
+      const timeout = exercise.id === 'm18-offline-restore' && phase === 'solution' ? 30 * 60_000 : undefined;
+      runSteps(exercise[phase], cwd, env, timeout);
     }
     if (exercise.id === 'm18-offline-restore') {
       const unowned: NodeJS.ProcessEnv = { ...env, KV_LAB_BACKUP_DIR: join(scratch, 'backups', 'recovery-guard-check') };

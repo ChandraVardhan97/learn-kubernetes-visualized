@@ -241,7 +241,7 @@ Field manager kv-gitops declares WebApp m20-platform. The reconciler creates the
      kubectl --context kind-kv-lab -n kv-lab apply -f crd.yaml
      kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Established crd/webapps.labs.kv.example --timeout=60s
      kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f platform.yaml
-     python3 operator.py --once
+     python3 webapp-reconciler.py --once
      kubectl --context kind-kv-lab -n kv-lab rollout status deployment/m20-platform --timeout=180s
    )
    ```
@@ -273,7 +273,7 @@ Field manager kv-gitops declares WebApp m20-platform. The reconciler creates the
    (
      set -euo pipefail
      before=$(kubectl --context kind-kv-lab -n kv-lab get deployment m20-platform -o jsonpath='{.metadata.uid}:{.metadata.generation}')
-     python3 operator.py --iterations 2 --interval 1
+     python3 webapp-reconciler.py --iterations 2 --interval 1
      test "$(kubectl --context kind-kv-lab -n kv-lab get deployment m20-platform -o jsonpath='{.metadata.uid}:{.metadata.generation}')" = "$before"
    )
    ```
@@ -284,7 +284,7 @@ Field manager kv-gitops declares WebApp m20-platform. The reconciler creates the
    (
      set -euo pipefail
      kubectl --context kind-kv-lab -n kv-lab delete configmap m20-platform
-     python3 operator.py --once
+     python3 webapp-reconciler.py --once
      test "$(kubectl --context kind-kv-lab -n kv-lab get configmap m20-platform -o jsonpath='{.data.index\.html}')" = gitops-declared-page
      kubectl --context kind-kv-lab -n kv-lab delete webapp m20-platform --wait=true
    )

@@ -19,6 +19,7 @@ if kind get clusters | grep -qx kv-recovery; then
 fi
 # Isolate kubeconfig output so cluster creation cannot change the caller active context.
 export KUBECONFIG="$backup_dir/recovery.kubeconfig"
+echo 'Creating the separate kv-recovery cluster ...'
 kind create cluster --name kv-recovery --config recovery-kind.yaml --wait 180s
 node=kv-recovery-control-plane
 [ "$(kind get nodes --name kv-recovery)" = "$node" ] || exit 2
@@ -30,6 +31,7 @@ trap 'docker rm -f kv-recovery-etcd-tool >/dev/null 2>&1 || true' EXIT
 docker cp kv-recovery-etcd-tool:/usr/local/bin/etcdutl "$backup_dir/etcdutl"
 docker cp "$backup_dir/etcdutl" "$node":/usr/local/bin/etcdutl
 # Offline means both API server and etcd are stopped BEFORE replacing any data.
+echo 'Stopping the recovery API server and etcd ...'
 docker exec "$node" mv /etc/kubernetes/manifests/kube-apiserver.yaml /tmp/kv-recovery-kube-apiserver.yaml
 docker exec "$node" mv /etc/kubernetes/manifests/etcd.yaml /tmp/kv-recovery-etcd.yaml
 for attempt in $(seq 1 90); do
@@ -39,6 +41,7 @@ for attempt in $(seq 1 90); do
   sleep 2
 done
 [ -z "$running$api" ] || { echo 'Refusing restore: old static containers still run' >&2; exit 1; }
+echo 'Staging and restoring the snapshot in the recovery cluster ...'
 docker cp "$backup_dir/kv-lab.db" "$node":/var/lib/kv-recovery-snapshot.db
 docker exec "$node" test -s /var/lib/kv-recovery-snapshot.db
 ip=$(docker inspect -f '{{(index .NetworkSettings.Networks "kind").IPAddress}}' "$node")
@@ -47,12 +50,14 @@ docker exec "$node" etcdutl snapshot restore /var/lib/kv-recovery-snapshot.db --
 # Preserve the newly-created cluster's original data directory for investigation.
 docker exec "$node" mv /var/lib/etcd /var/lib/etcd-before-restore
 docker exec "$node" mv /var/lib/etcd-restored /var/lib/etcd
+echo 'Restarting the recovery services and checking for the saved marker ...'
 docker exec "$node" mv /tmp/kv-recovery-etcd.yaml /etc/kubernetes/manifests/etcd.yaml
 docker exec "$node" mv /tmp/kv-recovery-kube-apiserver.yaml /etc/kubernetes/manifests/kube-apiserver.yaml
 for attempt in $(seq 1 90); do
-  kubectl --context kind-kv-recovery -n kv-lab get configmap m18 >/dev/null 2>&1 && break
+  kubectl --request-timeout=5s --context kind-kv-recovery -n kv-lab get configmap m18 >/dev/null 2>&1 && break
   sleep 2
 done
-[ "$(kubectl --context kind-kv-recovery -n kv-lab get configmap m18 -o jsonpath='{.data.marker}')" = captured-before-disaster ]
+[ "$(kubectl --request-timeout=5s --context kind-kv-recovery -n kv-lab get configmap m18 -o jsonpath='{.data.marker}')" = captured-before-disaster ] ||
+  { echo 'Recovery did not return the saved marker. See RECOVERY.md for inspection and cleanup.' >&2; exit 1; }
 echo 'Recovered marker visible through separate kind-kv-recovery API. Original kv-lab was never stopped or restored.'
 echo 'Cleanup: bash cleanup-recovery.sh from this lab directory.'

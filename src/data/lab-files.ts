@@ -120,7 +120,7 @@ export const moduleLabFiles: Record<string, readonly string[]> = {
     "run.sh",
     "cleanup.sh",
     "crd.yaml",
-    "operator.py"
+    "webapp-reconciler.py"
   ],
   "m17": [
     "README.md",
@@ -163,7 +163,7 @@ export const moduleLabFiles: Record<string, readonly string[]> = {
     "crd.yaml",
     "platform.yaml",
     "platform-conflict.yaml",
-    "operator.py",
+    "webapp-reconciler.py",
     "backup-path.py"
   ]
 };

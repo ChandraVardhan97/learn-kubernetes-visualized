@@ -4,9 +4,9 @@ The catalog includes 20 module labs, three cumulative capstones within m20, offl
 
 ## Create the disposable environment
 
-Install Docker, kind **v0.33.0**, kubectl **v1.37.x**, and Python 3. Docker must be running and able to pull public images. Use the official [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/) and check release checksums when installing binaries. Start Docker Desktop with enough memory for a control plane and workers; 6–8 GiB available to Docker is a useful starting allocation, not a measured minimum. The offline restore needs resources for another control plane.
+Install Docker Desktop, Bash, curl and Python 3. The bundle setup selects and checksum-verifies kind **v0.33.0** and kubectl **v1.37.0** for the host OS and CPU. Docker must be running and able to pull public images. Allow enough memory for a control plane and workers. 6–8 GiB available to Docker is a starting point. Offline restore needs resources for another control plane.
 
-Use Terminal on macOS and Ubuntu's Bash shell on Windows. The website's [platform setup instructions](https://k8s-visualized.pages.dev/labs/#setup) cover Docker Desktop, WSL 2 integration, and which binaries to install. The full suite was verified on Apple Silicon macOS. Windows via WSL 2 still needs an end-to-end run.
+Use Bash in Terminal on macOS and Ubuntu's Bash shell on Windows. The website's [platform setup instructions](https://k8s-visualized.pages.dev/labs/#setup) cover Docker Desktop and WSL 2 integration. On Windows, extract into the Ubuntu home directory.
 
 The node image is pinned to the multiarchitecture digest published by the [kind v0.33.0 release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0):
 
@@ -17,14 +17,10 @@ kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de
 From the extracted bundle directory containing `kind.yaml`:
 
 ```bash
-# A separate kubeconfig file prevents kind creation from changing your usual current context.
-export KUBECONFIG="$PWD/kv-lab.kubeconfig"
-kind create cluster --name kv-lab --config kind.yaml --wait 180s
-kubectl --context kind-kv-lab wait --for=condition=Ready nodes --all --timeout=180s
-kubectl --context kind-kv-lab get nodes
+bash setup.sh && source ./lab-env.sh
 ```
 
-Leave that `KUBECONFIG` set while running downloaded labs, or merge it yourself after reviewing contexts. All lab scripts verify `kind-kv-lab` maps to the expected cluster and that its API node names match `kind get nodes --name kv-lab`. Every Kubernetes operation explicitly selects the context; namespaced operations select `kv-lab`. Scripts do not call `use-context` or `set-context`. A missing dependency, absent cluster or identity mismatch fails before the exercise changes resources.
+Run `source ./lab-env.sh` from the bundle in any new Bash shell. It selects the local tools and the dedicated kubeconfig. All lab scripts verify `kind-kv-lab` maps to the expected cluster and that its API node names match `kind get nodes --name kv-lab`. Every Kubernetes operation explicitly selects the context. Namespaced operations select `kv-lab`. A missing dependency, absent cluster or identity mismatch fails before the exercise changes resources.
 
 Application images use explicit version tags (`nginx:1.28.0-alpine`, `busybox:1.37.0`). These tags are repeatable version choices but can be republished; production supply chains should resolve and retain digests. The kind node is digest pinned. The example Secret is a disposable teaching value.
 
@@ -41,7 +37,17 @@ bash scripts/run-labs.sh m06
 bash scripts/run-labs.sh all
 ```
 
-The integration runner extracts the ZIP and runs the published command blocks against a fresh three-node kind cluster with a private kubeconfig. It requires that the kv-lab and kv-recovery names are free. It runs cleanup after each exercise and checks that its resources are gone. The full run also checks interrupted finalizer cleanup and validates manifests with Kubernetes server dry-run. See [the run report](labs-report.md) for execution evidence.
+The integration runner accepts an optional ZIP path as its second argument. It extracts that archive and runs the same setup and published command blocks against a fresh three-node kind cluster with a private kubeconfig. It requires that the kv-lab and kv-recovery names are free. It verifies cleanup after every exercise. The full run also checks interrupted finalizer cleanup and validates manifests with Kubernetes server dry-run. Offline restore gets up to 30 minutes for its restore command because it starts and stops a second cluster. See [the run report](labs-report.md) for historical execution evidence.
+
+If a pull fails during offline recovery, try pulling the exact etcd image named in the Docker error from the same shell. The recovery tool uses the image from the recovery cluster's etcd Pod. Follow the credential-helper troubleshooting in the bundle README if Docker cannot retrieve credentials for that image.
+
+### Release check for the shared ZIP
+
+Before deploying a changed lab bundle, use an Apple Silicon Mac and a fresh Windows installation with Ubuntu on WSL 2. Download the ZIP from the release candidate's preview site. Confirm its SHA-256 matches the candidate's `dist/labs/kv-labs.zip` and record the hash and platform versions.
+
+1. Follow the public setup instructions with no preinstalled lab binaries. Check that all three nodes are Ready, run the m02 commands on the page, then clean up its resources and cluster.
+2. From the candidate's source checkout with its locked Node dependencies installed, run `bash scripts/run-labs.sh all /absolute/path/to/downloaded/kv-labs.zip`. Use Bash inside Ubuntu on Windows and keep the ZIP on the Ubuntu filesystem.
+3. Require all 27 procedures and per-exercise cleanups to pass, including the offline restore and the final disposable cluster cleanup. Record the results in the PR before releasing. Keep the publish step pending if either supported release environment fails or has not been verified.
 
 Use smoke for a representative subset, all for the complete catalog, or pass an exercise ID such as m20-stateful or p02. Running m18 selects snapshot capture. Selecting m18-offline-restore also captures its prerequisite snapshot. The static validator checks the instructions, ZIP parity, namespaces, and Bash, Python and YAML syntax. With kubeconform on PATH, it checks compatible standard manifests against Kubernetes 1.37 schemas.
 
@@ -105,9 +111,9 @@ Every module runner creates labeled resources and its cleanup script removes the
 
 ```bash
 # Only after all lab work is finished:
-kind delete cluster --name kv-lab
-# If the optional recovery exercise was run, from its m18 directory:
-bash cleanup-recovery.sh
+source ./lab-env.sh && kind delete cluster --name kv-lab
+# If the optional recovery cluster still exists, from the bundle directory:
+bash m18/cleanup-recovery.sh
 ```
 
 Do not substitute a production cluster name into these destructive commands. The scripts' fixed names are an intentional scope boundary.

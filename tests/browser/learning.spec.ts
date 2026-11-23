@@ -168,7 +168,7 @@ test('copy preserves static commands and current interactive YAML', async ({page
  }
 
  await page.goto('/labs/#setup');
- await copyBlock(page.locator('#setup pre').filter({hasText: 'kind create cluster'}));
+ await copyBlock(page.locator('#setup pre').filter({hasText: 'bash setup.sh && source ./lab-env.sh'}));
 
  await page.goto('/learn/intermediate/m07-l01/');
  await copyBlock(page.locator('pre.astro-code').first());
