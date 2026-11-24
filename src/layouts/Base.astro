@@ -14,6 +14,7 @@ const {title='Kubernetes, Visualized',description='Understand Kubernetes through
 const path=Astro.url.pathname;
 const currentModule=lessonId?.slice(0,3);
 const canonical=new URL(path,Astro.site);
+const repository='https://github.com/ChandraVardhan97/learn-kubernetes-visualized';
 ---
 <!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="color-scheme" content="light dark"/><title>{title==='Kubernetes, Visualized'?title:`${title} · Kubernetes, Visualized`}</title><meta name="description" content={description}/><link rel="canonical" href={canonical}/><meta property="og:title" content={title}/><meta property="og:description" content={description}/><meta property="og:type" content="website"/><link rel="icon" href="/favicon.svg" type="image/svg+xml"/><script is:inline>try{const t=localStorage.getItem('kv-theme')||'system';document.documentElement.dataset.theme=t==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):t;}catch{}</script></head>
 <body><a class="skip-link" href="#main">Skip to content</a>
@@ -34,14 +35,37 @@ const canonical=new URL(path,Astro.site);
    {path==='/' && <span>Kubernetes, Visualized</span>}
   </a>
   <span class:list={[{'breadcrumb-current-home':path==='/'}]}>{path==='/'?'Home':title}</span>
- </div><div class="topbar-actions"><button id="search-open" aria-label="Search the book"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="1.7"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="1.7"/></svg><span>Search</span><kbd>⌘ K</kbd></button><div class="theme-picker"><button id="theme-open" type="button" popovertarget="theme-menu" aria-label="Color theme" aria-controls="theme-menu"><span class="theme-current-icon"><Icon name="system" data-icon="system"/><Icon name="sun" data-icon="light"/><Icon name="moon" data-icon="dark"/></span><span id="theme-label">System</span><Icon name="chevron" size={14}/></button><div id="theme-menu" popover="auto"><fieldset class="theme-options"><legend>Appearance</legend>{[{value:'system',label:'System',note:'Match your device',icon:'system'},{value:'light',label:'Light',note:'A bright reading surface',icon:'sun'},{value:'dark',label:'Dark',note:'Comfortable after hours',icon:'moon'}].map(t=><label><input type="radio" name="color-theme" value={t.value} checked={t.value==='system'}/><Icon name={t.icon} size={20}/><span>{t.label}<small>{t.note}</small></span><span class="theme-check"><Icon name="check" size={16}/></span></label>)}</fieldset></div></div></div></header>
+ </div>
+ <div class="topbar-actions">
+  <button id="search-open" aria-label="Search the book"><Icon name="search" size={16}/><span>Search</span><kbd>⌘ K</kbd></button>
+  <a class="topbar-icon" href={repository} aria-label="View repository on GitHub" title="View repository on GitHub"><Icon name="github"/></a>
+  <div class="theme-picker"><button id="theme-open" type="button" popovertarget="theme-menu" aria-label="Color theme" aria-controls="theme-menu"><span class="theme-current-icon"><Icon name="system" data-icon="system"/><Icon name="sun" data-icon="light"/><Icon name="moon" data-icon="dark"/></span><span id="theme-label">System</span><Icon name="chevron" size={14}/></button><div id="theme-menu" popover="auto"><fieldset class="theme-options"><legend>Appearance</legend>{[{value:'system',label:'System',note:'Match your device',icon:'system'},{value:'light',label:'Light',note:'A bright reading surface',icon:'sun'},{value:'dark',label:'Dark',note:'Comfortable after hours',icon:'moon'}].map(t=><label><input type="radio" name="color-theme" value={t.value} checked={t.value==='system'}/><Icon name={t.icon} size={20}/><span>{t.label}<small>{t.note}</small></span><span class="theme-check"><Icon name="check" size={16}/></span></label>)}</fieldset></div></div>
+  <button id="shortcuts-open" class="topbar-icon" type="button" aria-label="Keyboard shortcuts" aria-haspopup="dialog" aria-controls="shortcuts-dialog" title="Keyboard shortcuts"><Icon name="keyboard" size={20}/></button>
+ </div></header>
  <main id="main" class="sheet" tabindex="-1"><slot/></main>
  <footer class="site-footer">
-  <span>Kubernetes, Visualized</span>
-  <span class="footer-credit">Built by <a href="https://www.linkedin.com/in/chandubodduluri/">Chandu B</a> with ❤️</span>
-  <a href="https://github.com/ChandraVardhan97/learn-kubernetes-visualized/blob/main/CONTRIBUTING.md">Contribute</a>
+  <div class="footer-contribution">
+   <div><h2>Source &amp; contributions</h2><p>Found an unclear lesson, a broken lab, or a diagram that could teach more? Open an issue or pull request.</p></div>
+   <a class="button footer-github" href={repository+'/blob/main/CONTRIBUTING.md'}><Icon name="github"/>Contribute on GitHub</a>
+  </div>
+  <p class="footer-credit">Built by <a href="https://www.linkedin.com/in/chandubodduluri/">Chandu B</a> with ❤️</p>
  </footer></div>
  <dialog id="search-dialog" aria-labelledby="search-title"><div class="search-header"><h2 id="search-title">Search the book</h2><button id="search-close" aria-label="Close search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.7"/></svg></button></div><div id="search-root"><p>Search loads when you open it.</p></div></dialog>
+ <dialog id="shortcuts-dialog" aria-labelledby="shortcuts-title">
+  <div class="shortcuts-heading">
+   <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+   <form method="dialog"><button type="submit" class="topbar-icon" aria-label="Close keyboard shortcuts" autofocus><Icon name="close"/></button></form>
+  </div>
+  <dl class="shortcuts-list">
+   <div><dt><span><kbd>Ctrl</kbd> + <kbd>K</kbd></span> / <span><kbd>⌘</kbd> + <kbd>K</kbd></span></dt><dd>Search the book</dd></div>
+   <div><dt><kbd>?</kbd></dt><dd>Open this guide</dd></div>
+   <div><dt><kbd>Tab</kbd> / <span><kbd>Shift</kbd> + <kbd>Tab</kbd></span></dt><dd>Move between controls</dd></div>
+   <div><dt><kbd>Enter</kbd> / <kbd>Space</kbd></dt><dd>Activate a focused button or disclosure</dd></div>
+   <div><dt><kbd>←</kbd> / <kbd>→</kbd></dt><dd>Focused visual timeline · previous or next step</dd></div>
+   <div><dt><kbd>Home</kbd> / <kbd>End</kbd></dt><dd>Focused visual timeline · first or last point</dd></div>
+   <div><dt><kbd>Esc</kbd></dt><dd>Close the open dialog or menu</dd></div>
+  </dl>
+ </dialog>
  <template id="code-snippet-controls">
   <div part="toolbar">
    <span part="status" role="status"></span>
@@ -69,6 +93,19 @@ const canonical=new URL(path,Astro.site);
   matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme);applyTheme();
   const dialog=document.querySelector<HTMLDialogElement>('#search-dialog')!;let searchLoaded=false;
   async function openSearch(){if(!dialog.open)dialog.showModal();if(!searchLoaded){try{const css=document.createElement('link');css.rel='stylesheet';css.href='/pagefind/pagefind-ui.css';document.head.append(css);await new Promise<void>((resolve,reject)=>{const script=document.createElement('script');script.src='/pagefind/pagefind-ui.js';script.onload=()=>resolve();script.onerror=()=>reject(new Error('Search assets unavailable'));document.head.append(script);});document.querySelector('#search-root')!.innerHTML='';new (window as any).PagefindUI({element:'#search-root',showSubResults:true,showImages:false,resetStyles:false});searchLoaded=true;}catch{document.querySelector('#search-root')!.innerHTML='<p>Search is available in the production build. <a href="/curriculum/">Browse the complete learning path.</a></p>';}}setTimeout(()=>dialog.querySelector<HTMLInputElement>('input')?.focus(),50);}
-  document.querySelector('#search-open')!.addEventListener('click',openSearch);document.querySelector('#search-close')!.addEventListener('click',()=>dialog.close());dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();void openSearch();}});
+  const shortcuts=document.querySelector<HTMLDialogElement>('#shortcuts-dialog')!;
+  const shortcutsOpen=document.querySelector<HTMLButtonElement>('#shortcuts-open')!;
+  function openShortcuts(){if(!dialog.open&&!shortcuts.open)shortcuts.showModal();}
+  shortcutsOpen.addEventListener('click',openShortcuts);
+  shortcuts.addEventListener('click',event=>{if(event.target===shortcuts)shortcuts.close();});
+  document.querySelector('#search-open')!.addEventListener('click',openSearch);
+  document.querySelector('#search-close')!.addEventListener('click',()=>dialog.close());
+  dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
+  document.addEventListener('keydown',e=>{
+   if(e.defaultPrevented||shortcuts.open)return;
+   if((e.metaKey||e.ctrlKey)&&!e.altKey&&e.key.toLowerCase()==='k'){e.preventDefault();void openSearch();return;}
+   const editing=e.target instanceof HTMLElement&&e.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"])');
+   if(e.key==='?'&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&!editing&&!dialog.open){e.preventDefault();openShortcuts();}
+  });
  </script>
 </body></html>

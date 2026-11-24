@@ -55,6 +55,8 @@ You run `kubectl apply` and get a line saying a Pod was created. A second later 
 
 A **Pod** is the unit that Kubernetes places on one node. The API stores its description first. The scheduler then finds a node that meets its requirements and records the assignment. A kubelet on that node observes the assignment and prepares it locally through the runtime. The node must set up the Pod's execution environment, obtain the image if needed, mount any required volumes, and start the containers. Status updates show what the cluster has observed so far.
 
+Open **Inspect the Pod startup** to compare the evidence each step leaves behind. Look for the stored object, the assigned node, and the Ready condition as three separate observations.
+
 <Scene id="m02-l03-request" />
 
 ## <span id="walkthrough-capture-evidence-at-each-boundary" aria-hidden="true" />Follow the evidence through the API and the node

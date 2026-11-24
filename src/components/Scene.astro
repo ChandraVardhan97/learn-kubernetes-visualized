@@ -1,9 +1,11 @@
 ---
 import CurriculumScene from './CurriculumScene';
 import { getVisualStory } from '../data/lesson-visuals';
+import { getEventTrace } from '../data/event-traces';
 import { getPilot } from '../lib/pilot-scenes';
 import '../styles/pilot-scenes.css';
 import '../styles/curriculum-scenes.css';
+import '../styles/trace-explorer.css';
 import { getScene,scenes } from '../lib/scenes';
 import type {ExperimentKind} from './MechanismExperiment';
 const {id}=Astro.props;
@@ -16,5 +18,5 @@ const experiment=scenes.find(s=>s.id.startsWith(prefix))?.id===scene.id?experime
 ---
 <figure id={`scene-${id}`} class="scene scene--pilot" data-ui>
  <figcaption><h3>{pilot?.title ?? story?.title ?? scene.title}</h3><p>{pilot?.intro ?? story?.takeaway ?? scene.description}</p></figcaption>
- <CurriculumScene scene={scene} story={story} experiment={experiment} client:visible />
+ <CurriculumScene scene={scene} story={story} experiment={experiment} eventTrace={getEventTrace(id)} client:visible />
 </figure>

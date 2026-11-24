@@ -23,6 +23,8 @@ A controller needs to know which ConfigMaps exist and keep track of changes. It 
 
 If the connection drops, the client can resume from a suitable recent version. If the API server has discarded too much history, a `410 Gone` response tells the client to list again and rebuild its view before watching further. A resource version is a cursor for API state and should be passed back as provided; use the API’s documented comparison guarantees only where they apply. It is distinct from a wall-clock time or a count of application changes.
 
+Open **Inspect the watch** to follow each resource version. Step through a ConfigMap update, a reconnect with expired history, and the fresh list that lets the client resume.
+
 <Scene id="m14-l02-watch-cursor" />
 
 ## <span id="walkthrough-watch-current-state-negotiate-field-changes" aria-hidden="true" />What happens when field managers disagree
