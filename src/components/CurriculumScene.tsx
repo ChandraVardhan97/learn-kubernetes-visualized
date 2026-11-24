@@ -6,6 +6,8 @@ import PilotScene, { Demonstration } from './PilotScene';
 import CurriculumExercise, { HpaRequestComparison } from './CurriculumExercise';
 import MechanismExperiment, { type ExperimentKind } from './MechanismExperiment';
 import CodeBlock from './CodeBlock';
+import type { EventTrace } from '../data/event-traces';
+import TraceExplorer from './TraceExplorer';
 
 const beatLength = 1500;
 
@@ -119,10 +121,11 @@ function caseLink(sceneId: string, variant: string) {
   return '?' + new URLSearchParams({ scene: sceneId, variant }) + '#scene-' + sceneId;
 }
 
-export default function CurriculumScene({ scene, story, experiment }: {
+export default function CurriculumScene({ scene, story, experiment, eventTrace }: {
   scene: Scene;
   story?: VisualStory;
   experiment?: ExperimentKind;
+  eventTrace?: EventTrace;
 }) {
   const [selection, setSelection] = useState<Selection>({});
   const content = useRef<HTMLDivElement>(null);
@@ -160,6 +163,7 @@ export default function CurriculumScene({ scene, story, experiment }: {
   const frames = variant?.frames ?? scene.frames;
   const codeFrames = frames.flatMap(frame => frame.code ? [{ title: frame.title, code: frame.code }] : []);
   const run = story?.run;
+  const trace = caseOpen ? undefined : eventTrace;
 
   return (
     <>
@@ -190,8 +194,9 @@ export default function CurriculumScene({ scene, story, experiment }: {
           </div>
         )}
       </div>
-      {(codeFrames.length > 0 || otherVariants.length > 0 || experiment) && (
+      {(codeFrames.length > 0 || otherVariants.length > 0 || experiment || trace) && (
         <div className="lesson-visual-extras">
+          {trace && <TraceExplorer sceneId={scene.id} trace={trace} />}
           {experiment && <MechanismExperiment kind={experiment} />}
           {codeFrames.length > 0 && (
             <details>

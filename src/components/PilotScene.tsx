@@ -10,16 +10,17 @@ export default function PilotScene({ id, pilot }: { id: string; pilot: Pilot }) 
   return <Demonstration pilot={pilot} id={id}>{time => <Visual time={time} />}</Demonstration>;
 }
 
-export function Demonstration({ pilot, id, inlineSteps = false, children }: {
+export function Demonstration({ pilot, id, inlineSteps = false, initialPosition = 0, children }: {
   pilot: Playback;
   id: string;
   inlineSteps?: boolean;
-  children: (time: number) => ReactNode;
+  initialPosition?: number;
+  children: (time: number, seek: (next: number) => void, hydrated: boolean) => ReactNode;
 }) {
-  const [position, setPosition] = useState(0);
+  const [position, setPosition] = useState(initialPosition);
   const [destination, setDestination] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
-  const time = useRef(0);
+  const time = useRef(initialPosition);
   const graphic = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   const moment = momentAt(pilot, position);
@@ -113,7 +114,7 @@ export function Demonstration({ pilot, id, inlineSteps = false, children }: {
         <button type="button" className="pilot-secondary" onClick={() => seek(0)} disabled={!hydrated || position === 0}>Reset</button>
       </div>
       <div ref={graphic} className="pilot-graphic">
-        {children(position)}
+        {children(position, seek, hydrated)}
       </div>
       <div className={inlineSteps ? "sr-only" : "pilot-readout"} aria-live="polite" aria-atomic="true">
         <strong>{moment.title}</strong>

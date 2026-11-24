@@ -58,7 +58,7 @@ See [the content contract](docs/CONTENT-CONTRACT.md), [contribution guide](CONTR
 
 Cloudflare Pages is the public address. Cloudflare Workers Static Assets also builds from `main`. Build and learning functionality do not need an account. To host your own copy, sign in to Cloudflare and set `SITE_URL` to its public address for canonical links and sitemap generation.
 
-The owner has not yet chosen an open-source license or published the repository. Do not infer a license from a public website. Third-party software and font licenses remain with their authors; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The source repository is public and the owner has yet to choose a project license. Third-party software, fonts, and assets retain their own licenses. See [Third-party notices](THIRD-PARTY-NOTICES.md).
 
 This independent resource is not affiliated with Kubernetes or CNCF. Educational models identify their material simplifications; local kind behavior does not establish production HA or cloud-provider guarantees.
 

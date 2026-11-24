@@ -60,6 +60,8 @@ A catalog service has three healthy copies. You want to release a new container 
 
 With `maxSurge: 1` and `maxUnavailable: 0`, the Deployment can ask for a fourth replica while the three old ones are still available. It waits until the first new Pod becomes available before it scales down an old copy. The spare slot can then hold the next new Pod. The rule works as long as the cluster has room to schedule the extra copy and the updated application passes its checks.
 
+Open **Inspect the rollout** to see when the first replacement becomes Ready, when the Deployment counts it as available, and which ReplicaSet scales down.
+
 <Scene id="m05-l02-rollout" />
 
 ## <span id="walkthrough-state-the-update-budget" aria-hidden="true" />Choose how much capacity to keep available

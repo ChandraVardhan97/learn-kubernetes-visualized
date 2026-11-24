@@ -34,6 +34,10 @@
   ],
   "sources": [
     {
+      "title": "Kubernetes scheduler",
+      "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/"
+    },
+    {
       "title": "Assigning Pods to nodes",
       "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/"
     },
@@ -57,6 +61,8 @@ A cluster shares workers between ordinary web apps and maintenance tools. You wa
 A **node selector** requires matching node labels. **Node affinity** also evaluates node labels and can express alternatives and preferences. Required rules remove nodes from consideration. Preferred rules influence the scheduler’s scoring of eligible nodes. In the scene, find which nodes are still eligible before the scheduler compares preference scores.
 
 **Pod affinity** evaluates where other Pods with selected labels run. For example, a worker could prefer the same zone as a cache it calls frequently. **Pod anti-affinity** can keep matching web replicas apart by hostname so one node failure affects fewer replicas. The topology key defines what “together” or “apart” means. A hard one-per-node requirement for three replicas needs at least three eligible nodes.
+
+Open **Inspect the placement** to compare three workers. Watch one fail a required label check, then see how the cache’s location breaks the tie between the two eligible workers.
 
 <Scene id="m07-l02-affinity" />
 
@@ -130,4 +136,5 @@ Yes, if the Pod has no other requirement that rules it out. Add a node selector 
 ## Primary documentation
 
 - [Assigning Pods to nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/)
+- [Kubernetes scheduler](https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/)
 - [Taints and tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)

@@ -1,12 +1,12 @@
 # Contributing
 
-Public contribution intake begins when the owner publishes the source and chooses its license. These guidelines keep the source ready for that step.
+Use GitHub Issues to share corrections and suggestions. The repository is public and the project license is pending. These guidelines describe how to prepare and verify a proposed change.
 
 ## Improve one idea at a time
 
 Start with a specific learning problem: a misconception, an inaccurate transition, a missing failure case, an inaccessible control, or a lab that fails on the pinned environment. Describe the observed result, expected result, environment and primary source.
 
-Read `docs/CONTENT-CONTRACT.md` before adding content. Prose lives in MDX; scene definitions live in JSON; renderers and stateful UI live in components. Keep the smallest meaningful change in one contribution.
+Read `docs/CONTENT-CONTRACT.md` before adding content. Prose lives in MDX, scene definitions in JSON, and detailed traces in `src/data/event-traces.ts`. Renderers and stateful UI live in components. Keep the smallest meaningful change in one contribution.
 
 ## Content review
 
