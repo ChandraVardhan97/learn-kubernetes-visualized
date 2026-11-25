@@ -29,6 +29,8 @@ If ownership matches, the operator can repair fields it manages. If there is no 
 
 Recreating a missing child serves a parent that still exists and wants that child. When the parent is being deleted, the intended outcome changes. Kubernetes garbage collection can remove API dependents whose owner reference points to the deleted parent. An object in an external system needs its own cleanup policy, often implemented with a finalizer when cleanup should complete before parent deletion. In the scene, compare deleting the generated ConfigMap with deleting the WebApp.
 
+Open **Inspect the child repair** to follow one pass of the lab reconciler. Look at which UID changes when it recreates the ConfigMap and which owner UID stays the same.
+
 <Scene id="m16-l03-operator-repair-gc" />
 
 ## <span id="practice-collect-evidence-at-each-boundary" aria-hidden="true" />Recreate a child and inspect its owner

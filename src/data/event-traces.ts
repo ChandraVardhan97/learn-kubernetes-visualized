@@ -272,6 +272,143 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'Use the lab’s short watch to inspect its starting ConfigMap. The recovery from expired history is illustrated in this trace.',
     },
   },
+  'm08-l02-directions': {
+    label: 'Inspect the policy decision',
+    scope: 'Follow the networking lab’s HTTP probe from m08-client to the m08 backend on TCP port 80. The client and backend are in kv-lab.',
+    model: 'This cluster has NetworkPolicy enforcement. The client’s egress is unrestricted, the backend stays ready, and each probe opens a fresh connection. The diagram shows the effective policy decision. Packet handling varies by network plugin.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Apply the policies', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Policy objects', x: 320, y: 53 },
+      client: { label: 'm08-client', area: 'lab=m08', x: 112, y: 166 },
+      network: { label: 'Policy enforcement', area: 'Pod network', x: 320, y: 166 },
+      backend: { label: 'm08 backend', area: 'app=m08 · TCP 80', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'establish-http-baseline', title: 'Confirm HTTP works first', from: 'client', to: 'network',
+        detail: 'The client reaches the ready backend through its Service. The successful probe gives you a working baseline before any policy change.',
+        field: 'HTTP probe from m08-client', before: 'No probe yet', after: 'HTTP_OK',
+      },
+      {
+        id: 'isolate-backend-ingress', title: 'Apply the ingress isolation policy', from: 'cli', to: 'api',
+        detail: 'm08-deny selects backend Pods labeled app=m08 and declares Ingress with an empty rule list. Once enforced, those Pods require an explicit ingress allowance for new traffic from the client.',
+        field: 'Ingress policy for app=m08', before: 'Unrestricted', after: 'Isolated with no ingress allowance',
+      },
+      {
+        id: 'test-blocked-request', title: 'Test a new connection', from: 'client', to: 'network',
+        detail: 'The client can send new traffic, and the backend still appears ready. The backend ingress has no matching allow rule, so this HTTP connection fails.',
+        field: 'HTTP probe from m08-client', before: 'HTTP_OK', after: 'HTTP_FAILED',
+      },
+      {
+        id: 'allow-the-client', title: 'Add the narrow ingress allowance', from: 'cli', to: 'api',
+        detail: 'm08-allow selects the same backend and allows source Pods labeled lab=m08 in this namespace on TCP port 80. The two policies combine additively, and m08-deny stays in place.',
+        field: 'Ingress allowed to TCP port 80', before: 'No lab peers allowed', after: 'Same-namespace Pods with lab=m08',
+      },
+      {
+        id: 'verify-restored-http', title: 'Retry from the original client', from: 'network', to: 'backend',
+        detail: 'Once the network enforces the new allowance, m08-client matches the peer selector and reaches the backend on port 80. Its HTTP probe succeeds again.',
+        field: 'HTTP probe from m08-client', before: 'HTTP_FAILED', after: 'HTTP_OK',
+      },
+    ],
+    lab: {
+      href: '/labs/#m08', label: 'Reproduce all three HTTP results in the NetworkPolicy lab',
+      question: 'If the client becomes egress-isolated and no egress rule allows this traffic, which direction now blocks the connection?',
+      answer: 'Both directions have to permit the connection. An ingress allowance leaves source egress rules in effect.',
+      check: 'Compare the client labels, the two NetworkPolicy objects, and the output of fresh probes from m08-client.',
+    },
+  },
+  'm10-l01-claims': {
+    label: 'Inspect the storage handoff',
+    scope: 'Replace ledger-1 while its claim data-ledger-1 stays bound. Follow the Pod name, Pod UID, persistent volume, and file across the replacement.',
+    model: 'The storage backend is healthy and the original claim is retained. The kubelet can remount the bound volume on an eligible node. The file comes from that volume.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Read and replace', x: 112, y: 53 },
+      controller: { label: 'StatefulSet controller', area: 'Maintains ordinal 1', x: 528, y: 53 },
+      api: { label: 'API server', area: 'Pod and claim records', x: 320, y: 53 },
+      writer: { label: 'ledger-1', area: 'Writer process', x: 528, y: 166 },
+      kubelet: { label: 'Kubelet', area: 'Mounts the volume', x: 112, y: 166 },
+      volume: { label: 'Persistent volume', area: 'Bound to data-ledger-1', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'read-original-identities', title: 'Record the Pod and claim', from: 'api', to: 'cli',
+        detail: 'Read the UID of ledger-1, the UID of data-ledger-1, and the PV named in the claim. The writer has already recorded a start in /data/starts.',
+        field: 'Storage identity for ledger-1', before: 'Unrecorded', after: 'Pod UID, PVC UID, and PV name recorded',
+      },
+      {
+        id: 'delete-only-the-pod', title: 'Delete the Pod and keep the claim', from: 'cli', to: 'api',
+        detail: 'Delete only ledger-1. Its containers stop, but the PVC remains bound to its volume. The StatefulSet still wants a Pod at ordinal 1.',
+        field: 'Pod ledger-1', before: 'Original Pod exists', after: 'Original Pod removed',
+      },
+      {
+        id: 'recreate-ordinal', title: 'Recreate ordinal 1', from: 'controller', to: 'api',
+        detail: 'The controller creates a replacement named ledger-1. Kubernetes assigns a fresh UID to the replacement, and the Pod spec refers to the existing claim for ordinal 1.',
+        field: 'ledger-1 metadata.uid', before: 'Original Pod UID', after: 'New Pod UID with the name ledger-1',
+      },
+      {
+        id: 'reuse-bound-claim', title: 'Mount the existing claim', from: 'kubelet', to: 'volume',
+        detail: 'On the assigned node, the kubelet and volume plugin prepare the same bound volume and mount it at /data for the replacement. The ordinal continues using its original storage.',
+        field: 'PVC used by ledger-1', before: 'data-ledger-1 mounted by the original Pod', after: 'data-ledger-1 mounted by the replacement',
+      },
+      {
+        id: 'read-retained-file', title: 'Read the retained file', from: 'writer', to: 'volume',
+        detail: 'The new process appends its hostname to /data/starts. Reading the old line and the new entry confirms that a new process is using the same stored data.',
+        field: '/data/starts', before: 'Earlier start recorded', after: 'Earlier start and new start recorded',
+      },
+    ],
+    lab: {
+      href: '#practice-replace-one-member-and-inspect-continuity', label: 'Replace ledger-1 and check the evidence',
+      question: 'After replacement, does seeing the name ledger-1 prove it is the original Pod?',
+      answer: 'The name identifies the ordinal. Compare the UID to identify the Pod object, then compare the PVC UID and PV name to verify storage continuity.',
+      check: 'Save the Pod UID and volume binding, replace only ledger-1, and compare both with the file read from the replacement.',
+    },
+  },
+  'm16-l03-operator-repair-gc': {
+    label: 'Inspect the child repair',
+    scope: 'Delete the generated ConfigMap m16 while its WebApp stays present. Run one pass of the lab’s polling reconciler and inspect the repair.',
+    model: 'This replay follows the teaching script with an unchanged WebApp spec. The repair is a reconcile pass against current API state. Kubernetes garbage collection is a separate path when an owner is deleted.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Delete only the child', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Current object state', x: 320, y: 53 },
+      config: { label: 'ConfigMap m16', area: 'Generated page data', x: 112, y: 166 },
+      reconciler: { label: 'WebApp reconciler', area: 'Python polling script', x: 320, y: 166 },
+      parent: { label: 'WebApp m16', area: 'Desired page and replicas', x: 528, y: 53 },
+      deployment: { label: 'Deployment m16', area: 'Surviving child', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'delete-configmap', title: 'Delete only the generated ConfigMap', from: 'cli', to: 'api',
+        detail: 'The ConfigMap disappears. The Deployment and WebApp still exist, and the WebApp still declares the page the reconciler should generate.',
+        field: 'Generated ConfigMap m16', before: 'Present', after: 'Absent',
+      },
+      {
+        id: 'read-current-parent', title: 'Read the current WebApp and its UID', from: 'api', to: 'reconciler',
+        detail: 'On the next pass, the script reads WebApp m16. It uses the message for the desired ConfigMap and the current WebApp UID for the owner reference.',
+        field: 'WebApp m16 desired page', before: 'Declared in spec.message', after: 'Desired ConfigMap prepared from the same spec',
+      },
+      {
+        id: 'check-child-absence', title: 'Check whether the child name is in use', from: 'reconciler', to: 'api',
+        detail: 'The script checks whether a ConfigMap named m16 exists. An absent child can be created. An existing object owned by a different UID would stop this repair.',
+        field: 'Lookup for ConfigMap m16', before: 'Ownership or absence unknown', after: 'Absent, so creation can proceed',
+      },
+      {
+        id: 'restore-owned-configmap', title: 'Recreate the owned ConfigMap', from: 'reconciler', to: 'config',
+        detail: 'The script applies the page through the API. The new ConfigMap has the same name but receives a new UID. Its owner reference points to the current WebApp.',
+        field: 'ConfigMap m16', before: 'Absent', after: 'New UID, original WebApp owner UID',
+      },
+      {
+        id: 'preserve-existing-deployment', title: 'Keep the existing Deployment', from: 'reconciler', to: 'deployment',
+        detail: 'The script verifies the Deployment’s owner UID and reapplies the same desired fields. The Deployment object keeps its UID.',
+        field: 'Deployment m16 metadata.uid', before: 'Original Deployment UID', after: 'Same Deployment UID',
+      },
+    ],
+    lab: {
+      href: '/labs/#m16', label: 'Delete and repair the generated child in the operator lab',
+      question: 'If another object already uses the ConfigMap name, can the script take it over just because the name matches?',
+      answer: 'The script checks the controlling owner’s UID. A mismatched UID stops the apply for that child.',
+      check: 'After the reconcile pass, compare the generated ConfigMap owner UID with the WebApp UID and verify the Deployment’s ready replica count.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {
