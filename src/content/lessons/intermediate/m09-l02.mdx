@@ -71,6 +71,8 @@ With `Immediate` binding, the decision can happen as soon as the claim is create
 
 <Scene id="m09-l02-binding" />
 
+Open **Inspect a Pending claim** to compare two claims with the same phase. One waits for a Pod so the provisioner can create storage on the right node. The other names a StorageClass that does not exist. Check the claim’s events before deciding whether it needs a repair.
+
 ## <span id="walkthrough-delay-a-decision-until-workload-topology-is-known" aria-hidden="true" />Wait for the Pod before choosing storage
 
 Save the example as `report-data.yaml`. Use a real class from `kubectl get storageclass` and record its `volumeBindingMode`. This claim requests 2 GiB and single-node read-write access. A pending claim waiting for a first consumer can be healthy. Inspect its events to distinguish that state from an unknown class or a provisioning error.
@@ -88,6 +90,45 @@ spec:
     requests:
       storage: 2Gi
 ```
+
+In the [disposable kind lab cluster](/labs/#setup), `standard` uses `WaitForFirstConsumer`. Save this Pod as `report-reader.yaml`. Apply the claim by itself first and look for `WaitForFirstConsumer` in its events. Then apply the Pod and watch the claim become Bound.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: report-reader
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: reader
+      image: busybox:1.37.0
+      command: ["sleep", "3600"]
+      volumeMounts:
+        - name: reports
+          mountPath: /data
+  volumes:
+    - name: reports
+      persistentVolumeClaim:
+        claimName: report-data
+```
+
+```bash
+kubectl --context kind-kv-lab get namespace kv-lab >/dev/null 2>&1 || \
+  kubectl --context kind-kv-lab create namespace kv-lab
+kubectl --context kind-kv-lab -n kv-lab apply -f report-data.yaml
+kubectl --context kind-kv-lab -n kv-lab describe pvc report-data
+```
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab apply -f report-reader.yaml
+kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/report-reader --timeout=90s
+kubectl --context kind-kv-lab -n kv-lab get pvc report-data
+kubectl --context kind-kv-lab -n kv-lab delete pod report-reader
+kubectl --context kind-kv-lab -n kv-lab delete pvc report-data
+```
+
+Compare that sequence with the [missing StorageClass lab](/labs/#p03). The claim there stays Pending even after you create its consumer. Its events identify which class cannot be found.
 
 ## <span id="practice-read-the-lifecycle-in-order" aria-hidden="true" />Follow provisioning, attachment, and mounting
 

@@ -72,6 +72,24 @@ test('curriculum traces expose each decision and open the right practice exercis
       event: 'read-pending-deletion', title: 'The ConfigMap is still visible',
       field: 'ConfigMap state', before: 'No deletion timestamp, finalizer present', after: 'Deletion timestamp set, finalizer still present', practice: '/labs/#m14',
     },
+    {
+      lesson: '/learn/foundations/m06-l03/', scene: 'm06-l03-startup', label: 'Inspect the crash loop',
+      event: 'read-previous-logs', title: 'Read the previous container logs',
+      field: 'Evidence from the failed start', before: 'CrashLoopBackOff, exit code 1', after: 'APP_CONFIG is required',
+      practice: '#practice-reproduce-a-crash-loop',
+    },
+    {
+      lesson: '/learn/intermediate/m09-l02/', scene: 'm09-l02-binding', label: 'Inspect a Pending claim',
+      event: 'compare-missing-class', title: 'Compare a claim with a missing class',
+      field: 'Two claims with the same phase', before: 'standard: Pending, waiting for a consumer', after: 'p03-missing: Pending, class not found',
+      practice: '/labs/#p03',
+    },
+    {
+      lesson: '/learn/advanced/m14-l02/', scene: 'm14-l02-apply-owners', label: 'Inspect the apply conflict',
+      event: 'reject-conflicting-value', title: 'Reject the conflicting value',
+      field: 'Apply response / live data.release', before: 'Change requested / git-declared', after: '409 Conflict / git-declared',
+      practice: '#practice-capture-a-conflict-instead-of-suppressing-it',
+    },
   ];
   for (const example of examples) {
     await page.goto(example.lesson + '#scene-' + example.scene);
