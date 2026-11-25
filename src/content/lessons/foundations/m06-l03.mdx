@@ -71,6 +71,8 @@ Your frontend reports that the catalog is unavailable. At first, that symptom co
 
 <Scene id="m06-l03-startup" />
 
+Open **Inspect the crash loop** to follow one container from its first failed start through the retry delay. `CrashLoopBackOff` tells you the container is waiting for another attempt. The previous container’s log tells you why this example failed.
+
 ## <span id="walkthrough-inspect-startup-before-transport" aria-hidden="true" />Investigate startup before network traffic
 
 Use the `service-demo` Deployment from the previous lessons. First ask if it has any ready Pods. Use a real Pod name from the list in the remaining commands. A pending Pod can have a `FailedScheduling` event explaining why no node is a fit. A running container that restarts can have a useful error in the previous instance’s logs. If the image never started, look at Events because there is no application output from that attempt.
@@ -83,6 +85,71 @@ kubectl logs ACTUAL_POD_NAME -c web --tail=100 --timestamps
 # Useful only if that container has a previous terminated instance:
 kubectl logs ACTUAL_POD_NAME -c web --previous --tail=100
 kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+## <span id="practice-reproduce-a-crash-loop" aria-hidden="true" />Reproduce and repair a crash loop
+
+Use the [disposable kind lab cluster](/labs/#setup) and source `lab-env.sh` first. The example container exits with code `1` until it receives `APP_CONFIG`. It uses a readiness check to report when startup succeeds.
+
+```bash
+kubectl --context kind-kv-lab get namespace kv-lab >/dev/null 2>&1 || \
+  kubectl --context kind-kv-lab create namespace kv-lab
+kubectl --context kind-kv-lab -n kv-lab apply -f - <<'YAML'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trace-startup
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trace-startup
+  template:
+    metadata:
+      labels:
+        app: trace-startup
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37.0
+          command:
+            - sh
+            - -c
+            - |
+              if [ -z "$APP_CONFIG" ]; then
+                echo 'APP_CONFIG is required' >&2
+                exit 1
+              fi
+              touch /tmp/startup-ready
+              exec sleep 3600
+          readinessProbe:
+            exec:
+              command: ["test", "-f", "/tmp/startup-ready"]
+            periodSeconds: 2
+YAML
+```
+
+Wait for Kubernetes to delay another restart. Compare the Pod’s displayed status with the previous container’s log. The status tells you when to look. The log names the missing setting.
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab wait --for=create pod \
+  -l app=trace-startup --timeout=30s
+pod=$(kubectl --context kind-kv-lab -n kv-lab get pods \
+  -l app=trace-startup -o jsonpath='{.items[0].metadata.name}')
+kubectl --context kind-kv-lab -n kv-lab wait \
+  --for='jsonpath={.status.containerStatuses[0].state.waiting.reason}=CrashLoopBackOff' \
+  "pod/$pod" --timeout=90s
+kubectl --context kind-kv-lab -n kv-lab get "pod/$pod"
+kubectl --context kind-kv-lab -n kv-lab logs "pod/$pod" -c app --previous
+```
+
+Set the missing environment variable on the Deployment. That changes the Pod template, so the rollout creates a new Pod with the corrected configuration. After it becomes Ready, delete the teaching Deployment.
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab set env deployment/trace-startup APP_CONFIG=ready
+kubectl --context kind-kv-lab -n kv-lab rollout status deployment/trace-startup --timeout=90s
+kubectl --context kind-kv-lab -n kv-lab get pods -l app=trace-startup
+kubectl --context kind-kv-lab -n kv-lab delete deployment trace-startup
 ```
 
 ## <span id="follow-a-broken-request-one-hop-at-a-time" aria-hidden="true" />Follow the client request

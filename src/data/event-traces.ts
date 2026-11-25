@@ -680,6 +680,152 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'Read metadata.deletionTimestamp and metadata.finalizers after deletion, then verify the object is gone after releasing the teaching key.',
     },
   },
+  'm06-l03-startup': {
+    label: 'Inspect the crash loop',
+    scope: 'A Pod starts, but its app exits before becoming Ready. Follow the retries, read the previous container’s log, and fix the setting in the Deployment.',
+    model: 'Uses a deliberately failing startup check in the lesson exercise. The animation compresses the kubelet’s retry delays and groups the rollout’s controller actions.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Your terminal', x: 112, y: 166 },
+      deployment: { label: 'Deployment', area: 'Pod template', x: 112, y: 53 },
+      kubelet: { label: 'Kubelet', area: 'Restarts containers', x: 320, y: 166 },
+      replica: { label: 'ReplicaSet', area: 'Creates Pods', x: 320, y: 53 },
+      process: { label: 'App container', area: 'Startup script', x: 528, y: 166 },
+      pod: { label: 'Pod', area: 'Container status', x: 528, y: 53 },
+    },
+    events: [
+      {
+        id: 'start-app', title: 'Start the app container', from: 'kubelet', to: 'process',
+        detail: 'The image is available, so the worker starts the container. Its startup script checks for APP_CONFIG before reporting readiness.',
+        field: 'Container process', before: 'Waiting to start', after: 'Running the startup script',
+      },
+      {
+        id: 'record-startup-exit', title: 'The app exits before it is Ready', from: 'process', to: 'kubelet',
+        detail: 'APP_CONFIG is missing. The process writes a message to its log and exits with code 1. The worker records the termination.',
+        field: 'Last container termination', before: 'No previous exit', after: 'Error, exit code 1',
+      },
+      {
+        id: 'delay-next-restart', title: 'Wait before trying again', from: 'kubelet', to: 'pod',
+        detail: 'The kubelet restarts the container as the Pod’s policy allows. Repeated failures cause a delay between attempts. CrashLoopBackOff is the container’s waiting reason and can appear in kubectl get pods.',
+        field: 'Container waiting reason', before: 'Previous attempt terminated', after: 'CrashLoopBackOff',
+      },
+      {
+        id: 'read-previous-logs', title: 'Read the previous container logs', from: 'cli', to: 'kubelet',
+        detail: 'kubectl logs --previous requests the terminated container’s log through the API server. The log names the setting that the display status alone cannot identify.',
+        field: 'Evidence from the failed start', before: 'CrashLoopBackOff, exit code 1', after: 'APP_CONFIG is required',
+      },
+      {
+        id: 'correct-pod-template', title: 'Set the missing environment variable', from: 'cli', to: 'deployment',
+        detail: 'kubectl set env changes the Deployment’s Pod template. That starts a rollout with the corrected setting.',
+        field: 'APP_CONFIG in the Pod template', before: 'Missing', after: 'ready',
+      },
+      {
+        id: 'replacement-ready', title: 'The replacement Pod becomes Ready', from: 'replica', to: 'pod',
+        detail: 'The new ReplicaSet creates a Pod from the corrected template. Its app keeps running and passes the readiness check. The rollout can finish once the new replica is available.',
+        field: 'Deployment availability', before: 'No available replica', after: 'One available replica',
+      },
+    ],
+    lab: {
+      href: '#practice-reproduce-a-crash-loop', label: 'Reproduce and fix the startup failure',
+      question: 'If kubectl reports CrashLoopBackOff again, can you tell which configuration value is missing from that message alone?',
+      answer: 'The waiting reason only tells you that retries are being delayed. Read the previous container logs and termination details to find this failure’s cause.',
+      check: 'Read the last exit code and previous logs, then compare the Pod name and readiness before and after the rollout.',
+    },
+  },
+  'm09-l02-binding': {
+    label: 'Inspect a Pending claim',
+    scope: 'A report needs local storage. Follow a healthy claim that starts Pending, then compare it with a separate claim whose StorageClass is missing.',
+    model: 'Uses kind’s standard local-path StorageClass, which delays provisioning until a consumer is scheduled. The chosen worker can vary. Other classes and drivers can behave differently.',
+    actors: {
+      class: { label: 'StorageClass', area: 'Class lookup', x: 112, y: 53 },
+      claim: { label: 'PVC', area: 'Requests storage', x: 320, y: 53 },
+      consumer: { label: 'Report Pod', area: 'Mounts the claim', x: 528, y: 166 },
+      scheduler: { label: 'Scheduler', area: 'Chooses a worker', x: 528, y: 53 },
+      volume: { label: 'PersistentVolume', area: 'Local to the worker', x: 112, y: 166 },
+      provisioner: { label: 'Local provisioner', area: 'Creates the volume', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'wait-for-consumer', title: 'Wait for a consumer', from: 'class', to: 'claim',
+        detail: 'The report-data claim names standard. That class uses WaitForFirstConsumer. With no Pod using the claim, provisioning is deferred. The claim’s event explains why it is Pending.',
+        field: 'Claim state', before: 'Claim submitted', after: 'Pending / WaitForFirstConsumer',
+      },
+      {
+        id: 'create-report-pod', title: 'Create the Pod that uses the claim', from: 'consumer', to: 'scheduler',
+        detail: 'The report-reader Pod refers to the claim in its volume list. The scheduler can now evaluate where the Pod and its storage can run together.',
+        field: 'Consumer for report-data', before: 'No Pod uses the claim', after: 'report-reader requests the claim',
+      },
+      {
+        id: 'select-node-for-provisioning', title: 'Choose a worker for provisioning', from: 'scheduler', to: 'claim',
+        detail: 'For this dynamically provisioned claim, the scheduler records the selected worker on the PVC. The local provisioner uses that choice to place the volume on the same worker.',
+        field: 'PVC selected node annotation', before: 'Unset', after: 'Selected worker',
+      },
+      {
+        id: 'bind-volume', title: 'Provision and bind the local volume', from: 'provisioner', to: 'volume',
+        detail: 'The provisioner creates a volume whose node affinity matches that worker. The claim binds to the new PersistentVolume.',
+        field: 'PVC phase / assigned volume', before: 'Pending / no volume', after: 'Bound / local PersistentVolume',
+      },
+      {
+        id: 'run-with-mounted-volume', title: 'Start the Pod with its volume mounted', from: 'scheduler', to: 'consumer',
+        detail: 'The scheduler can finish binding the Pod to the worker. The kubelet starts it with the volume mounted at /data.',
+        field: 'Report Pod', before: 'Waiting for storage to bind', after: 'Ready with /data mounted',
+      },
+      {
+        id: 'compare-missing-class', title: 'Compare a claim with a missing class', from: 'claim', to: 'class',
+        detail: 'The separate p03 claim names p03-missing. Its Pod cannot trigger provisioning through a class the cluster does not have. In this disposable lab, learners recreate the unbound practice claim with standard.',
+        field: 'Two claims with the same phase', before: 'standard: Pending, waiting for a consumer', after: 'p03-missing: Pending, class not found',
+      },
+    ],
+    lab: {
+      href: '/labs/#p03', label: 'Diagnose and repair the missing class',
+      question: 'What should you check before deciding whether a Pending claim needs a fix?',
+      answer: 'Check whether the named StorageClass exists, read its binding mode, and inspect the claim’s events. A delayed-binding claim can wait normally for its first consumer.',
+      check: 'Compare kubectl describe pvc with kubectl get storageclass. Look at the actual class name and event message before repairing the unbound teaching claim.',
+    },
+  },
+  'm14-l02-apply-owners': {
+    label: 'Inspect the apply conflict',
+    scope: 'A Git manager and a human manager both apply the same ConfigMap field. Follow the rejected change and the successful apply when they agree on the value.',
+    model: 'Uses two Server-Side Apply requests to one teaching ConfigMap. Ownership evidence is scoped to data.release. The API server may track other fields for these managers as well.',
+    actors: {
+      git: { label: 'Git field manager', area: 'kv-gitops', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Field ownership check', x: 320, y: 53 },
+      human: { label: 'Human field manager', area: 'kv-human', x: 528, y: 53 },
+      config: { label: 'ConfigMap', area: 'm14-ownership', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'apply-git-value', title: 'Apply the Git value', from: 'git', to: 'api',
+        detail: 'The first Server-Side Apply request creates m14-ownership with data.release set to git-declared. The API server records kv-gitops as the manager of that field.',
+        field: 'Live value / field manager', before: 'No ConfigMap', after: 'git-declared / kv-gitops',
+      },
+      {
+        id: 'apply-different-value', title: 'Apply a different value as the human manager', from: 'human', to: 'api',
+        detail: 'kv-human tries to set data.release to human-declared. The API server finds that kv-gitops already owns the field and that the incoming value differs.',
+        field: 'Live value compared with the incoming value', before: 'git-declared', after: 'human-declared requested',
+      },
+      {
+        id: 'reject-conflicting-value', title: 'Reject the conflicting value', from: 'api', to: 'human',
+        detail: 'The API reports a conflict with kv-gitops on .data.release. The rejected change leaves the stored ConfigMap unchanged.',
+        field: 'Apply response / live data.release', before: 'Change requested / git-declared', after: '409 Conflict / git-declared',
+      },
+      {
+        id: 'apply-agreed-value', title: 'Apply the value both managers agree on', from: 'human', to: 'api',
+        detail: 'kv-human applies the original file with data.release set to git-declared. Because the value is the same, the apply can succeed and record kv-human as a co-owner.',
+        field: 'Requested data.release from kv-human', before: 'human-declared', after: 'git-declared',
+      },
+      {
+        id: 'inspect-shared-ownership', title: 'Confirm both managers own the field', from: 'api', to: 'config',
+        detail: 'The live release value is still git-declared. The managedFields entries now list data.release under both managers. Future changes to that shared field still need to account for both claims.',
+        field: 'Owners of data.release', before: 'kv-gitops', after: 'kv-gitops and kv-human',
+      },
+    ],
+    lab: {
+      href: '#practice-capture-a-conflict-instead-of-suppressing-it', label: 'Reproduce the conflict and check the owners',
+      question: 'If the apply is rejected, what should you check to confirm whether it changed the object?',
+      answer: 'Read the live value and check which manager owns that field. In this exercise, both stay the same after the conflict.',
+      check: 'Use kubectl get with --show-managed-fields before the conflict and after both managers have applied the agreed value.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {

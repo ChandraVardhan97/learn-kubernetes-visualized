@@ -46,17 +46,33 @@ data:
 
 <Scene id="m14-l02-apply-owners" />
 
+Open **Inspect the apply conflict** to see what the API server retains after rejecting a second manager’s value. Compare that with both managers applying the same value and sharing ownership of the field.
+
 ## <span id="practice-capture-a-conflict-instead-of-suppressing-it" aria-hidden="true" />Reproduce and inspect an apply conflict
 
-Save the ConfigMap as `ownership.yaml` and start with the `kv-gitops` manager. Inspect managed fields. Watch the object in a second terminal, and in the first terminal change `data.release` in the file. Apply as `kv-human` and read which manager and path the conflict names. A rejected change gives the watch no successful object update for that attempt.
+Use the [disposable kind lab cluster](/labs/#setup) and source `lab-env.sh`. Save the ConfigMap as `ownership.yaml` and start with the `kv-gitops` manager. Apply a different value as `kv-human` and read which manager and field the conflict names. A rejected apply leaves the live `data.release` value unchanged.
 
 ```bash
+kubectl --context kind-kv-lab get namespace kv-lab >/dev/null 2>&1 || \
+  kubectl --context kind-kv-lab create namespace kv-lab
 kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-gitops -f ownership.yaml
 kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership -o yaml --show-managed-fields
-# Keep a second terminal watching while you edit and reapply the file.
-kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership --watch
-# After changing data.release locally, expect a field conflict here.
+```
+
+This command should return a conflict naming `kv-gitops` and `.data.release`.
+
+```bash
+sed 's/^  release: git-declared$/  release: human-declared/' ownership.yaml | \
+  kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-human -f -
+```
+
+Now apply the original file as `kv-human`. Both managers agree on the value, so both can own `data.release`. In `managedFields`, look for `f:data` and `f:release` under each manager. Delete the teaching ConfigMap when you finish.
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership -o jsonpath='{.data.release}{"\n"}'
 kubectl --context kind-kv-lab -n kv-lab apply --server-side --field-manager=kv-human -f ownership.yaml
+kubectl --context kind-kv-lab -n kv-lab get configmap m14-ownership -o yaml --show-managed-fields
+kubectl --context kind-kv-lab -n kv-lab delete configmap m14-ownership
 ```
 
 Try this in the [API mechanics lab](/labs/#m14). For a shared cluster, resolve a conflict by deciding who should manage the field. Remove the field from a manager’s declared configuration where appropriate, coordinate an update through the owner, or take ownership deliberately with a reviewed force apply. Transferring ownership changes what other reconcilers may be able to apply.
