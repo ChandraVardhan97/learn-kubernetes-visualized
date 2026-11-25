@@ -56,6 +56,22 @@ test('curriculum traces expose each decision and open the right practice exercis
       field: 'EndpointSlice conditions', before: 'ready=true, terminating=false', after: 'ready=false, terminating=true',
       practice: '#practice-watch-the-endpoint-while-the-pod-exits',
     },
+    {
+      lesson: '/learn/intermediate/m11-l01/', scene: 'm11-l01-authorization', label: 'Inspect the permission check',
+      event: 'reject-delete', title: 'Reject the delete request',
+      field: 'HTTP result for the same identity', before: 'List Pods → 200 OK', after: 'Delete Pod → 403 Forbidden', practice: '/labs/#m11',
+    },
+    {
+      lesson: '/learn/intermediate/m13-l02/', scene: 'm13-l02-hpa-loop', label: 'Inspect the scale-down decision',
+      event: 'retain-higher-recommendation', title: 'Keep the higher recent recommendation',
+      field: 'Recommendations in the stabilization window', before: '6 Pods, 2 Pods', after: '6 Pods selected',
+      practice: '#practice-watch-all-checkpoints-not-just-the-desired-count',
+    },
+    {
+      lesson: '/learn/advanced/m14-l03/', scene: 'm14-l03-finalizer-hold', label: 'Inspect the pending deletion',
+      event: 'read-pending-deletion', title: 'The ConfigMap is still visible',
+      field: 'ConfigMap state', before: 'No deletion timestamp, finalizer present', after: 'Deletion timestamp set, finalizer still present', practice: '/labs/#m14',
+    },
   ];
   for (const example of examples) {
     await page.goto(example.lesson + '#scene-' + example.scene);

@@ -25,6 +25,8 @@ In the scene, delete an object with a finalizer, then follow the controller that
 
 <Scene id="m14-l03-finalizer-hold" />
 
+Open **Inspect the pending deletion** to follow the lab ConfigMap through two reads. The first read shows `deletionTimestamp` and the finalizer key. After the teaching key is released, the next read can confirm that the object is gone.
+
 ## <span id="walkthrough-ownership-identifies-the-dependent-not-a-name-match" aria-hidden="true" />How Kubernetes finds dependents
 
 **Garbage collection** deals with dependencies between Kubernetes objects. An owner reference records the owning object’s identity, including its UID. A ReplicaSet can disappear and another object can be created under the same name, but the replacement has a different UID. The old dependents do not acquire a new owner just by matching its name. Deletion propagation controls whether dependents are cleaned up in the background, deleted before a foreground owner deletion completes when they block it, or left as orphans.

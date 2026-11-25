@@ -551,6 +551,135 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'Watch ready and terminating on the EndpointSlice while deleting the Pod. Compare the endpoint update with the time at which the Pod disappears.',
     },
   },
+  'm11-l01-authorization': {
+    label: 'Inspect the permission check',
+    scope: 'A reporting app can list Pods in kv-lab. Follow that decision, then change the API verb to delete and see why the same identity gets a different answer.',
+    model: 'Uses the permissions lab’s ServiceAccount and RoleBinding. Only this binding grants Pod permissions to the identity in this example. The lab uses impersonation to check permissions without reading a token.',
+    actors: {
+      reader: { label: 'Pod reader', area: 'm11-reader identity', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Request attributes', x: 320, y: 53 },
+      rbac: { label: 'RBAC authorizer', area: 'Permission check', x: 528, y: 53 },
+      binding: { label: 'RoleBinding', area: 'Namespace kv-lab', x: 528, y: 166 },
+      role: { label: 'Role', area: 'Rules for pods', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'identify-pod-reader', title: 'Identify the Pod reader', from: 'reader', to: 'api',
+        detail: 'The API server has established that the caller is system:serviceaccount:kv-lab:m11-reader. It passes that identity and the request attributes to authorization.',
+        field: 'Request attributes', before: 'An authenticated caller', after: 'list · pods · kv-lab',
+      },
+      {
+        id: 'find-role-binding', title: 'Find a binding for this caller', from: 'rbac', to: 'binding',
+        detail: 'For this namespaced request, RBAC finds a RoleBinding in kv-lab whose subject matches the ServiceAccount. The binding points to the Role named m11-reader.',
+        field: 'Source of the permission', before: 'ServiceAccount m11-reader', after: 'RoleBinding m11-reader → Role m11-reader',
+      },
+      {
+        id: 'match-list-rule', title: 'Match the list rule', from: 'binding', to: 'role',
+        detail: 'The referenced Role covers the core API resource pods and includes the list verb. The API server can return the Pod list for kv-lab.',
+        field: 'Authorization for list pods', before: 'Checking API group, resource, and verb', after: 'Allowed by get, list, watch on pods',
+      },
+      {
+        id: 'compare-delete-verb', title: 'Try the delete verb', from: 'api', to: 'rbac',
+        detail: 'A second request asks to delete one named Pod in the same namespace. The Role still matches the resource, but none of its verbs grants deletion.',
+        field: 'Verb checked against the Role', before: 'list → rule matches', after: 'delete → no matching grant',
+      },
+      {
+        id: 'reject-delete', title: 'Reject the delete request', from: 'api', to: 'reader',
+        detail: 'No applicable authorization rule allows this request. The API server returns Forbidden and leaves the Pod in place.',
+        field: 'HTTP result for the same identity', before: 'List Pods → 200 OK', after: 'Delete Pod → 403 Forbidden',
+      },
+    ],
+    lab: {
+      href: '/labs/#m11', label: 'Check the reader’s permissions in kind',
+      question: 'If another RoleBinding grants this ServiceAccount delete on Pods in kv-lab, will the reader Role still keep it from deleting them?',
+      answer: 'RBAC permissions add together. The second binding grants delete in kv-lab. Leaving delete out of the reader Role does not cancel another grant.',
+      check: 'Run kubectl auth can-i for both list pods and delete pods with the same impersonated identity and namespace.',
+    },
+  },
+  'm13-l02-hpa-loop': {
+    label: 'Inspect the scale-down decision',
+    scope: 'Traffic has dropped and the HPA has fresh metrics, but the Deployment still wants six replicas. Follow the latest calculation and the recent recommendation that keeps the count up.',
+    model: 'Illustrative CPU values and compressed time. All Pods are ready and have complete metrics and equal requests. The lesson configures a 300-second scale-down stabilization window. This example assumes scale-down rate policies permit the final change.',
+    actors: {
+      metrics: { label: 'Resource metrics', area: 'CPU utilization', x: 112, y: 53 },
+      hpa: { label: 'HPA controller', area: 'Target CPU 60%', x: 320, y: 53 },
+      recommendations: { label: 'Recommendations', area: 'Last 300 seconds', x: 528, y: 53 },
+      scale: { label: 'Deployment scale', area: 'Desired replicas', x: 320, y: 166 },
+      pods: { label: 'API replicas', area: 'Observed replicas', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'read-lower-usage', title: 'Observe lower CPU usage', from: 'metrics', to: 'hpa',
+        detail: 'The busy period left a recent recommendation of six replicas. The six replicas are now ready and traffic has fallen. In this example, each now uses 40m against a request of 200m.',
+        field: 'Latest utilization and configured target', before: '60% observed / 60% target', after: '20% observed / 60% target',
+      },
+      {
+        id: 'calculate-two-replicas', title: 'Calculate a lower recommendation', from: 'hpa', to: 'recommendations',
+        detail: 'With the example’s complete metrics, six current replicas multiplied by 20% divided by 60% gives a recommendation of two. That is also the configured lower bound.',
+        field: 'Replica recommendation from the latest metric', before: '6 Pods', after: '2 Pods',
+      },
+      {
+        id: 'retain-higher-recommendation', title: 'Keep the higher recent recommendation', from: 'recommendations', to: 'hpa',
+        detail: 'For a scale-down, the controller uses the highest recommendation that is still inside the stabilization window. Six is still in that window, so the Deployment keeps its desired count.',
+        field: 'Recommendations in the stabilization window', before: '6 Pods, 2 Pods', after: '6 Pods selected',
+      },
+      {
+        id: 'lower-desired-count', title: 'Lower the desired count after the window', from: 'hpa', to: 'scale',
+        detail: 'Low utilization persists. Once the higher recommendation ages out and the scaling policies allow the change, the HPA writes two replicas through the Deployment’s scale subresource.',
+        field: 'Deployment desired replicas', before: '6', after: '2',
+      },
+      {
+        id: 'observe-fewer-pods', title: 'Observe the Deployment converge', from: 'scale', to: 'pods',
+        detail: 'The Deployment and ReplicaSet controllers act on the new count. The four extra Pods terminate. Watching the workload shows when the new count is reached.',
+        field: 'Replicas still running', before: '6 while cleanup starts', after: '2 after cleanup finishes',
+      },
+    ],
+    lab: {
+      href: '#practice-watch-all-checkpoints-not-just-the-desired-count', label: 'Compare HPA conditions and Deployment replicas',
+      question: 'If CPU has been below target for one minute, does a five-minute stabilization window have to allow scale-down yet?',
+      answer: 'A higher recommendation can still be inside the window. The controller considers the recent recommendation history when deciding how far to scale down.',
+      check: 'With a working Metrics API, watch the current CPU metric, the HPA’s desired count, and the Deployment’s actual count as load falls.',
+    },
+  },
+  'm14-l03-finalizer-hold': {
+    label: 'Inspect the pending deletion',
+    scope: 'Delete the lab ConfigMap while it has a teaching finalizer. Follow the API response, inspect the remaining object, and see when it disappears.',
+    model: 'The lab’s finalizer is a marker with no controller or external cleanup behind it. A production controller normally verifies the cleanup associated with its own finalizer before removing that key.',
+    actors: {
+      cli: { label: 'kubectl', area: 'API client', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Deletion protocol', x: 320, y: 53 },
+      config: { label: 'ConfigMap m14', area: 'Stored object', x: 528, y: 53 },
+      operator: { label: 'Lab operator', area: 'Releases teaching key', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'request-deletion', title: 'Request deletion with the key present', from: 'cli', to: 'api',
+        detail: 'The lab operator sends a DELETE request. The API server accepts the request and sets metadata.deletionTimestamp. The finalizer still gates removal.',
+        field: 'Delete request', before: 'Sent to the API server', after: 'Accepted, finalizer still present',
+      },
+      {
+        id: 'read-pending-deletion', title: 'The ConfigMap is still visible', from: 'api', to: 'config',
+        detail: 'kubectl get still returns the ConfigMap. Its deletion timestamp records the pending deletion, and metadata.finalizers shows which key is holding it.',
+        field: 'ConfigMap state', before: 'No deletion timestamp, finalizer present', after: 'Deletion timestamp set, finalizer still present',
+      },
+      {
+        id: 'release-verified-lab-marker', title: 'Remove the verified teaching marker', from: 'operator', to: 'api',
+        detail: 'In the lab, the operator can safely remove this one key because the marker owns no external resources. A real controller would verify its own cleanup first.',
+        field: 'Deletion gate', before: 'labs.kv.example/hold', after: 'No remaining finalizer blocks removal',
+      },
+      {
+        id: 'confirm-object-disappears', title: 'Confirm the object is gone', from: 'api', to: 'cli',
+        detail: 'The API server has completed deletion. A fresh GET for ConfigMap m14 now returns NotFound.',
+        field: 'GET ConfigMap m14', before: '200 OK with deletionTimestamp', after: '404 Not Found',
+      },
+    ],
+    lab: {
+      href: '/labs/#m14', label: 'Inspect and release the practice finalizer',
+      question: 'What should you check before removing an unfamiliar finalizer?',
+      answer: 'Identify the controller and the cleanup associated with the key. Removing it early can leave resources behind that Kubernetes can no longer track through the deleted object.',
+      check: 'Read metadata.deletionTimestamp and metadata.finalizers after deletion, then verify the object is gone after releasing the teaching key.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {
