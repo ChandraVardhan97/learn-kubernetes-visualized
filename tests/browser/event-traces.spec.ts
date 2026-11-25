@@ -6,23 +6,39 @@ const serviceId = 'm06-l01-dataplane';
 const pod = '/learn/foundations/m02-l03/';
 const podId = 'm02-l03-request';
 
-test('rollout, placement, and watch traces expose the evidence for each decision', async ({ page }) => {
+test('curriculum traces expose each decision and open the right practice exercise', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   const examples = [
     {
       lesson: '/learn/foundations/m05-l02/', scene: 'm05-l02-rollout', label: 'Inspect the rollout',
       event: 'count-replacement', title: 'Count the replacement as available',
-      field: 'Available Pods (old / new)', before: '3 / 0', after: '3 / 1', lab: '#m05',
+      field: 'Available Pods (old / new)', before: '3 / 0', after: '3 / 1', practice: '/labs/#m05',
     },
     {
       lesson: '/learn/intermediate/m07-l02/', scene: 'm07-l02-affinity', label: 'Inspect the placement',
       event: 'filter-workers', title: 'Filter out an ineligible worker',
-      field: 'Workers eligible for scoring', before: 'worker-a, worker-b, worker-c', after: 'worker-a, worker-c', lab: '#m07',
+      field: 'Workers eligible for scoring', before: 'worker-a, worker-b, worker-c', after: 'worker-a, worker-c', practice: '/labs/#m07',
     },
     {
       lesson: '/learn/advanced/m14-l02/', scene: 'm14-l02-watch-cursor', label: 'Inspect the watch',
       event: 'history-expired', title: 'The cursor is too old',
-      field: 'Watch response', before: 'Resume requested with cursor B', after: '410 Gone', lab: '#m15',
+      field: 'Watch response', before: 'Resume requested with cursor B', after: '410 Gone', practice: '/labs/#m15',
+    },
+    {
+      lesson: '/learn/intermediate/m08-l02/', scene: 'm08-l02-directions', label: 'Inspect the policy decision',
+      event: 'test-blocked-request', title: 'Test a new connection',
+      field: 'HTTP probe from m08-client', before: 'HTTP_OK', after: 'HTTP_FAILED', practice: '/labs/#m08',
+    },
+    {
+      lesson: '/learn/intermediate/m10-l01/', scene: 'm10-l01-claims', label: 'Inspect the storage handoff',
+      event: 'reuse-bound-claim', title: 'Mount the existing claim',
+      field: 'PVC used by ledger-1', before: 'data-ledger-1 mounted by the original Pod', after: 'data-ledger-1 mounted by the replacement',
+      practice: '#practice-replace-one-member-and-inspect-continuity',
+    },
+    {
+      lesson: '/learn/advanced/m16-l03/', scene: 'm16-l03-operator-repair-gc', label: 'Inspect the child repair',
+      event: 'restore-owned-configmap', title: 'Recreate the owned ConfigMap',
+      field: 'ConfigMap m16', before: 'Absent', after: 'New UID, original WebApp owner UID', practice: '/labs/#m16',
     },
   ];
   for (const example of examples) {
@@ -41,7 +57,7 @@ test('rollout, placement, and watch traces expose the evidence for each decision
     expect(url.searchParams.get('event')).toBe(example.event);
     await page.reload();
     await expect(evidence.getByRole('heading', { name: example.title, exact: true })).toBeVisible();
-    await expect(trace.locator('.trace-lab a')).toHaveAttribute('href', '/labs/' + example.lab);
+    await expect(trace.locator('.trace-lab a')).toHaveAttribute('href', example.practice);
   }
 });
 

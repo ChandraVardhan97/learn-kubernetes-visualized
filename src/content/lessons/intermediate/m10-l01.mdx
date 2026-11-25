@@ -67,9 +67,17 @@ When Kubernetes replaces `ledger-1`, the new Pod gets the same name and can use 
 
 A **headless Service** has `clusterIP: None`. With a selector matching the StatefulSet’s Pods, it can publish addresses for the members instead of giving callers one virtual IP. In the same namespace, a client can use a per-Pod name such as `ledger-1.ledger`. A fully qualified example is `ledger-1.ledger.default.svc.cluster.local`, assuming the default namespace and cluster domain. By default, readiness affects which addresses are published. A workload that needs to discover peers during startup can use `publishNotReadyAddresses` deliberately. Clients then need to handle peers that answer DNS but are still initializing. A cached failed lookup can also delay discovery shortly after creation.
 
-The manifest refers to the headless Service through `serviceName: ledger`. Create a matching Service and use a working default StorageClass before trying the three-member example. The claim template named `data` creates one PVC per ordinal, including `data-ledger-1`. The writer mounts that claim at `/data` and records its hostname each time it starts.
+Save both objects below as `ledger.yaml`. The StatefulSet refers to its headless Service through `serviceName: ledger` and uses the cluster’s default StorageClass. The claim template named `data` creates one PVC per ordinal, including `data-ledger-1`. The writer records its hostname in the mounted volume each time it starts. This example uses the Service for stable naming and the writer for storage verification.
 
 ```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger
+spec:
+  clusterIP: None
+  selector: {app: ledger}
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -85,7 +93,7 @@ spec:
     spec:
       containers:
         - name: writer
-          image: busybox:1.36
+          image: busybox:1.37.0
           command: ["sh", "-c", "hostname >> /data/starts; sleep 3600"]
           volumeMounts:
             - name: data
@@ -100,20 +108,48 @@ spec:
             storage: 1Gi
 ```
 
+Open **Inspect the storage handoff** to follow the replacement of ordinal 1. Compare the Pod UID, the PVC, and the file across the two lifetimes.
+
 <Scene id="m10-l01-claims" />
 
 ## <span id="practice-replace-one-member-and-inspect-continuity" aria-hidden="true" />Replace one ledger member and verify its disk
 
-Use the example’s commands after the three Pods are ready. Write down the Pod UID, IP, and claim name for `ledger-1`, then delete the Pod only. Stop the watch after the replacement is ready. The PVC stays bound across this replacement with default retention, and the file should contain the earlier start plus the new one. The [StatefulSet lab](/labs/#m10) demonstrates stable identity with a smaller workload. Use the storage lab for a separate claim persistence exercise.
+Run this on the [disposable kind workbench](/labs/#setup) with a working default StorageClass and a fresh `ledger-trace` namespace. The checks verify that the Pod UID changes, the same PVC uses the same PV, and the replacement appends a line to the same file.
+
+The [StatefulSet lab](/labs/#m10) compares the StatefulSet’s stable name with a DaemonSet’s node coverage and a Job’s completion.
 
 ```bash
-kubectl get statefulset ledger
-kubectl get pods -l app=ledger -o wide
-kubectl get pvc
-kubectl exec ledger-1 -- cat /data/starts
-kubectl delete pod ledger-1
-kubectl get pod ledger-1 -w
-kubectl exec ledger-1 -- cat /data/starts
+(
+  set -euo pipefail
+  k() { kubectl --context kind-kv-lab -n ledger-trace "$@"; }
+  kubectl --context kind-kv-lab create namespace ledger-trace
+  k apply -f ledger.yaml
+  k rollout status statefulset/ledger --timeout=180s
+
+  old_pod_uid=$(k get pod ledger-1 -o jsonpath='{.metadata.uid}')
+  old_claim_uid=$(k get pvc data-ledger-1 -o jsonpath='{.metadata.uid}')
+  volume=$(k get pvc data-ledger-1 -o jsonpath='{.spec.volumeName}')
+  old_line_count=$(k exec ledger-1 -- sh -c 'wc -l < /data/starts')
+  printf 'Original Pod UID: %s\nPVC UID: %s\nPV: %s\n' "$old_pod_uid" "$old_claim_uid" "$volume"
+  k exec ledger-1 -- cat /data/starts
+
+  k delete pod ledger-1 --wait=true
+  k wait --for=create pod/ledger-1 --timeout=120s
+  k wait --for=condition=Ready pod/ledger-1 --timeout=180s
+  new_pod_uid=$(k get pod ledger-1 -o jsonpath='{.metadata.uid}')
+  test "$new_pod_uid" != "$old_pod_uid"
+  test "$(k get pvc data-ledger-1 -o jsonpath='{.metadata.uid}')" = "$old_claim_uid"
+  test "$(k get pvc data-ledger-1 -o jsonpath='{.spec.volumeName}')" = "$volume"
+  test "$(k exec ledger-1 -- sh -c 'wc -l < /data/starts')" -gt "$old_line_count"
+  printf 'Replacement Pod UID: %s\n' "$new_pod_uid"
+  k exec ledger-1 -- cat /data/starts
+)
+```
+
+Remove the namespace you created for this exercise when you finish.
+
+```bash
+kubectl --context kind-kv-lab delete namespace ledger-trace
 ```
 
 ## <span id="pitfalls-controller-ordering-is-not-a-database-protocol" aria-hidden="true" />Understand rollout order and application recovery

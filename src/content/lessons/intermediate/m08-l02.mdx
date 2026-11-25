@@ -61,6 +61,8 @@ An API should accept requests from the shop frontend, but another application in
 
 Policies select Pods in their own namespace. A Pod becomes isolated for **ingress** when an ingress policy selects it, and for **egress** when an egress policy selects it. A new connection between two Pods must satisfy the source’s egress rules if it is egress-isolated, and the destination’s ingress rules if it is ingress-isolated. Reply traffic for an allowed connection is implicitly allowed. Toggle each direction in the scene and check both ends before predicting the outcome.
 
+Open **Inspect the policy decision** to compare three fresh probes from the lab’s original client. Follow the working baseline, the blocked request, and the narrow allowance that restores HTTP.
+
 <Scene id="m08-l02-directions" />
 
 ## <span id="walkthrough-select-a-server-then-select-its-clients" aria-hidden="true" />Allow the shop frontend to call the API
