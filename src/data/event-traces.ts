@@ -409,6 +409,148 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'After the reconcile pass, compare the generated ConfigMap owner UID with the WebApp UID and verify the Deployment’s ready replica count.',
     },
   },
+  'm05-l03-probes': {
+    label: 'Inspect what each probe changes',
+    scope: 'Follow one web Pod through startup, a temporary readiness failure, and a separate liveness failure. Its Service has a second healthy backend.',
+    model: 'The startup probe is from the lesson example. The lab uses separate readiness and liveness checks. Probe intervals and delays between API updates are compressed.',
+    actors: {
+      web: { label: 'Web container', area: 'One Pod', x: 112, y: 166 },
+      api: { label: 'API server', area: 'Pod conditions', x: 320, y: 53 },
+      kubelet: { label: 'Kubelet', area: 'Worker node', x: 112, y: 53 },
+      endpoints: { label: 'EndpointSlice controller', area: 'Service backends', x: 528, y: 53 },
+      runtime: { label: 'Container runtime', area: 'Worker node', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'finish-startup', title: 'Startup succeeds', from: 'kubelet', to: 'web',
+        detail: 'The kubelet has been running only the configured startup probe. After it passes, the kubelet can run readiness and liveness checks on their own schedules. Readiness soon passes and the Pod starts receiving traffic.',
+        field: 'Readiness and liveness checks', before: 'Waiting for the startup probe', after: 'Both can run',
+      },
+      {
+        id: 'report-unready', title: 'Report the readiness failure', from: 'kubelet', to: 'api',
+        detail: 'The readiness check reaches its failure threshold. The liveness check still passes, so the web process keeps running. The kubelet reports the Pod as unready.',
+        field: 'Pod Ready / container restart count', before: 'True / 0', after: 'False / 0',
+      },
+      {
+        id: 'exclude-unready-backend', title: 'Exclude the unready backend', from: 'api', to: 'endpoints',
+        detail: 'The EndpointSlice controller observes the Pod condition and updates its endpoint. As that update reaches the forwarding layer, ordinary new connections go to the healthy backend.',
+        field: 'This endpoint’s ready condition', before: 'true', after: 'false',
+      },
+      {
+        id: 'readiness-recovers', title: 'Readiness recovers', from: 'kubelet', to: 'api',
+        detail: 'A later check succeeds. The same container can serve requests again once the updated Pod and endpoint conditions propagate.',
+        field: 'Pod Ready / container restart count', before: 'False / 0', after: 'True / 0',
+      },
+      {
+        id: 'restart-container', title: 'Restart the web container', from: 'kubelet', to: 'runtime',
+        detail: 'Later, the liveness check reaches its own failure threshold. The kubelet asks the runtime to stop the container and restarts it under the Pod’s Always restart policy. The startup check runs again for the new container instance.',
+        field: 'Pod UID / container restart count', before: 'Same Pod UID / 0', after: 'Same Pod UID / 1',
+      },
+    ],
+    lab: {
+      href: '/labs/#m05', label: 'Verify readiness in the probe and rollout lab',
+      question: 'If a dependency goes offline but your web process can recover on its own, which check should usually fail?',
+      answer: 'Readiness can take the Pod out of ordinary Service traffic while the dependency recovers. Repeated liveness failures restart the container, which may accomplish nothing during a dependency outage.',
+      check: 'Record the Pod UID and restart count before removing its readiness file. Compare those fields with the Pod Ready and EndpointSlice ready conditions after the failure.',
+    },
+  },
+  'm06-l02-dns': {
+    label: 'Inspect the DNS lookup',
+    scope: 'A client in kv-lab looks up the short Service name m06. Follow the DNS answer, then retry the request after the Service selector stops matching.',
+    model: 'Uses the lab’s names and an illustrative IPv4 ClusterIP. The Pod uses the standard cluster DNS search list. DNS caching and packet forwarding implementation details are omitted.',
+    actors: {
+      dns: { label: 'CoreDNS', area: 'Cluster DNS', x: 528, y: 53 },
+      resolver: { label: 'Pod resolver', area: 'DNS search list', x: 320, y: 53 },
+      app: { label: 'Client process', area: 'Pod in kv-lab', x: 112, y: 53 },
+      service: { label: 'Service m06', area: 'API object', x: 528, y: 166 },
+      routing: { label: 'Service forwarding', area: '10.96.0.42:80', x: 320, y: 166 },
+      backend: { label: 'Ready web Pods', area: 'Deployment m06', x: 112, y: 166 },
+    },
+    events: [
+      {
+        id: 'expand-service-name', title: 'Expand the short Service name', from: 'resolver', to: 'dns',
+        detail: 'The client asks for m06. Its resolver tries the namespace search suffix kv-lab.svc.cluster.local and sends the resulting DNS query to CoreDNS.',
+        field: 'Name being looked up', before: 'm06', after: 'm06.kv-lab.svc.cluster.local.',
+      },
+      {
+        id: 'return-cluster-ip', title: 'Return the Service IP', from: 'dns', to: 'resolver',
+        detail: 'CoreDNS uses Service data it watches through the API. For this ClusterIP Service, the IPv4 DNS answer contains the Service IP. A separate forwarding decision will select a Pod.',
+        field: 'DNS A record answer', before: 'Waiting for the reply', after: '10.96.0.42',
+      },
+      {
+        id: 'connect-to-service-ip', title: 'Connect to the returned address', from: 'app', to: 'routing',
+        detail: 'The resolver hands the IP back to the client process. The client opens a TCP connection to that address on port 80.',
+        field: 'TCP destination', before: 'No connection yet', after: '10.96.0.42:80',
+      },
+      {
+        id: 'connect-via-service', title: 'Reach a web Pod through the Service', from: 'routing', to: 'backend',
+        detail: 'The forwarding layer sends the connection to one eligible endpoint, where the web server returns HTTP 200.',
+        field: 'HTTP request', before: 'Connection to the Service IP', after: '200 OK from a matching Pod',
+      },
+      {
+        id: 'selector-stops-matching', title: 'Change the selector without changing the IP', from: 'service', to: 'routing',
+        detail: 'Someone changes the Service selector to a label the two web Pods lack. After the EndpointSlice update propagates, forwarding has no matching backends. The Service keeps its name and ClusterIP.',
+        field: 'Eligible Service backends', before: '2', after: '0',
+      },
+      {
+        id: 'resolve-without-backends', title: 'Resolve the name with zero backends', from: 'dns', to: 'resolver',
+        detail: 'DNS still returns the Service IP in this setup. The client’s new connection fails because there is no eligible endpoint. Successful DNS tells you only that the name resolved.',
+        field: 'DNS answer / eligible backends', before: '10.96.0.42 / 2', after: '10.96.0.42 / 0',
+      },
+    ],
+    lab: {
+      href: '/labs/#m06', label: 'Compare DNS and HTTP in the Service lab',
+      question: 'When nslookup returns the expected Service IP but HTTP fails, what should you check next?',
+      answer: 'Check the Service port and target port, then compare its selector with the Pod labels and read its EndpointSlices for eligible addresses.',
+      check: 'Run nslookup and an HTTP request from the same client Pod before and after repairing the selector.',
+    },
+  },
+  'm10-l03-termination': {
+    label: 'Inspect the shutdown',
+    scope: 'Delete one web Pod behind a Service with another healthy backend. Follow endpoint changes in the control plane and shutdown on the worker node.',
+    model: 'The diagram shows one possible order. Endpoint updates and kubelet shutdown run concurrently. No change to an EndpointSlice closes an established connection by itself.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Your terminal', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Pod object', x: 320, y: 53 },
+      endpoints: { label: 'EndpointSlice controller', area: 'Service backends', x: 528, y: 53 },
+      kubelet: { label: 'Kubelet', area: 'Worker node', x: 112, y: 166 },
+      runtime: { label: 'Container runtime', area: 'Worker node', x: 320, y: 166 },
+      process: { label: 'Web process', area: 'Departing Pod', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'request-pod-deletion', title: 'Start the termination grace period', from: 'cli', to: 'api',
+        detail: 'The API server accepts the deletion and records the grace period and deletion timestamp. The Pod stays visible while its containers wind down.',
+        field: 'Pod metadata.deletionTimestamp', before: 'Unset', after: 'Set to the deletion deadline',
+      },
+      {
+        id: 'run-prestop-hook', title: 'Run the preStop hook', from: 'kubelet', to: 'runtime',
+        detail: 'The kubelet sees the terminating Pod and runs its configured preStop hook. The hook spends part of the Pod’s existing grace period.',
+        field: 'Local shutdown', before: 'Web process running', after: 'Hook running within the grace period',
+      },
+      {
+        id: 'mark-terminating-endpoint', title: 'Mark the endpoint as terminating', from: 'api', to: 'endpoints',
+        detail: 'Independently, the EndpointSlice controller sees the deletion. This endpoint can still be listed with serving=true while its readiness for ordinary routing is false. New connections can use the other healthy backend once the forwarding layer sees the change.',
+        field: 'EndpointSlice conditions', before: 'ready=true, terminating=false', after: 'ready=false, terminating=true',
+      },
+      {
+        id: 'signal-web-process', title: 'Send the stop signal after the hook', from: 'runtime', to: 'process',
+        detail: 'Once the hook finishes, the runtime signals the container’s main process. The signal can come from the image configuration. An application that handles it can finish requests within the remaining time.',
+        field: 'Web process', before: 'Running during the hook', after: 'Handling the stop signal',
+      },
+      {
+        id: 'finish-pod-shutdown', title: 'The web process exits within the grace period', from: 'process', to: 'runtime',
+        detail: 'The web process finishes and exits. If processes outlast the grace period, the runtime forcibly stops them. The API object and its endpoint are then removed as cleanup completes.',
+        field: 'Container process', before: 'Shutting down', after: 'Exited before forced termination',
+      },
+    ],
+    lab: {
+      href: '#practice-watch-the-endpoint-while-the-pod-exits', label: 'Watch an endpoint during a real shutdown',
+      question: 'Does preStop receive its own full timeout before the Pod’s grace period begins?',
+      answer: 'The countdown is already running when the hook starts. Time spent in preStop reduces the time left for the application to handle its stop signal.',
+      check: 'Watch ready and terminating on the EndpointSlice while deleting the Pod. Compare the endpoint update with the time at which the Pod disappears.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {

@@ -67,6 +67,8 @@ A normal ClusterIP Service resolves to its cluster IP. Once your client knows th
 
 <Scene id="m06-l02-dns" />
 
+Open **Inspect the DNS lookup** to follow a short name from the client’s DNS search list to CoreDNS and then trace the connection to a backend. The final step shows which part breaks when the Service selector stops matching.
+
 ## <span id="walkthrough-inspect-the-callers-resolver" aria-hidden="true" />Check DNS from a client Pod
 
 Use the `service-demo` Service and Deployment from the previous lesson. The client created here stays running long enough to execute several commands. Inside it, `/etc/resolv.conf` shows the search suffixes and the resolver address. Compare the result of `nslookup` with `wget`. A DNS answer tells you the name resolved. A successful HTTP response proves that the connection also reached a backend that could answer.
