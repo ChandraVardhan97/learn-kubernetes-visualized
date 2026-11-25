@@ -109,6 +109,8 @@ RBAC permissions are additive. A second binding can grant an action that this Ro
 
 <Scene id="m11-l01-authorization" />
 
+Open **Inspect the permission check** to compare two requests made by the same ServiceAccount. The lab’s reader can list Pods because its Role includes `list`. A request to delete a Pod changes the verb and receives `403 Forbidden`.
+
 ## <span id="practice-verify-permissions-without-printing-credentials" aria-hidden="true" />Test allowed and denied operations
 
 Create `learning` if needed in your disposable cluster. Save the manifest as `pod-reader-rbac.yaml` and run the checks with a lab user allowed to impersonate the ServiceAccount. Expect listing Pods to succeed, deletion to be denied, and reading Secrets to be denied with only the grant shown. If an action returns an unexpected answer, inspect other bindings and check that the command targets the right identity and namespace.

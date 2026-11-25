@@ -102,6 +102,8 @@ spec:
 
 <Scene id="m13-l02-hpa-loop" />
 
+Open **Inspect the scale-down decision** to see why the HPA can keep six replicas after CPU usage falls. The current sample produces a lower recommendation, but the controller considers the highest recommendation still inside the scale-down stabilization window.
+
 ## <span id="practice-watch-all-checkpoints-not-just-the-desired-count" aria-hidden="true" />Follow a scale-up through readiness
 
 Check resource metrics before generating traffic. Then watch the HPA’s metric, desired count, and conditions. Compare them with the Deployment’s actual and ready replicas. If the HPA wants six copies but two Pods are pending, their events might reveal a placement constraint or insufficient requested CPU. Adding enough suitable nodes can help the latter case. A conflict in required labels or affinities can make new capacity irrelevant.
@@ -117,6 +119,8 @@ kubectl get events -n learning --sort-by=.metadata.creationTimestamp
 ```
 
 In the [application delivery lab](/labs/#m13), the baseline lets you inspect the HPA and its conditions. It does not install the Metrics API. A working CPU-based scaling experiment needs that pipeline, a resource request, and sustained traffic you can observe.
+
+When metrics are available, try reducing load once the replicas are ready. Compare the current CPU metric with the desired replica count. If a higher recommendation is still in the window, `kubectl describe hpa` can report `ScaleDownStabilized` under `AbleToScale`.
 
 ## <span id="pitfalls-more-nodes-only-help-satisfiable-demand" aria-hidden="true" />Check whether the new Pods can help
 
