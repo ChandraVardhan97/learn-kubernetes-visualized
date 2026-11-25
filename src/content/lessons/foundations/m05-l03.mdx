@@ -69,6 +69,8 @@ A **readiness probe** asks whether the application can accept traffic now. After
 
 <Scene id="m05-l03-probes" />
 
+Open **Inspect what each probe changes** to compare the Pod’s `Ready` condition, its endpoint’s `ready` condition, and the container’s restart count. They tell you which part of the system changed and which check caused it.
+
 ## <span id="walkthrough-configure-real-paths" aria-hidden="true" />Configure the three HTTP checks
 
 Save this example as `probes-demo.yaml`. All three probes use the same HTTP path here so you can focus on how their timing and consequences differ. The named port `http` resolves to port 80. The startup probe’s two-second period and 30-failure threshold give the process roughly a minute to start. In a real application, separate endpoints may check different things. For example, an app might report unready while a required backend is down but still report live because restarting it would achieve nothing.
@@ -125,7 +127,7 @@ When you delete the Pod, graceful termination gives the application a bounded ti
 
 <Scene id="m05-l03-termination" />
 
-Use the [probe and recovery lab](/labs/#m05) to compare an unready Pod with a restarted container. For the shutdown exercise, use a disposable workload and check which effects you can observe from the caller.
+Use the [probe and recovery lab](/labs/#m05) to make a Pod unready and confirm that its container stays running. In the [shutdown exercise](/learn/intermediate/m10-l03/#practice-watch-the-endpoint-while-the-pod-exits), watch the endpoint change while a Pod is still shutting down.
 
 ## <span id="pitfalls" aria-hidden="true" />Choose failures that justify a restart
 

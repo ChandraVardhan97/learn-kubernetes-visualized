@@ -67,6 +67,66 @@ Meanwhile, EndpointSlices mark the endpoint as terminating and normally unready 
 
 <Scene id="m10-l03-termination" />
 
+Open **Inspect the shutdown** to follow the deletion request, the EndpointSlice update, and the stop signal. The control plane can update the endpoint while the kubelet is still running the Pod’s shutdown hook.
+
+<span id="practice-watch-the-endpoint-while-the-pod-exits" aria-hidden="true" />
+
+## Watch the endpoint while the Pod exits
+
+Use the [disposable kind lab cluster](/labs/#setup). This Pod’s `preStop` hook sleeps for 12 seconds so you have time to see the EndpointSlice change during its 25-second grace period.
+
+```bash
+kubectl --context kind-kv-lab get namespace kv-lab >/dev/null 2>&1 || \
+  kubectl --context kind-kv-lab create namespace kv-lab
+kubectl --context kind-kv-lab -n kv-lab apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: trace-shutdown
+  labels:
+    app: trace-shutdown
+spec:
+  terminationGracePeriodSeconds: 25
+  containers:
+    - name: web
+      image: nginx:1.28.0-alpine
+      lifecycle:
+        preStop:
+          exec:
+            command: ["sleep", "12"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trace-shutdown
+spec:
+  selector:
+    app: trace-shutdown
+  ports:
+    - port: 80
+      targetPort: 80
+YAML
+kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready \
+  pod/trace-shutdown --timeout=90s
+```
+
+Start this watch and wait for `READY=true` and `TERMINATING=false`. Source `lab-env.sh` in both terminals so they use the same cluster.
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab get endpointslices \
+  -l kubernetes.io/service-name=trace-shutdown --watch \
+  -o 'custom-columns=ADDRESS:.endpoints[*].addresses[*],READY:.endpoints[*].conditions.ready,TERMINATING:.endpoints[*].conditions.terminating'
+```
+
+Delete the Pod in the other terminal. Look for `READY=false` and `TERMINATING=true` while the Pod is still present. When it exits, its address disappears from the EndpointSlice. Stop the watch with `Ctrl+C`, then delete the Service.
+
+```bash
+kubectl --context kind-kv-lab -n kv-lab delete pod trace-shutdown --wait=false
+kubectl --context kind-kv-lab -n kv-lab wait --for=delete \
+  pod/trace-shutdown --timeout=60s
+kubectl --context kind-kv-lab -n kv-lab delete service trace-shutdown
+```
+
 ## <span id="walkthrough-allow-maintenance-without-removing-too-many-healthy-replicas" aria-hidden="true" />Keep enough replicas during maintenance
 
 A **PodDisruptionBudget (PDB)** limits voluntary evictions performed through the Eviction API, such as those used by normal node drain. This example selects `app: api` in its own namespace and asks for two healthy copies to remain. If three matched Pods are healthy, the budget can allow one eviction. With only two healthy copies before the drain starts, evicting a healthy copy can be blocked until availability improves. Use the scene to try both cases.
@@ -100,7 +160,7 @@ kubectl drain LAB_WORKER --ignore-daemonsets
 kubectl uncordon LAB_WORKER
 ```
 
-Follow the [maintenance lab](/labs/#m10) in a disposable environment. A single worker cannot prove availability during maintenance, so a spare eligible worker matters when you practice evicting and rescheduling a replica.
+Use the [workload controllers lab](/labs/#m10) to inspect a live disruption budget before trying a drain. To practice rescheduling a replica during maintenance, use a disposable cluster with a spare eligible worker.
 
 ## <span id="pitfalls-a-force-action-changes-the-safety-boundary" aria-hidden="true" />Recognize disruptions the budget cannot prevent
 

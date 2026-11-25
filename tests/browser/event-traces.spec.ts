@@ -40,6 +40,22 @@ test('curriculum traces expose each decision and open the right practice exercis
       event: 'restore-owned-configmap', title: 'Recreate the owned ConfigMap',
       field: 'ConfigMap m16', before: 'Absent', after: 'New UID, original WebApp owner UID', practice: '/labs/#m16',
     },
+    {
+      lesson: '/learn/foundations/m05-l03/', scene: 'm05-l03-probes', label: 'Inspect what each probe changes',
+      event: 'restart-container', title: 'Restart the web container',
+      field: 'Pod UID / container restart count', before: 'Same Pod UID / 0', after: 'Same Pod UID / 1', practice: '/labs/#m05',
+    },
+    {
+      lesson: '/learn/foundations/m06-l02/', scene: 'm06-l02-dns', label: 'Inspect the DNS lookup',
+      event: 'resolve-without-backends', title: 'Resolve the name with zero backends',
+      field: 'DNS answer / eligible backends', before: '10.96.0.42 / 2', after: '10.96.0.42 / 0', practice: '/labs/#m06',
+    },
+    {
+      lesson: '/learn/intermediate/m10-l03/', scene: 'm10-l03-termination', label: 'Inspect the shutdown',
+      event: 'mark-terminating-endpoint', title: 'Mark the endpoint as terminating',
+      field: 'EndpointSlice conditions', before: 'ready=true, terminating=false', after: 'ready=false, terminating=true',
+      practice: '#practice-watch-the-endpoint-while-the-pod-exits',
+    },
   ];
   for (const example of examples) {
     await page.goto(example.lesson + '#scene-' + example.scene);
@@ -49,6 +65,8 @@ test('curriculum traces expose each decision and open the right practice exercis
     const sequence = trace.getByRole('button', { name: 'Sequence', exact: true });
     await sequence.click();
     await expect(sequence).toHaveAttribute('aria-pressed', 'true');
+    await expect(trace.getByRole('list', { name: 'Events in order' }).getByRole('link').first())
+      .toHaveAttribute('aria-current', 'step');
     await trace.getByRole('link', { name: new RegExp(example.title) }).click();
     const evidence = trace.getByRole('region', { name: 'Event evidence' });
     await expect(evidence).toContainText(example.field);
@@ -58,6 +76,9 @@ test('curriculum traces expose each decision and open the right practice exercis
     await page.reload();
     await expect(evidence.getByRole('heading', { name: example.title, exact: true })).toBeVisible();
     await expect(trace.locator('.trace-lab a')).toHaveAttribute('href', example.practice);
+    if (example.practice.startsWith('#')) {
+      await expect(page.locator(example.practice)).toHaveCount(1);
+    }
   }
 });
 
