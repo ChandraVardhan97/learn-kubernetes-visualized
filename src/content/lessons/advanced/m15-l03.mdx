@@ -25,7 +25,7 @@ In the election scene, stop renewal from controller A and watch when controller 
 
 <Scene id="m15-l03-lease-election" />
 
-Open **Inspect the leadership handoff** to see when the recorded holder stops renewing and when a different scheduler takes over.
+Open **Inspect the leadership handoff** to see when the recorded holder stops renewing and when a standby contender takes over.
 
 ## <span id="walkthrough-renewal-is-different-from-a-node-heartbeat" aria-hidden="true" />Read election Leases and node heartbeats
 
@@ -60,36 +60,79 @@ kubectl --context kind-kv-lab -n kube-node-lease get leases
 kubectl --context kind-kv-lab -n kube-system get lease kube-scheduler -o yaml
 ```
 
-## <span id="practice-observe-a-live-lease-handoff" aria-hidden="true" />Observe a live scheduler handoff
+## <span id="practice-observe-a-live-lease-handoff" aria-hidden="true" />Observe a live Lease handoff
 
-Create the [separate HA kind cluster](/learn/advanced/m18-l01/#practice-test-quorum-in-disposable-kind) using only its cluster creation block. Keep all three members running at the start. Record the Lease holder, transition count, and renewal timestamp. This exercise stops the holder’s Docker node in that named cluster.
+Source `lab-env.sh` in the [disposable kind lab](/labs/#setup). Create a dedicated namespace and Lease. The example uses two teaching contenders running on the same workstation clock.
 
 ```bash
-ha=(kubectl --kubeconfig ./kv-quorum.kubeconfig --request-timeout=10s)
-"${ha[@]}" -n kube-system get lease kube-scheduler \
-  -o 'custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions,RENEWED:.spec.renewTime'
-holder=$("${ha[@]}" -n kube-system get lease kube-scheduler -o jsonpath='{.spec.holderIdentity}')
-node=${holder%%_*}
-case "$node" in
-  kv-quorum-trace-control-plane|kv-quorum-trace-control-plane2|kv-quorum-trace-control-plane3)
-    docker stop "$node" ;;
-  *) printf 'Unexpected scheduler node: %s\n' "$node" >&2 ;;
-esac
+kubectl --context kind-kv-lab create namespace kv-lease-trace
+kubectl --context kind-kv-lab -n kv-lease-trace apply -f - <<'YAML'
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: demo-election
+spec:
+  leaseDurationSeconds: 12
+YAML
 ```
 
-Repeat the read until another scheduler holds the Lease. Compare the transition count and see whether the new holder renews again. Restore the node after observing the handoff, then remove the practice cluster.
+Save the following as `contender.py`. Each contender can renew its own Lease or try to take over an expired Lease. The API's version check prevents a writer from replacing a newer record it has not read yet.
 
-```bash
-"${ha[@]}" -n kube-system get lease kube-scheduler \
-  -o 'custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions,RENEWED:.spec.renewTime'
+```python
+import datetime
+import json
+import subprocess
+import sys
+import time
+
+identity, seconds = sys.argv[1:]
+deadline = time.monotonic() + int(seconds)
+base = ["kubectl", "--context", "kind-kv-lab", "-n", "kv-lease-trace", "--request-timeout=8s"]
+
+
+def kubectl(*args, body=None):
+    return subprocess.run([*base, *args], input=body, text=True, capture_output=True)
+
+
+while time.monotonic() < deadline:
+    result = kubectl("get", "lease", "demo-election", "-o", "json")
+    result.check_returncode()
+    lease = json.loads(result.stdout)
+    spec = lease["spec"]
+    now = datetime.datetime.now(datetime.timezone.utc)
+    holder = spec.get("holderIdentity")
+    renewed = spec.get("renewTime")
+    expired = not renewed or (
+        now - datetime.datetime.fromisoformat(renewed.replace("Z", "+00:00"))
+    ).total_seconds() >= spec["leaseDurationSeconds"]
+
+    if holder == identity or expired:
+        if holder != identity:
+            spec["leaseTransitions"] = spec.get("leaseTransitions", 0) + 1
+        spec["holderIdentity"] = identity
+        spec["renewTime"] = now.isoformat(timespec="microseconds").replace("+00:00", "Z")
+        result = kubectl("replace", "-f", "-", body=json.dumps(lease))
+        if result.returncode and "(Conflict)" not in result.stderr:
+            raise SystemExit(result.stderr)
+        if not result.returncode:
+            print(identity, "renewed the Lease", flush=True)
+
+    time.sleep(1)
 ```
 
+Start A, wait for it to acquire the Lease, and start B. A stops after 18 seconds. B waits for the last renewal to expire, takes over, and starts renewing. While both commands run, read the Lease with `kubectl` in a second shell if you want to see the intermediate holder and timestamps.
+
 ```bash
-case "$node" in
-  kv-quorum-trace-control-plane|kv-quorum-trace-control-plane2|kv-quorum-trace-control-plane3)
-    docker start "$node" ;;
-esac
-kind delete cluster --name kv-quorum-trace --kubeconfig ./kv-quorum.kubeconfig
+python3 contender.py A 18 &
+kubectl --context kind-kv-lab -n kv-lease-trace wait \
+  --for='jsonpath={.spec.holderIdentity}=A' lease/demo-election --timeout=30s
+python3 contender.py B 50 &
+kubectl --context kind-kv-lab -n kv-lease-trace wait \
+  --for='jsonpath={.spec.holderIdentity}=B' lease/demo-election --timeout=60s
+kubectl --context kind-kv-lab -n kv-lease-trace get lease demo-election \
+  -o 'custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions,RENEWED:.spec.renewTime'
+wait
+kubectl --context kind-kv-lab delete namespace kv-lease-trace
 ```
 
 ## <span id="pitfalls-shortening-timeouts-changes-failure-behavior" aria-hidden="true" />Protect external data from a former leader

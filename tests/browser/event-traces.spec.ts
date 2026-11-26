@@ -121,8 +121,8 @@ test('curriculum traces expose each decision and open the right practice exercis
     },
     {
       lesson: '/learn/advanced/m15-l03/', scene: 'm15-l03-lease-election', label: 'Inspect the leadership handoff',
-      event: 'transfer-scheduler-lease', title: 'A standby scheduler acquires the Lease',
-      field: 'Kube-scheduler Lease holder', before: 'Scheduler A', after: 'Scheduler B',
+      event: 'transfer-scheduler-lease', title: 'A standby contender acquires the Lease',
+      field: 'Lease holder', before: 'Controller A', after: 'Controller B',
       practice: '#practice-observe-a-live-lease-handoff',
     },
   ];
