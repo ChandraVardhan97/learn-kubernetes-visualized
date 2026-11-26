@@ -7,7 +7,7 @@ This bundle contains 20 module labs, three capstones in m20, a separate offline 
 - **macOS:** Start [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/), install [Python 3](https://www.python.org/downloads/macos/) if needed, and enter Bash by running `bash` in Terminal.
 - **Windows:** Set up [Ubuntu on WSL 2](https://learn.microsoft.com/en-us/windows/wsl/install) and [enable Docker Desktop's WSL integration](https://docs.docker.com/desktop/features/wsl/) for Ubuntu in Linux containers mode. In Ubuntu, run `sudo apt update` and `sudo apt install curl python3 unzip`. Extract the bundle inside your Ubuntu home directory and run the lab commands from Ubuntu's Bash shell.
 
-Setup uses the same bundle for both platforms and installs the pinned tools in its private `.kv-lab/bin` directory. It checks the downloads against the official release checksums. You need internet access for the first setup and several GiB of free disk space for the cluster and images. See the [website setup guide](https://k8s-visualized.pages.dev/labs/#setup).
+Setup uses the same bundle for both platforms and installs the pinned tools in its private `.kv-lab/bin` directory. It checks the downloads against the official release checksums. You need internet access for the first setup and several GiB of free disk space for the cluster and images. See the [website setup guide](https://learn-k8s.chandubodduluri.com/labs/#setup).
 
 ## Setup
 

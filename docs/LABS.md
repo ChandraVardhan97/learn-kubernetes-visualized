@@ -6,7 +6,7 @@ The catalog includes 20 module labs, three cumulative capstones within m20, offl
 
 Install Docker Desktop, Bash, curl and Python 3. The bundle setup selects and checksum-verifies kind **v0.33.0** and kubectl **v1.37.0** for the host OS and CPU. Docker must be running and able to pull public images. Allow enough memory for a control plane and workers. 6–8 GiB available to Docker is a starting point. Offline restore needs resources for another control plane.
 
-Use Bash in Terminal on macOS and Ubuntu's Bash shell on Windows. The website's [platform setup instructions](https://k8s-visualized.pages.dev/labs/#setup) cover Docker Desktop and WSL 2 integration. On Windows, extract into the Ubuntu home directory.
+Use Bash in Terminal on macOS and Ubuntu's Bash shell on Windows. The website's [platform setup instructions](https://learn-k8s.chandubodduluri.com/labs/#setup) cover Docker Desktop and WSL 2 integration. On Windows, extract into the Ubuntu home directory.
 
 The node image is pinned to the multiarchitecture digest published by the [kind v0.33.0 release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0):
 

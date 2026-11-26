@@ -13,13 +13,21 @@ This is an Astro **static** site. No Worker script, SSR, R2, KV, D1, or paid ser
 
 `assets.directory` points at `dist`; `not_found_handling` is `404-page`. Keep `main` and `run_worker_first` absent so ordinary requests remain static asset requests.
 
+## Production custom domain
+
+The `kubernetes-visualized` Worker serves [learn-k8s.chandubodduluri.com](https://learn-k8s.chandubodduluri.com/).
+
+1. Open **Workers & Pages → kubernetes-visualized → Settings → Domains & Routes → Add → Custom Domain** and enter `learn-k8s.chandubodduluri.com`. Cloudflare creates the DNS record and issues the certificate for the `.com` zone. [Cloudflare Workers custom domains](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/)
+2. Set any existing production `SITE_URL` build variable to `https://learn-k8s.chandubodduluri.com` before rebuilding. A build without an override uses the repository default.
+3. Verify the custom hostname serves the homepage, deep links, search, lab downloads, and custom 404 over HTTPS. Check that the generated canonical links and sitemap use the custom hostname.
+
 ## Git integration and previews
 
-Both Cloudflare projects track `main` from the same GitHub repository and use `npm run build`. Pages publishes `dist`. Workers Builds deploys with `npx wrangler deploy` and uses its preview build settings for other branches. Enable branch previews in each project as needed.
+Workers Builds tracks `main` from the GitHub repository, builds with `npm run build`, and deploys with `npx wrangler deploy`. Enable Worker preview builds for other branches as needed.
 
-Use the Node version in `.node-version` and the same canonical `SITE_URL` in both build environments.
+Use the Node version in `.node-version`. If the legacy Pages project still builds, use the same canonical `SITE_URL` there. After verifying the Worker deployment on the custom domain, disable Pages automatic deployments or retire the Pages project. Deleting Pages takes `k8s-visualized.pages.dev` and its Pages previews offline. [Cloudflare migration guide](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/)
 
-For an existing Worker created from a dashboard template, connect GitHub and merge a pull request into the configured production branch. The merge triggers the first repository build for that Worker. Check **Deployments → View build history** for the build and confirm the commit is active. The canonical public address is `https://k8s-visualized.pages.dev`.
+For an existing Worker created from a dashboard template, connect GitHub and merge a pull request into the configured production branch. The merge triggers the first repository build for that Worker. Check **Deployments → View build history** for the build and confirm the commit is active.
 
 Keep the build checks in the repository’s CI. Preview builds should exercise the same static output; do not introduce an adapter or API just for deployment.
 
