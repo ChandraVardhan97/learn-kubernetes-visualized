@@ -2,7 +2,7 @@
 
 An interactive visual textbook for building a practical, accurate mental model of Kubernetes, from containers through control-plane internals and platform operations.
 
-[Open Kubernetes, Visualized](https://k8s-visualized.pages.dev/)
+[Open Kubernetes, Visualized](https://learn-k8s.chandubodduluri.com/)
 
 ## Run locally
 
@@ -56,7 +56,7 @@ See [the content contract](docs/CONTENT-CONTRACT.md), [contribution guide](CONTR
 
 ## Publishing and rights
 
-Cloudflare Pages is the public address. Cloudflare Workers Static Assets also builds from `main`. Build and learning functionality do not need an account. To host your own copy, sign in to Cloudflare and set `SITE_URL` to its public address for canonical links and sitemap generation.
+Cloudflare Workers Static Assets serves `learn-k8s.chandubodduluri.com` and builds from `main`. Build and learning functionality do not need an account. To host your own copy, sign in to Cloudflare and set `SITE_URL` to its public address for canonical links and sitemap generation.
 
 Copyright 2026 Chandu B. The project’s original code, lessons, diagrams, and lab materials are licensed under the [Apache License 2.0](LICENSE). See [Third-party notices](THIRD-PARTY-NOTICES.md) for separately licensed material.
 

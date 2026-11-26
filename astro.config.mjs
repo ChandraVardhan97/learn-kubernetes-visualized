@@ -4,7 +4,7 @@ import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
 
 export default defineConfig({
-  site: process.env.SITE_URL || 'https://k8s-visualized.pages.dev',
+  site: process.env.SITE_URL || 'https://learn-k8s.chandubodduluri.com',
   output: 'static',
   trailingSlash: 'always',
   integrations: [mdx(), react(), sitemap()],
