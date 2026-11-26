@@ -97,7 +97,7 @@ metadata:
 spec:
   containers:
     - name: app
-      image: busybox:1.36.1
+      image: busybox:1.37.0
       command: ["sh", "-c", "echo mode=$MODE; test -s /run/token/token && sleep 3600"]
       env:
         - name: MODE
@@ -134,9 +134,39 @@ kubectl exec configuration-demo -c app -- cat /etc/application/settings.ini
 
 <Scene id="m04-l03-config" />
 
+Open **Inspect the ConfigMap update** to compare the two values inside the same container after editing its ConfigMap.
+
 ## <span id="practice-predict-configuration-refresh" aria-hidden="true" />Observe what happens after a config change
 
 Now change the ConfigMap's `MODE` and `settings.ini` while the Pod keeps running. The environment variable was set when the container started, so the current process keeps the old value. A normal mounted ConfigMap volume can see updated files after the kubelet refreshes the projection. An application may need to re-open the file or reload to use those changes. A single file mounted with `subPath` does not receive those automatic ConfigMap or Secret updates.
+
+With `configuration-demo.yaml` saved, source `lab-env.sh` in the [kind lab](/labs/#setup) first. Run the example in a dedicated namespace, then patch the ConfigMap.
+
+```bash
+kubectl --context kind-kv-lab create namespace kv-config-trace
+kubectl --context kind-kv-lab -n kv-config-trace apply -f configuration-demo.yaml
+kubectl --context kind-kv-lab -n kv-config-trace wait --for=condition=Ready pod/configuration-demo --timeout=90s
+kubectl --context kind-kv-lab -n kv-config-trace patch configmap application-settings --type=merge \
+  -p '{"data":{"MODE":"review","settings.ini":"color=green\n"}}'
+```
+
+Run the next command until the file says `color=green`. Projection refresh can take a minute or more. The environment still says `training`.
+
+```bash
+kubectl --context kind-kv-lab -n kv-config-trace exec configuration-demo -- \
+  sh -c 'printenv MODE; cat /etc/application/settings.ini'
+```
+
+Replace the standalone Pod to see the new environment value. Apply only the Pod document from the file above to keep the updated ConfigMap in place.
+
+```bash
+kubectl --context kind-kv-lab -n kv-config-trace delete pod configuration-demo
+sed -n '/^kind: Pod/,$p' configuration-demo.yaml | \
+  (printf 'apiVersion: v1\n'; cat) | kubectl --context kind-kv-lab -n kv-config-trace apply -f -
+kubectl --context kind-kv-lab -n kv-config-trace wait --for=condition=Ready pod/configuration-demo --timeout=90s
+kubectl --context kind-kv-lab -n kv-config-trace exec configuration-demo -- printenv MODE
+kubectl --context kind-kv-lab delete namespace kv-config-trace
+```
 
 ## <span id="pitfalls" aria-hidden="true" />Control who can read the credential
 

@@ -81,6 +81,8 @@ One slow example may explain a particular request. Aggregate metrics help establ
 
 <Scene id="m12-l03-metrics-pipeline" />
 
+Open **Inspect the metric scrape** to follow one sample into Prometheus and compare it with Prometheus’s own `up` metric when the next scrape fails.
+
 ## <span id="walkthrough-scrape-useful-measurements-and-label-them-carefully" aria-hidden="true" />Collect and label application metrics
 
 **Prometheus** typically scrapes instrumented endpoints on a schedule, stores samples as time series, and supports queries over their values. The example scrapes an application metrics endpoint on port 9090 inside the cluster. Save it as part of a Prometheus configuration only after you have a reachable `api` Service and a metrics endpoint.
@@ -102,6 +104,70 @@ A metric name and its label values identify a series. Using a request ID or emai
 sum by (service) (rate(http_requests_total[5m]))
 # A resource signal, when a suitable collector exports this metric.
 sum by (pod) (rate(container_cpu_usage_seconds_total[5m]))
+```
+
+## <span id="practice-follow-one-metric" aria-hidden="true" />Follow one metric through a real scrape
+
+Source `lab-env.sh` in the [kind lab](/labs/#setup). This exercise serves a fixed counter so the sample value is easy to recognize. Prometheus runs in an isolated namespace and uses the text fallback for this simple HTTP fixture.
+
+```bash
+kubectl --context kind-kv-lab create namespace kv-metrics-trace
+kubectl --context kind-kv-lab -n kv-metrics-trace run app --image=busybox:1.37.0 --restart=Never \
+  --command -- sh -c 'mkdir -p /www; printf "%s\n" "# TYPE app_requests_total counter" "app_requests_total 42" >/www/metrics; exec httpd -f -p 8080 -h /www'
+kubectl --context kind-kv-lab -n kv-metrics-trace expose pod app --port=8080
+kubectl --context kind-kv-lab -n kv-metrics-trace create configmap scrape --from-file=prometheus.yml=/dev/stdin <<'YAML'
+scrape_configs:
+  - job_name: app
+    scrape_interval: 5s
+    fallback_scrape_protocol: PrometheusText0.0.4
+    static_configs:
+      - targets: ["app:8080"]
+YAML
+kubectl --context kind-kv-lab -n kv-metrics-trace apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  containers:
+    - name: server
+      image: prom/prometheus:v3.5.0
+      args: ["--config.file=/etc/trace/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+      volumeMounts:
+        - name: config
+          mountPath: /etc/trace
+  volumes:
+    - name: config
+      configMap:
+        name: scrape
+YAML
+kubectl --context kind-kv-lab -n kv-metrics-trace expose pod prometheus --port=9090
+```
+
+Run this query until it returns `42`.
+
+```bash
+kubectl --context kind-kv-lab -n kv-metrics-trace exec app -- \
+  wget -qO- 'http://prometheus:9090/api/v1/query?query=app_requests_total'
+```
+
+Remove the app Service to break the scrape path while leaving the app Pod available as a query client.
+
+```bash
+kubectl --context kind-kv-lab -n kv-metrics-trace delete service app
+```
+
+Run the next query until it returns `0` for `job="app"`.
+
+```bash
+kubectl --context kind-kv-lab -n kv-metrics-trace exec app -- \
+  wget -qO- 'http://prometheus:9090/api/v1/query?query=up'
+```
+
+```bash
+kubectl --context kind-kv-lab delete namespace kv-metrics-trace
 ```
 
 ## <span id="practice-correlate-one-request-without-collecting-its-payload" aria-hidden="true" />Follow a slow request across services

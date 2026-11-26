@@ -826,6 +826,125 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'Use kubectl get with --show-managed-fields before the conflict and after both managers have applied the agreed value.',
     },
   },
+  'm04-l03-config': {
+    label: 'Inspect the ConfigMap update',
+    scope: 'One container gets its mode from an environment variable and its color from a ConfigMap volume. Edit both values and compare when the container sees them.',
+    model: 'The projection refresh delay is compressed. The file is mounted as part of a ConfigMap volume. An app that caches the file still needs to reread it.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Your terminal', x: 112, y: 53 },
+      config: { label: 'ConfigMap', area: 'application-settings', x: 320, y: 53 },
+      kubelet: { label: 'Kubelet', area: 'Worker node', x: 320, y: 166 },
+      file: { label: 'Mounted file', area: 'settings.ini', x: 528, y: 166 },
+      env: { label: 'App environment', area: 'MODE', x: 112, y: 166 },
+    },
+    events: [
+      {
+        id: 'read-original-config', title: 'Read the original configuration', from: 'kubelet', to: 'env',
+        detail: 'When the container starts, the kubelet resolves MODE from the ConfigMap. It also projects settings.ini into the volume. Both reads reflect the original values.',
+        field: 'Initial environment / file', before: 'Container starting', after: 'MODE=training / color=blue',
+      },
+      {
+        id: 'patch-configmap', title: 'Change both values in the ConfigMap', from: 'cli', to: 'config',
+        detail: 'The API stores the patch. The container continues to run with its original environment. The mounted data can lag behind the API until projection refreshes.',
+        field: 'ConfigMap data', before: 'training / blue', after: 'review / green',
+      },
+      {
+        id: 'refresh-projection', title: 'Refresh the mounted file', from: 'kubelet', to: 'file',
+        detail: 'After the kubelet refreshes the projection, opening settings.ini again reads color=green. The existing container still has the MODE value it received at startup.',
+        field: 'Existing container reads', before: 'MODE=training / color=blue', after: 'MODE=training / color=green',
+      },
+      {
+        id: 'read-replacement-environment', title: 'Read the replacement container’s environment', from: 'kubelet', to: 'env',
+        detail: 'The lab replaces the standalone Pod. At startup the new container reads the current ConfigMap value for MODE. The projected file remains green.',
+        field: 'MODE read at startup', before: 'training', after: 'review',
+      },
+    ],
+    lab: {
+      href: '#practice-predict-configuration-refresh', label: 'Observe both values in kind',
+      question: 'Can reopening settings.ini change an app’s existing MODE environment variable?',
+      answer: 'Reopening the file can pick up the projection. The process environment is a separate value set when the container starts.',
+      check: 'Compare printenv MODE and cat settings.ini before and after projection refresh, then on the replacement Pod.',
+    },
+  },
+  'm12-l03-metrics-pipeline': {
+    label: 'Inspect the metric scrape',
+    scope: 'Follow a counter sample from an app endpoint into Prometheus, then break the scrape path and compare the query results.',
+    model: 'The lab serves a fixed counter. The trace compresses the scrape interval and groups HTTP transport, parsing, and storage.',
+    actors: {
+      app: { label: 'App endpoint', area: 'GET /metrics', x: 112, y: 53 },
+      scrape: { label: 'Prometheus scraper', area: 'Job app', x: 320, y: 53 },
+      storage: { label: 'Time series', area: 'Value + timestamp', x: 528, y: 53 },
+      query: { label: 'Query client', area: 'PromQL', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'scrape-endpoint', title: 'Scrape the app endpoint', from: 'scrape', to: 'app',
+        detail: 'The configured job sends GET /metrics to the app Service. The response includes the example counter at 42.',
+        field: 'Scrape response', before: 'Waiting for the first scrape', after: 'app_requests_total 42',
+      },
+      {
+        id: 'store-sample', title: 'Store the counter sample', from: 'scrape', to: 'storage',
+        detail: 'Prometheus parses the response and records the counter with its timestamp and target labels. It also records up=1 for this successful scrape.',
+        field: 'Latest samples', before: 'No observations', after: 'app_requests_total=42 / up=1',
+      },
+      {
+        id: 'query-sample', title: 'Query the sample', from: 'storage', to: 'query',
+        detail: 'The instant query reads the stored time series. It returns the sample from the scrape, without making an extra request to the application.',
+        field: 'Query result', before: 'app_requests_total requested', after: '42',
+      },
+      {
+        id: 'record-scrape-failure', title: 'Record a failed scrape', from: 'scrape', to: 'storage',
+        detail: 'The app Service was removed. Prometheus still has the configured target, but the next scrape fails and up changes to 0. That is evidence about the scrape path.',
+        field: 'Prometheus up for the app target', before: '1', after: '0',
+      },
+    ],
+    lab: {
+      href: '#practice-follow-one-metric', label: 'Scrape and query the example counter',
+      question: 'What does up=0 tell you about the number of requests the app handled?',
+      answer: 'It tells you the scrape failed. You need a successful scrape and an appropriate application metric to measure traffic.',
+      check: 'Query the counter first, then remove the app Service and query up after the next scrape.',
+    },
+  },
+  'm18-l01-etcd-quorum': {
+    label: 'Inspect the quorum decision',
+    scope: 'Try the same kind of API write with three, two, and one available etcd voter. Restart an original voter and observe writes resume.',
+    model: 'Uses three stacked control-plane members in a disposable kind cluster. Leader elections and retries are compressed. The example restores an original member with its data intact.',
+    actors: {
+      client: { label: 'kubectl', area: 'ConfigMap write', x: 112, y: 53 },
+      api: { label: 'API server', area: 'Stores API objects', x: 320, y: 53 },
+      a: { label: 'etcd voter A', area: 'Stays up', x: 528, y: 53 },
+      c: { label: 'etcd voter C', area: 'Stopped first', x: 528, y: 166 },
+      b: { label: 'etcd voter B', area: 'Stopped second', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'write-with-three-voters', title: 'Write with all voters available', from: 'client', to: 'api',
+        detail: 'The API server sends the storage operation to etcd. A voting majority can commit it, so the client sees a successful ConfigMap creation.',
+        field: 'Available voters / ConfigMap write', before: '3 of 3 / requested', after: '3 of 3 / commits',
+      },
+      {
+        id: 'stop-first-voter', title: 'Lose one voter and keep writing', from: 'a', to: 'b',
+        detail: 'Voter C is unavailable. Once a leader is active, A and B still form a majority of the three configured voters. The next write can commit.',
+        field: 'Available voters / ConfigMap write', before: '3 of 3 / commits', after: '2 of 3 / commits',
+      },
+      {
+        id: 'lose-majority', title: 'Lose the second voter', from: 'api', to: 'a',
+        detail: 'Voter B stops as well. A surviving process can still accept connections, but one vote cannot commit a new entry. The client sees an error or a timeout.',
+        field: 'Available voters / ConfigMap write', before: '2 of 3 / commits', after: '1 of 3 / cannot commit',
+      },
+      {
+        id: 'restore-majority', title: 'Bring an original voter back', from: 'b', to: 'a',
+        detail: 'B rejoins with its original data. Two voters can once again elect a leader and commit new entries. A fresh API write succeeds.',
+        field: 'Available voters / ConfigMap write', before: '1 of 3 / cannot commit', after: '2 of 3 / commits',
+      },
+    ],
+    lab: {
+      href: '#practice-test-quorum-in-disposable-kind', label: 'Test writes in a disposable HA cluster',
+      question: 'How many healthy voters does this three-member cluster need to commit a write?',
+      answer: 'Two. Quorum is calculated from configured voting membership, so stopping a voter does not reduce the majority needed.',
+      check: 'Compare ConfigMap writes with one member stopped, two stopped, and one of them restored.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {
