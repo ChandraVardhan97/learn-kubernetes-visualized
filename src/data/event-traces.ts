@@ -1066,6 +1066,134 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'Record holderIdentity, leaseTransitions, and renewTime before A stops renewing and after the handoff.',
     },
   },
+  'm17-l01-cpu-memory-boundary': {
+    label: 'Inspect CPU and memory limits',
+    scope: 'Compare two Pods on Linux. A CPU-bound task uses up its quota, while a separate task exceeds its container’s memory limit.',
+    model: 'The teaching Pods use different limits and deliberately simple workloads. The CPU check reads cgroup v2 counters. The memory Pod uses restartPolicy Never so its termination stays visible.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Reads Pod status', x: 112, y: 53 },
+      quota: { label: 'CPU quota', area: '50m in the lab', x: 320, y: 53 },
+      busy: { label: 'CPU task', area: 'Keeps running', x: 528, y: 53 },
+      kernel: { label: 'Linux kernel', area: 'cgroup enforcement', x: 320, y: 166 },
+      mem: { label: 'Memory task', area: '32 MiB memory limit', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'consume-cpu-quota', title: 'Use the allowed CPU time', from: 'quota', to: 'busy',
+        detail: 'The CPU task continually asks for CPU. After it uses the runtime available in a scheduling period, the kernel delays it until CPU time is replenished.',
+        field: 'CPU task', before: 'Runnable and consuming quota', after: 'Runnable but throttled',
+      },
+      {
+        id: 'read-throttle-count', title: 'See repeated throttling', from: 'kernel', to: 'busy',
+        detail: 'The container keeps running. Repeated reads of cpu.stat show nr_throttled increasing while the workload is busy.',
+        field: 'CPU container evidence', before: 'Running / initial nr_throttled', after: 'Running / higher nr_throttled',
+      },
+      {
+        id: 'enforce-memory-limit', title: 'Hit the separate memory limit', from: 'kernel', to: 'mem',
+        detail: 'The memory task attempts to write more data to its memory-backed volume than its limit allows. The kernel kills the process and Kubernetes records the termination reason.',
+        field: 'Memory container state', before: 'Running', after: 'Terminated / OOMKilled',
+      },
+      {
+        id: 'compare-limit-results', title: 'Compare the two limit outcomes', from: 'cli', to: 'quota',
+        detail: 'The CPU example is still running with throttling evidence. The memory example shows a terminated container and the Pod is Failed under this example’s restart policy.',
+        field: 'Evidence at the two limits', before: 'CPU: nr_throttled rises / Running', after: 'Memory: OOMKilled / Failed',
+      },
+    ],
+    lab: {
+      href: '#practice-explain-the-observed-termination',
+      label: 'Compare the live CPU and memory evidence',
+      question: 'If a process is still running and nr_throttled rises, which limit explains the observation?',
+      answer: 'That counter shows CPU throttling. Inspect the terminated container reason separately when investigating a memory-limit kill.',
+      check: 'Compare two reads of cpu.stat and the state of the OOM exercise Pod.',
+    },
+  },
+  'm19-l01-gitops-loop': {
+    label: 'Inspect the drift repair',
+    scope: 'Compare a declared checkout setting with the live ConfigMap after an emergency edit, then restore the approved value.',
+    model: 'The operator compares and applies the declaration by hand in this exercise. A GitOps controller can automate these decisions under its sync policy.',
+    actors: {
+      git: { label: 'Declared source', area: 'resources.yaml', x: 112, y: 53 },
+      compare: { label: 'Comparison', area: 'Desired vs live', x: 320, y: 53 },
+      api: { label: 'API server', area: 'Accepts the write', x: 528, y: 53 },
+      manual: { label: 'Manual edit', area: 'Emergency change', x: 528, y: 166 },
+      live: { label: 'Live ConfigMap', area: 'm19', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'declare-git-value', title: 'Apply the declared setting', from: 'git', to: 'compare',
+        detail: 'The lab starts with resources.yaml declaring git-declared. Applying it creates the live ConfigMap with the same value.',
+        field: 'Declared / live release', before: 'git-declared / absent', after: 'git-declared / git-declared',
+      },
+      {
+        id: 'edit-live-setting', title: 'Change only the live setting', from: 'manual', to: 'api',
+        detail: 'The manual patch stores manual-drift. The source file still defines git-declared.',
+        field: 'Live data.release', before: 'git-declared', after: 'manual-drift',
+      },
+      {
+        id: 'detect-live-drift', title: 'Compare the declaration with the live value', from: 'compare', to: 'api',
+        detail: 'The comparison reads the source and the stored object. The value mismatch is evidence of drift. In a GitOps controller, detecting drift and deciding to sync are separate steps.',
+        field: 'Declared / live release', before: 'git-declared / git-declared', after: 'git-declared / manual-drift',
+      },
+      {
+        id: 'reconcile-declared-value', title: 'Reapply the approved declaration', from: 'api', to: 'live',
+        detail: 'The lab explicitly approves this one field takeover and applies the original declaration. A subsequent GET confirms that the source and live setting agree again.',
+        field: 'Live data.release', before: 'manual-drift', after: 'git-declared',
+      },
+    ],
+    lab: {
+      href: '/labs/#m19',
+      label: 'Detect and repair drift in the platform lab',
+      question: 'If the comparison shows drift, has the live value changed back yet?',
+      answer: 'Comparison reports the difference. A successful write is needed to restore the approved declaration.',
+      check: 'Read data.release after the manual patch and after applying the declaration again.',
+    },
+  },
+  'm20-l01-stateless-recovery': {
+    label: 'Inspect the recovered request path',
+    scope: 'Take an on-call investigation from the first failing request to the client’s proof of recovery. Keep the existing healthy Pods in place.',
+    model: 'Uses the stateless capstone’s resource names. Endpoint propagation and the wait before retrying are compressed.',
+    actors: {
+      client: { label: 'Probe client', area: 'm20-client', x: 112, y: 53 },
+      service: { label: 'Service', area: 'm20-web', x: 320, y: 53 },
+      slices: { label: 'EndpointSlices', area: 'Ready addresses', x: 528, y: 53 },
+      cli: { label: 'kubectl', area: 'Operator', x: 320, y: 166 },
+      pods: { label: 'Web Pods', area: 'app=m20-web', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'confirm-client-failure', title: 'Confirm the client’s request fails', from: 'client', to: 'service',
+        detail: 'The client can address the Service, but its HTTP request fails. The application’s Deployment still has two Ready replicas.',
+        field: 'Ready Pods / client result', before: '2 Ready / checking request', after: '2 Ready / HTTP fails',
+      },
+      {
+        id: 'compare-selector-and-labels', title: 'Compare the Service selector and Pod labels', from: 'service', to: 'slices',
+        detail: 'The Service still selects app=broken-selector. The ready Pods carry app=m20-web, so no eligible endpoint is published for the Service.',
+        field: 'Selector / eligible endpoints', before: 'Checking backend discovery', after: 'app=broken-selector / 0',
+      },
+      {
+        id: 'repair-service-selector', title: 'Repair only the Service selector', from: 'cli', to: 'service',
+        detail: 'Patch the Service to select app=m20-web. The Deployment and the Pod UIDs can stay the same.',
+        field: 'Service selector', before: 'app=broken-selector', after: 'app=m20-web',
+      },
+      {
+        id: 'observe-endpoints-return', title: 'Observe the ready addresses return', from: 'slices', to: 'pods',
+        detail: 'The EndpointSlice controller publishes addresses for the two matching Ready Pods. Wait for that change to reach the forwarding layer.',
+        field: 'Eligible endpoints', before: '0', after: '2',
+      },
+      {
+        id: 'verify-client-recovery', title: 'Repeat the request from the same client', from: 'client', to: 'service',
+        detail: 'The same client requests the same URL after forwarding catches up. This time a backend answers. That is the evidence that the full path works again.',
+        field: 'HTTP request from the same client', before: 'Fails with no eligible endpoints', after: '200 OK from m20-web',
+      },
+    ],
+    lab: {
+      href: '/labs/#m20-stateless',
+      label: 'Run the stateless recovery capstone',
+      question: 'What result best shows that users can reach the app again?',
+      answer: 'A successful retry from the same client to the same Service proves the whole request path. Endpoint state tells you just one part of that path is ready.',
+      check: 'Save the initial request result, the selector mismatch, the recovered endpoints, and the final HTTP response.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {

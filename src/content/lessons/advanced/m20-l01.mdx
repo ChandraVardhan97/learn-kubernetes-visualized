@@ -49,6 +49,8 @@ Predict what will change after replacing the Service selector with `app: m20-web
 
 <Scene id="m20-l01-stateless-recovery" />
 
+Open **Inspect the recovered request path** to follow the evidence you will collect during the capstone. Keep the original client and URL for the final retry.
+
 ## <span id="practice-produce-a-short-recovery-record" aria-hidden="true" />Record the recovered request path
 
 Download all module files and follow the [stateless capstone](/labs/#m20-stateless). This script sets up the deliberate failure, proves the request fails, repairs the selector, and verifies the response. Pause to predict before following the solution, or run the guided stages described in the lab. Keep a short record of the original symptom, the Pods’ actual labels, the correction, the EndpointSlice evidence, and the response seen by the same client.

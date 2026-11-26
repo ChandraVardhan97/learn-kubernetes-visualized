@@ -125,6 +125,24 @@ test('curriculum traces expose each decision and open the right practice exercis
       field: 'Lease holder', before: 'Controller A', after: 'Controller B',
       practice: '#practice-observe-a-live-lease-handoff',
     },
+    {
+      lesson: '/learn/advanced/m17-l01/', scene: 'm17-l01-cpu-memory-boundary', label: 'Inspect CPU and memory limits',
+      event: 'compare-limit-results', title: 'Compare the two limit outcomes',
+      field: 'Evidence at the two limits', before: 'CPU: nr_throttled rises / Running', after: 'Memory: OOMKilled / Failed',
+      practice: '#practice-explain-the-observed-termination',
+    },
+    {
+      lesson: '/learn/advanced/m19-l01/', scene: 'm19-l01-gitops-loop', label: 'Inspect the drift repair',
+      event: 'detect-live-drift', title: 'Compare the declaration with the live value',
+      field: 'Declared / live release', before: 'git-declared / git-declared', after: 'git-declared / manual-drift',
+      practice: '/labs/#m19',
+    },
+    {
+      lesson: '/learn/advanced/m20-l01/', scene: 'm20-l01-stateless-recovery', label: 'Inspect the recovered request path',
+      event: 'verify-client-recovery', title: 'Repeat the request from the same client',
+      field: 'HTTP request from the same client', before: 'Fails with no eligible endpoints', after: '200 OK from m20-web',
+      practice: '/labs/#m20-stateless',
+    },
   ];
   for (const example of examples) {
     await page.goto(example.lesson + '#scene-' + example.scene);

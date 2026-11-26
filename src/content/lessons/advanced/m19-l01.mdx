@@ -25,6 +25,8 @@ Follow one revision in the scene. The controller fetches the source, renders man
 
 <Scene id="m19-l01-gitops-loop" />
 
+Open **Inspect the drift repair** to see what the comparison reports after a manual edit, then verify the live value after applying the approved declaration again.
+
 ## <span id="walkthrough-automatic-sync-has-independent-controls" aria-hidden="true" />Decide when to sync, repair drift, and prune
 
 In Argo CD, for example, automated sync, self-healing of live drift, and automatic pruning are distinct controls. A manual change can remain until another sync if self-healing is disabled. Pruning authorizes removal of resources that the source no longer declares, subject to the application’s settings. Before allowing that behavior, inspect what the controller tracks and how it handles resources whose state must be retained. Check compatibility with your Kubernetes version before installing a production controller.

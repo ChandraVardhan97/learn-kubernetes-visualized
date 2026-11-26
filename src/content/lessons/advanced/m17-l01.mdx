@@ -25,6 +25,8 @@ A container can also hit its **memory limit**. The kernel can reclaim some memor
 
 <Scene id="m17-l01-cpu-memory-boundary" />
 
+Open **Inspect CPU and memory limits** to compare a container that stays running while throttled with a separate container killed after hitting its memory limit.
+
 ## <span id="walkthrough-pressure-can-remove-a-whole-pod" aria-hidden="true" />When the kubelet evicts a Pod
 
 **Node pressure eviction** happens when the kubelet needs to reclaim a scarce resource on the whole node. It may first attempt cleanup such as deleting unused images, then evict Pods if pressure persists. For memory, it ranks candidates using whether usage exceeds requests, priority, and relative usage. The Pod can be marked `Failed` with reason `Evicted` even when its containers were below their individual limits. Its controller may create a replacement with a different UID.
@@ -32,6 +34,36 @@ A container can also hit its **memory limit**. The kernel can reclaim some memor
 <Scene id="m17-l01-pressure-eviction" />
 
 ## <span id="practice-explain-the-observed-termination" aria-hidden="true" />Inspect a container killed under its memory limit
+
+Start with the CPU comparison in the [disposable kind lab](/labs/#setup). On a cgroup v2 node, read `nr_throttled` twice. The count can rise while the Pod still reports Running. Then run the existing memory exercise below to compare its termination evidence.
+
+```bash
+kubectl --context kind-kv-lab get namespace kv-lab >/dev/null 2>&1 || \
+  kubectl --context kind-kv-lab create namespace kv-lab
+kubectl --context kind-kv-lab -n kv-lab apply -f - <<'YAML'
+apiVersion: v1
+kind: Pod
+metadata:
+  name: trace-cpu-limit
+spec:
+  terminationGracePeriodSeconds: 1
+  restartPolicy: Never
+  containers:
+    - name: busy
+      image: busybox:1.37.0
+      command: ["sh", "-c", "while true; do :; done"]
+      resources:
+        limits:
+          cpu: 50m
+          memory: 16Mi
+YAML
+kubectl --context kind-kv-lab -n kv-lab wait --for=condition=Ready pod/trace-cpu-limit --timeout=90s
+kubectl --context kind-kv-lab -n kv-lab exec trace-cpu-limit -- grep '^nr_throttled ' /sys/fs/cgroup/cpu.stat
+sleep 3
+kubectl --context kind-kv-lab -n kv-lab exec trace-cpu-limit -- grep '^nr_throttled ' /sys/fs/cgroup/cpu.stat
+kubectl --context kind-kv-lab -n kv-lab get pod trace-cpu-limit
+kubectl --context kind-kv-lab -n kv-lab delete pod trace-cpu-limit
+```
 
 The teaching example mounts an in-memory `emptyDir` at `/memory`. The writer attempts to place 96 MiB in it with a 32 MiB container memory limit. Those file contents count toward memory use, so even a process writing to a filesystem can hit the memory boundary. Treat this as a small disposable experiment. The snippet names the Pod `m17-memory`. The inspection commands use `m17-oom`, the separate scenario supplied by the lab. Use the name that matches the exercise you ran.
 
