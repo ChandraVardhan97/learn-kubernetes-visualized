@@ -90,6 +90,23 @@ test('curriculum traces expose each decision and open the right practice exercis
       field: 'Apply response / live data.release', before: 'Change requested / git-declared', after: '409 Conflict / git-declared',
       practice: '#practice-capture-a-conflict-instead-of-suppressing-it',
     },
+    {
+      lesson: '/learn/foundations/m04-l03/', scene: 'm04-l03-config', label: 'Inspect the ConfigMap update',
+      event: 'refresh-projection', title: 'Refresh the mounted file',
+      field: 'Existing container reads', before: 'MODE=training / color=blue', after: 'MODE=training / color=green',
+      practice: '#practice-predict-configuration-refresh',
+    },
+    {
+      lesson: '/learn/intermediate/m12-l03/', scene: 'm12-l03-metrics-pipeline', label: 'Inspect the metric scrape',
+      event: 'record-scrape-failure', title: 'Record a failed scrape',
+      field: 'Prometheus up for the app target', before: '1', after: '0', practice: '#practice-follow-one-metric',
+    },
+    {
+      lesson: '/learn/advanced/m18-l01/', scene: 'm18-l01-etcd-quorum', label: 'Inspect the quorum decision',
+      event: 'lose-majority', title: 'Lose the second voter',
+      field: 'Available voters / ConfigMap write', before: '2 of 3 / commits', after: '1 of 3 / cannot commit',
+      practice: '#practice-test-quorum-in-disposable-kind',
+    },
   ];
   for (const example of examples) {
     await page.goto(example.lesson + '#scene-' + example.scene);

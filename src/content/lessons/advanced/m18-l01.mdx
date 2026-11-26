@@ -25,6 +25,8 @@ Use the quorum scene to remove members and predict whether etcd can commit write
 
 <Scene id="m18-l01-etcd-quorum" />
 
+Open **Inspect the quorum decision** to follow three ConfigMap write attempts as voters stop and return.
+
 ## <span id="walkthrough-topology-and-timing-can-defeat-apparent-redundancy" aria-hidden="true" />Count which voters survive a zone loss
 
 A **failure domain** is a set of components that can fail together because they share something such as power, a host, a rack, or a zone. Three etcd members in one zone tolerate a member failure there, but a zone outage can take all three. A two-to-one split across zones loses quorum if the larger zone goes down. Distributing three voters one per zone can tolerate losing one zone if the remaining network paths and members work. In the scene, vary placement and count the surviving voters.
@@ -56,6 +58,48 @@ kubectl --context kind-kv-lab get nodes
 ```
 
 For the [control-plane recovery lab](/labs/#m18), treat the single-node run as inspection and restore practice. Use the scene to make a failure table for three or five voters without disrupting system components.
+
+## <span id="practice-test-quorum-in-disposable-kind" aria-hidden="true" />Test quorum in a disposable HA cluster
+
+Use the pinned `kind` and `kubectl` tools from [`lab-env.sh`](/labs/#setup). Create `kv-quorum-trace` as a separate cluster. This exercise stops two Docker containers that belong to this named cluster. The lab kubeconfig below keeps the exercise separate from other contexts.
+
+```bash
+kind create cluster --name kv-quorum-trace --kubeconfig ./kv-quorum.kubeconfig \
+  --image 'kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5' \
+  --config - --wait 180s <<'YAML'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+  - role: control-plane
+  - role: control-plane
+YAML
+```
+
+Stop one voter and check that the write succeeds. If the remaining members are still electing a leader, retry the `kubectl` command after a few seconds.
+
+```bash
+docker stop kv-quorum-trace-control-plane3
+kubectl --kubeconfig ./kv-quorum.kubeconfig --request-timeout=10s create configmap with-majority --from-literal=proof=one-stopped
+```
+
+Stop a second voter. This time the write should fail or time out.
+
+```bash
+docker stop kv-quorum-trace-control-plane2
+kubectl --kubeconfig ./kv-quorum.kubeconfig --request-timeout=10s create configmap without-majority --from-literal=proof=two-stopped
+```
+
+Restore one of the original voters and retry the write if the API is still recovering. Clean up after seeing the write succeed.
+
+```bash
+docker start kv-quorum-trace-control-plane2
+kubectl --kubeconfig ./kv-quorum.kubeconfig --request-timeout=10s create configmap after-recovery --from-literal=proof=majority-restored
+```
+
+```bash
+kind delete cluster --name kv-quorum-trace --kubeconfig ./kv-quorum.kubeconfig
+```
 
 ## <span id="pitfalls-restoring-quorum-is-not-ordinary-scaling" aria-hidden="true" />Recover after majority loss
 
