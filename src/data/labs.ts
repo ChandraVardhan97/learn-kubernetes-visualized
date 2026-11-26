@@ -19,4 +19,4 @@ export const moduleLabs: Lab[] = [
   { id: 'm20', moduleId: 'm20', files: moduleLabFiles.m20, exercises: capstoneLabs },
 ];
 export const labs = [...moduleLabs, ...practiceLabs];
-export const labDownloadPaths = ['README.md', 'kind.yaml', 'setup.sh', 'lab-env.sh', ...labs.flatMap(lab => lab.files.map(file => lab.id + '/' + file))];
+export const labDownloadPaths = ['README.md', 'LICENSE.txt', 'kind.yaml', 'setup.sh', 'lab-env.sh', ...labs.flatMap(lab => lab.files.map(file => lab.id + '/' + file))];

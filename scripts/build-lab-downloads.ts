@@ -1,10 +1,11 @@
-import { writeFileSync } from 'node:fs';
+import { copyFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { labDownloadPaths, labs } from '../src/data/labs';
 import { labReadme } from '../src/lib/lab-readme';
 
 const root = 'public/labs';
+copyFileSync('LICENSE', join(root, 'LICENSE.txt'));
 for (const lab of labs) writeFileSync(join(root, lab.id, 'README.md'), labReadme(lab));
 
 const zipSource = [

@@ -7,6 +7,7 @@ import { unsafePublicAssets, unexpectedLabAssets } from './lib/public-assets';
 const roots = process.argv.slice(2);
 if (!roots.length) roots.push('public');
 const allowed = new Set([...labDownloadPaths, 'kv-labs.zip']);
+const projectLicense = readFileSync('LICENSE');
 const failures: string[] = [];
 for (const root of roots) {
   if (!existsSync(root)) {
@@ -22,6 +23,8 @@ for (const root of roots) {
     const file = join(root, 'labs', path);
     if (!existsSync(file)) {
       failures.push(file + ': missing lab download');
+    } else if (path === 'LICENSE.txt' && !readFileSync(file).equals(projectLicense)) {
+      failures.push(file + ': differs from the project license');
     } else if (root !== 'public' && !readFileSync(file).equals(readFileSync(join('public/labs', path)))) {
       failures.push(file + ': differs from its source asset');
     }

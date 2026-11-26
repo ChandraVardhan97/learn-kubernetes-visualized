@@ -7,4 +7,4 @@ Original explanations and diagrams are authored for this project. Referenced sit
 - Kubernetes and kind examples refer to upstream projects under their own terms. Kubernetes marks belong to their respective owners; this is an independent resource.
 - The [GitHub mark](https://github.com/primer/octicons/blob/main/icons/mark-github-16.svg) is from GitHub Octicons. See its [MIT license](public/licenses/github-octicons.txt).
 
-No open-source license has been applied to the project’s original code or learning content. The owner will make that decision before opening source contributions.
+The project’s original code and learning material are licensed under the [Apache License 2.0](LICENSE).
