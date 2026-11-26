@@ -59,3 +59,5 @@ bash m18/cleanup-recovery.sh
 The node image digest is from the official v0.33.0 release: https://github.com/kubernetes-sigs/kind/releases/tag/v0.33.0 . Application image version tags can be republished; use resolved image digests for production delivery.
 
 All common lab runners, the standalone WebApp operator and offline recovery require a kubectl v1.37.x client. The bundle setup installs v1.37.0.
+
+Copyright 2026 Chandu B. The project’s original lab materials are licensed under the [Apache License 2.0](LICENSE.txt).

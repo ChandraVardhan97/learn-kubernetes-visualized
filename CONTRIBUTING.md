@@ -1,6 +1,6 @@
 # Contributing
 
-Use GitHub Issues to share corrections and suggestions. The repository is public and the project license is pending. These guidelines describe how to prepare and verify a proposed change.
+Use GitHub Issues to share corrections and suggestions. The project’s original materials are licensed under the [Apache License 2.0](LICENSE). These guidelines describe how to prepare and verify a proposed change.
 
 ## Improve one idea at a time
 
