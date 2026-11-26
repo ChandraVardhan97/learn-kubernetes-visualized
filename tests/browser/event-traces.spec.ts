@@ -107,6 +107,24 @@ test('curriculum traces expose each decision and open the right practice exercis
       field: 'Available voters / ConfigMap write', before: '2 of 3 / commits', after: '1 of 3 / cannot commit',
       practice: '#practice-test-quorum-in-disposable-kind',
     },
+    {
+      lesson: '/learn/foundations/m01-l03/', scene: 'm01-l03-port-path', label: 'Inspect the published port',
+      event: 'forward-to-container', title: 'Forward to the container port',
+      field: 'Connection destination', before: '127.0.0.1:8080', after: 'Container TCP port 80',
+      practice: '#walkthrough-publish-a-local-training-port',
+    },
+    {
+      lesson: '/learn/foundations/m03-l03/', scene: 'm03-l03-context', label: 'Inspect the command target',
+      event: 'override-namespace', title: 'Override the namespace for one request',
+      field: 'ConfigMap target / value', before: 'kv-context-a / blue', after: 'kv-context-b / green',
+      practice: '#practice-compare-two-namespaces',
+    },
+    {
+      lesson: '/learn/advanced/m15-l03/', scene: 'm15-l03-lease-election', label: 'Inspect the leadership handoff',
+      event: 'transfer-scheduler-lease', title: 'A standby contender acquires the Lease',
+      field: 'Lease holder', before: 'Controller A', after: 'Controller B',
+      practice: '#practice-observe-a-live-lease-handoff',
+    },
   ];
   for (const example of examples) {
     await page.goto(example.lesson + '#scene-' + example.scene);

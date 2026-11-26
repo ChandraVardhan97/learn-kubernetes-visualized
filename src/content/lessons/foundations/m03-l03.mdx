@@ -64,6 +64,8 @@ The Workbench activates a dedicated kubeconfig by sourcing its `lab-env.sh`. A c
 
 <Scene id="m03-l03-context" />
 
+Open **Inspect the command target** to see how two successful requests for the same name can return different objects.
+
 ## <span id="walkthrough-inspect-without-spilling-credentials" aria-hidden="true" />Check your context and namespace
 
 Read the current context and server address before practice commands. The JSONPath expression below prints only the address and namespace. A blank namespace means the context has no namespace set; it normally falls back to `default` for namespaced commands without `-n`. Avoid printing a kubeconfig with credentials included, especially in a shared terminal or support ticket.
@@ -105,6 +107,31 @@ kubectl explain pod.spec.containers
 # Preview an existing local manifest before its next write.
 kubectl --context YOUR_LAB_CONTEXT -n selection-lab diff -f catalog-demo.yaml
 ```
+
+## <span id="practice-compare-two-namespaces" aria-hidden="true" />Read the same name in two namespaces
+
+Source `lab-env.sh` from the [disposable kind lab](/labs/#setup). These namespaces each get a ConfigMap named `catalog`. The example changes the default namespace in a temporary kubeconfig copy to keep the lab's original context settings intact.
+
+```bash
+(
+  set -euo pipefail
+  config=$(mktemp)
+  trap 'rm -f "$config"' EXIT
+  cp "$KUBECONFIG" "$config"
+  export KUBECONFIG="$config"
+  kubectl --context kind-kv-lab create namespace kv-context-a
+  kubectl --context kind-kv-lab create namespace kv-context-b
+  kubectl --context kind-kv-lab -n kv-context-a create configmap catalog --from-literal=color=blue
+  kubectl --context kind-kv-lab -n kv-context-b create configmap catalog --from-literal=color=green
+  kubectl config set-context kind-kv-lab --namespace=kv-context-a
+  kubectl --context kind-kv-lab get configmap catalog -o jsonpath='{.data.color}{"\n"}'
+  kubectl --context kind-kv-lab -n kv-context-b get configmap catalog -o jsonpath='{.data.color}{"\n"}'
+  kubectl --context kind-kv-lab get configmap catalog -o jsonpath='{.data.color}{"\n"}'
+  kubectl --context kind-kv-lab delete namespace kv-context-a kv-context-b
+)
+```
+
+The lookups return `blue`, `green`, then `blue`. After the command with `-n kv-context-b`, the following command uses the default in the temporary context again.
 
 ## <span id="pitfalls" aria-hidden="true" />Look here when your query returns nothing
 

@@ -945,6 +945,127 @@ const traces: Readonly<Record<string, EventTrace | undefined>> = {
       check: 'Compare ConfigMap writes with one member stopped, two stopped, and one of them restored.',
     },
   },
+  'm01-l03-port-path': {
+    label: 'Inspect the published port',
+    scope: 'Connect from the laptop to nginx and see which port belongs to each side of the connection.',
+    model: 'Uses a Docker port published to IPv4 loopback. The implementation of forwarding can differ across Docker hosts and Docker Desktop.',
+    actors: {
+      client: { label: 'curl', area: 'Your laptop', x: 112, y: 53 },
+      host: { label: 'Published port', area: '127.0.0.1:8080', x: 320, y: 53 },
+      docker: { label: 'Docker forwarding', area: 'Host to container', x: 320, y: 166 },
+      web: { label: 'nginx', area: 'Container TCP 80', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'publish-host-port', title: 'Publish a local host port', from: 'client', to: 'host',
+        detail: 'The Docker run command starts nginx and makes host TCP 8080 on loopback a published endpoint. The server inside the container listens on port 80.',
+        field: 'Published endpoint', before: 'No mapping', after: '127.0.0.1:8080 → container port 80',
+      },
+      {
+        id: 'forward-to-container', title: 'Forward to the container port', from: 'docker', to: 'web',
+        detail: 'curl connects to the published host endpoint. Docker forwards that connection to nginx on the container port.',
+        field: 'Connection destination', before: '127.0.0.1:8080', after: 'Container TCP port 80',
+      },
+      {
+        id: 'return-http-response', title: 'Read the HTTP response', from: 'web', to: 'docker',
+        detail: 'nginx returns its welcome page for GET /. The reply travels back over the connection. A request for a missing path still reaches nginx and returns an HTTP 404.',
+        field: 'Response for each path', before: 'GET / → 200 OK', after: 'GET /does-not-exist → 404 Not Found',
+      },
+      {
+        id: 'release-host-port', title: 'Stop the container and retry', from: 'client', to: 'host',
+        detail: 'Stopping the container removes its published endpoint. With no other program listening there, the next connection fails before HTTP.',
+        field: 'Request result', before: 'HTTP response from nginx', after: 'Connection refused',
+      },
+    ],
+    lab: {
+      href: '#walkthrough-publish-a-local-training-port',
+      label: 'Run the loopback port exercise',
+      question: 'If curl returns an HTTP 404, did the connection reach an HTTP server?',
+      answer: 'Yes. The server received the request and answered that the path was missing.',
+      check: 'Compare the two HTTP responses, then repeat the original request after stopping the container.',
+    },
+  },
+  'm03-l03-context': {
+    label: 'Inspect the command target',
+    scope: 'Two namespaces hold the same ConfigMap name. Follow a kubectl lookup and override the namespace for just one command.',
+    model: 'Both commands use the same local kind cluster and API identity. The exercise changes a context preference only in a temporary kubeconfig copy.',
+    actors: {
+      cli: { label: 'kubectl', area: 'Your terminal', x: 112, y: 53 },
+      cfg: { label: 'Lab context', area: 'kind-kv-lab', x: 320, y: 53 },
+      api: { label: 'API server', area: 'Same cluster', x: 528, y: 53 },
+      a: { label: 'Namespace A', area: 'catalog = blue', x: 320, y: 166 },
+      b: { label: 'Namespace B', area: 'catalog = green', x: 528, y: 166 },
+    },
+    events: [
+      {
+        id: 'choose-lab-context', title: 'Choose the lab context', from: 'cli', to: 'cfg',
+        detail: 'kubectl reads the specified context from its kubeconfig. The context selects the cluster and identity and supplies a default namespace when the command has no namespace flag.',
+        field: 'Selected context', before: 'No explicit API target yet', after: 'kind-kv-lab with default namespace kv-context-a',
+      },
+      {
+        id: 'lookup-context-namespace', title: 'Read the ConfigMap in the default namespace', from: 'cfg', to: 'a',
+        detail: 'The request goes to the lab cluster, scoped to kv-context-a. The API returns the ConfigMap named catalog from that namespace.',
+        field: 'Default target / value', before: 'Context points to kv-context-a', after: 'kv-context-a / blue',
+      },
+      {
+        id: 'override-namespace', title: 'Override the namespace for one request', from: 'api', to: 'b',
+        detail: 'The --namespace flag changes the request path for this lookup. The API server returns the different ConfigMap also named catalog.',
+        field: 'ConfigMap target / value', before: 'kv-context-a / blue', after: 'kv-context-b / green',
+      },
+      {
+        id: 'check-default-again', title: 'Read the default again', from: 'cli', to: 'cfg',
+        detail: 'A second command without the namespace flag uses the context’s stored default again. The override was limited to the preceding request.',
+        field: 'Namespace preference', before: 'kv-context-a', after: 'kv-context-a',
+      },
+    ],
+    lab: {
+      href: '#practice-compare-two-namespaces',
+      label: 'Read the same name in two namespaces',
+      question: 'Does --namespace change the context for later commands?',
+      answer: 'The flag scopes one request. A later command uses the context’s default unless it supplies another namespace.',
+      check: 'Compare the values returned before, during, and after the namespace override.',
+    },
+  },
+  'm15-l03-lease-election': {
+    label: 'Inspect the leadership handoff',
+    scope: 'Two teaching controllers contend for the same Lease. Watch the first controller stop renewing, then see the second take over.',
+    model: 'The contenders use one workstation clock and win writes through Kubernetes resourceVersion checks. Timings are illustrative. A Lease does not fence unrelated external writers.',
+    actors: {
+      a: { label: 'Controller A', area: 'Original holder', x: 112, y: 53 },
+      lease: { label: 'Election Lease', area: 'demo-election', x: 320, y: 53 },
+      b: { label: 'Controller B', area: 'Standby contender', x: 528, y: 53 },
+      read: { label: 'kubectl', area: 'Read-only evidence', x: 320, y: 166 },
+    },
+    events: [
+      {
+        id: 'observe-leader-renewal', title: 'Observe the current leader renew', from: 'a', to: 'lease',
+        detail: 'Controller A is the recorded holder. Successful renewals advance renewTime while holderIdentity stays the same.',
+        field: 'Lease record', before: 'Holder A / earlier renewTime', after: 'Holder A / later renewTime',
+      },
+      {
+        id: 'stop-renewing', title: 'Let the current holder stop renewing', from: 'a', to: 'lease',
+        detail: 'Controller A stops renewing. Its last renewal remains recorded. The standby waits for the lease window to expire before trying to take over.',
+        field: 'Lease record', before: 'Renewals arriving', after: 'Last renewTime stops advancing',
+      },
+      {
+        id: 'transfer-scheduler-lease', title: 'A standby contender acquires the Lease', from: 'b', to: 'lease',
+        detail: 'After the previous lease expires, B submits its identity with the version of the Lease it read. The API accepts the update if that version is still current.',
+        field: 'Lease holder', before: 'Controller A', after: 'Controller B',
+      },
+      {
+        id: 'verify-new-renewal', title: 'Read the new holder and its renewals', from: 'lease', to: 'read',
+        detail: 'The watcher sees a different holderIdentity. Controller B continues renewing the Lease, so the next read can show an advancing timestamp for the new holder.',
+        field: 'Watch observations', before: 'Holder changed', after: 'New holder renews',
+      },
+    ],
+    lab: {
+      href: '#practice-observe-a-live-lease-handoff',
+      label: 'Observe the live Lease handoff',
+      question: 'If the recorded renew time stops, has the holder already changed?',
+      answer: 'The record can still name the old holder while contenders wait. Look for the changed identity and then a fresh renewal.',
+      check: 'Record holderIdentity, leaseTransitions, and renewTime before A stops renewing and after the handoff.',
+    },
+  },
 };
 
 export function getEventTrace(id: string) {
