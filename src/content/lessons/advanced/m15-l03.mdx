@@ -25,6 +25,8 @@ In the election scene, stop renewal from controller A and watch when controller 
 
 <Scene id="m15-l03-lease-election" />
 
+Open **Inspect the leadership handoff** to see when the recorded holder stops renewing and when a different scheduler takes over.
+
 ## <span id="walkthrough-renewal-is-different-from-a-node-heartbeat" aria-hidden="true" />Read election Leases and node heartbeats
 
 Leases also support Kubernetes node heartbeats. A node lease in `kube-node-lease` records that the kubelet has renewed contact with the API. A controller election Lease records coordination over who should perform a particular role. The two uses share an API type. Interpreting a holder and renewal requires knowing which component maintains that Lease.
@@ -56,6 +58,38 @@ kubectl --context kind-kv-lab -n kube-system get leases
 kubectl --context kind-kv-lab -n kube-node-lease get leases
 # This is inspection, not an instruction to edit system leadership records.
 kubectl --context kind-kv-lab -n kube-system get lease kube-scheduler -o yaml
+```
+
+## <span id="practice-observe-a-live-lease-handoff" aria-hidden="true" />Observe a live scheduler handoff
+
+Create the [separate HA kind cluster](/learn/advanced/m18-l01/#practice-test-quorum-in-disposable-kind) using only its cluster creation block. Keep all three members running at the start. Record the Lease holder, transition count, and renewal timestamp. This exercise stops the holder’s Docker node in that named cluster.
+
+```bash
+ha=(kubectl --kubeconfig ./kv-quorum.kubeconfig --request-timeout=10s)
+"${ha[@]}" -n kube-system get lease kube-scheduler \
+  -o 'custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions,RENEWED:.spec.renewTime'
+holder=$("${ha[@]}" -n kube-system get lease kube-scheduler -o jsonpath='{.spec.holderIdentity}')
+node=${holder%%_*}
+case "$node" in
+  kv-quorum-trace-control-plane|kv-quorum-trace-control-plane2|kv-quorum-trace-control-plane3)
+    docker stop "$node" ;;
+  *) printf 'Unexpected scheduler node: %s\n' "$node" >&2 ;;
+esac
+```
+
+Repeat the read until another scheduler holds the Lease. Compare the transition count and see whether the new holder renews again. Restore the node after observing the handoff, then remove the practice cluster.
+
+```bash
+"${ha[@]}" -n kube-system get lease kube-scheduler \
+  -o 'custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions,RENEWED:.spec.renewTime'
+```
+
+```bash
+case "$node" in
+  kv-quorum-trace-control-plane|kv-quorum-trace-control-plane2|kv-quorum-trace-control-plane3)
+    docker start "$node" ;;
+esac
+kind delete cluster --name kv-quorum-trace --kubeconfig ./kv-quorum.kubeconfig
 ```
 
 ## <span id="pitfalls-shortening-timeouts-changes-failure-behavior" aria-hidden="true" />Protect external data from a former leader

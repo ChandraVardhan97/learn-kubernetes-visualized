@@ -64,6 +64,8 @@ After the connection opens, the client sends an **HTTP request** with a method a
 
 <Scene id="m01-l03-port-path" />
 
+Open **Inspect the published port** to trace the host connection to port 80 in the container. Compare a response from nginx with the connection failure after it stops. If port 8080 is already in use, replace the host port in the Docker and curl commands with 18081.
+
 ## <span id="walkthrough-publish-a-local-training-port" aria-hidden="true" />Connect to a container from your machine
 
 Follow both numbers in the publish option from left to right. `8080` is where the browser connects on your machine. `80` is where nginx listens in its own network view. Binding the host side to loopback keeps this practice endpoint local. Execute the commands in order and compare the response headers for the two paths.
